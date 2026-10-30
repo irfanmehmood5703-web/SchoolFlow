@@ -9,3 +9,12 @@ document.addEventListener('DOMContentLoaded',()=>{
  const totals=()=>document.querySelectorAll('[data-marks-row]').forEach(r=>{let sum=0;r.querySelectorAll('.mark-input').forEach(i=>{const s=i.closest('td').querySelector('.paper-state');i.disabled=!!s.value;if(!s.value)sum+=Number(i.value)||0});r.querySelector('.marks-total').textContent=sum.toFixed(2)});document.addEventListener('input',totals);document.addEventListener('change',totals);totals();
  document.querySelectorAll('[data-widget-key]').forEach(c=>{const k='sf:widget:'+c.dataset.widgetKey;c.open=localStorage.getItem(k)==='open';c.addEventListener('toggle',()=>localStorage.setItem(k,c.open?'open':'closed'))});
 });
+document.addEventListener('DOMContentLoaded',()=>{
+ document.querySelectorAll('[data-fee-plan]').forEach(form=>{
+  const update=()=>{let arrears=0,discount=0,net=0;form.querySelectorAll('[data-fee-line]').forEach(row=>{
+   const actual=Number(row.dataset.actual),d=Math.round((Number(row.querySelector('[data-discount]').value)||0)*100),a=Math.round((Number(row.querySelector('[data-arrears]').value)||0)*100);
+   arrears+=a;discount+=d;net+=actual-d;row.querySelector('[data-net]').textContent=((actual-d)/100).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  });for(const [key,value] of Object.entries({arrears,discount,net}))form.querySelector('[data-total-'+key+']').textContent=(value/100).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  form.addEventListener('input',update);update();
+ });
+});

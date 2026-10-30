@@ -12,7 +12,7 @@ This is an initial functional pre-test build. It is **not** the complete referen
 ## Functional test flows
 
 1. Dashboard → Set up test dropdowns. This creates **fictional configurable choices only**, not real student/staff data. Then add a fictional student and employee using their complete reference forms.
-2. Admissions → Manage Fee Plans → create one monthly fee particular. Fee Challans → generate for selected pupils/month. Repeat generation skips duplicates for that plan/student/month.
+2. Admissions → Manage Fee Plans separates active pupils with and without an assigned plan. Configure fee schedules (one row per particular with the same schedule name/campus/class), then Create / Update a student plan with effective month, year, discount reason, notes, first-time arrears and per-particular discounts. Actual fees are server-sourced snapshots; zero rows remain visible. View includes photo, totals and parent/principal signatures. Generate assigned challans explicitly selects particulars, month and due date, using the dated student plan and its net amounts. First-time arrears are optional and protected by a database unique claim per student/particular. Repeating generation skips the existing student/month; an existing other challan requires review. Earlier challans are unchanged. The legacy generator cannot bypass assigned discounts.
 3. Fee Payments → Pay this month / Pay all dues. Payment and discount amounts may not exceed outstanding debt. Duplicate form tokens are rejected. Saved receipts appear in Paid/Discount Challans; reversing them restores the debt and retains the receipt audit record.
 4. Direct/family payment loads unpaid bills by SID/roll/challan/family number and saves allocations. Advance balances and multi-row identifier entry are not yet implemented.
 5. Installments move selected amounts from an untouched challan to a new month/due date, preserving total debt. Already paid/discounted/frozen bills cannot be split in this build.
@@ -32,8 +32,8 @@ Generation deliberately refuses sandwich-leave rules, nonzero jump-step/max-limi
 
 ## Outstanding work
 
-- Full reference fee-plan particulars, original advanced fee generation, advance credit balances, complete print settings, fine calculation, exact report layouts/filters, certificates and Student 360.
-- Subject-wise student filtering, multi-select section/group/session award filtering, sorting/recheck behavior, return-date permission enforcement, parent-app publishing and teacher-performance reports.
+- Yearly fee-increment configuration/application, nonzero percentage increments, fee-plan deletion, full reusable schedule configuration, original advanced fee generation, advance credit balances, complete print settings, fine calculation, exact report layouts/filters, certificates and Student 360.
+- Subject-wise student filtering, multi-select section/group/session award filtering, sorting/recheck behavior, return-date permission enforcement, parent-app publishing and complete teacher-performance comparison reports.
 - Shift policy enforcement; posting increments/security balances; leave approval to attendance; consecutive lecture editor/carry-forward; complete salary reporting/accounting and verified payroll formulas.
 - All 37 dashboard widgets and customization. Current dashboard shows selected database-backed aggregates/charts and links.
 - Institute login, tenant isolation, role-scoped app accounts, forgotten-password recovery and all four connected apps. The optional owner-summary endpoint fails closed unless `SCHOOLFLOW_API_TOKEN` is configured; it is not a completed mobile-app backend.
@@ -43,6 +43,10 @@ Generation deliberately refuses sandwich-leave rules, nonzero jump-step/max-limi
 
 `python -m unittest discover -s tests -v`
 
-30 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages.
+40 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
 
 The tests use an isolated in-memory database and fictional data. A passing suite does not verify missing workflows or production suitability.
+
+Student plan percentage increments are deliberately rejected unless 0: the yearly screen has been captured but no per-year amount/percentage rule has been verified. Discount reason is currently free text; a configured reference dropdown is pending. Initial Actual Fee values come from explicitly configured schedules, not from real reference pupils.
+
+UI verification: Flask renders all new forms in integration tests. Local browser viewport checks could not run because Chromium is absent in this runtime; live browser verification is recorded separately after deployment.

@@ -169,6 +169,7 @@ def configure_operations(app, db, Student, Employee):
     def entry(key):
         if key in ('students','employees'): return redirect('/records/'+('student' if key=='students' else 'employee'))
         if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return redirect(url_for('ops.fees',mode=key))
+        if key=='fee-plans': return redirect(url_for('student_plans.index'))
         if key=='payment-history': return redirect(url_for('ops.history'))
         if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return redirect(url_for('reports.fees',view=key))
         if key in ('student-attendance','staff-attendance'): return redirect(url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student'))
@@ -265,6 +266,8 @@ def configure_operations(app, db, Student, Employee):
             created=0
             for id in ids:
                 s=db.get_or_404(Student,id)
+                assigned=app.extensions.get('student_fee_plan_model')
+                if assigned and assigned.query.filter_by(student_id=id).first(): raise ValueError('This student has an assigned fee plan. Use Generate from Student Fee Plans to apply the saved discounts.')
                 source=f'plan:{p.id}:student:{id}:month:{m}'
                 if Bill.query.filter_by(source=source).first(): continue
                 db.session.add(Bill(student_id=id,month=m,due=day(m+'-'+str(p.data['due_day']).zfill(2)),lines=[{'particular':p.data['particular'],'amount':amount}],source=source));created+=1
@@ -717,7 +720,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v2')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v3')
 
     @app.route('/api/v1/summary')
     def summary_api():
