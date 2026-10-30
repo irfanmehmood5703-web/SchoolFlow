@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
+from student_performance_schema import PERFORMANCE_CATEGORIES
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 
 
@@ -185,7 +186,7 @@ def configure_operations(app, db, Student, Employee):
             return render('approvals.html',title=TITLES[key],key=key,rows=Student.query.filter_by(status='Waiting').all())
         if key=='salary-approvals': return redirect(url_for('ops.plans'))
         if key=='teacher-performance': return redirect(url_for('reports.teacher_performance'))
-        if key=='student-360': return redirect('/records/student?status=')
+        if key=='student-360': return redirect(url_for('student_overview.index'))
         return render('reference_pending.html',title=TITLES.get(key,key),key=key)
 
     @bp.route('/register/<kind>',methods=['GET','POST'])
@@ -433,7 +434,9 @@ def configure_operations(app, db, Student, Employee):
                 papers.append(dict(subject=subject,date=d.isoformat(),type=typ,total=total,teacher=teacher,time=(request.form.getlist('exam_time')+['']*len(subjects))[i] if request.form.get('include_time') else '',syllabus=(request.form.getlist('syllabus')+['']*len(subjects))[i] if request.form.get('include_syllabus') else ''))
             if not papers: raise ValueError('Add at least one subject.')
             data={k:request.form.get(k,'').strip()[:1000] for k in ('name','print_heading','campus','class_name','section','gender','group_name','academic_session','return_date','sort_order','student_filter')}
-            data.update(papers=papers,recheck=bool(request.form.get('recheck')))
+            category=request.form.get('assessment_category','')
+            if category and category not in PERFORMANCE_CATEGORIES: raise ValueError('Choose a valid assessment category.')
+            data.update(papers=papers,recheck=bool(request.form.get('recheck')),assessment_category=category)
             if data.get('return_date'): day(data['return_date'])
             obj=Workflow(kind=kind,data=data,status='Active');db.session.add(obj);audit('Create '+kind);commit()
             return redirect(url_for('ops.marks',award_id=obj.id)) if kind=='awards' else redirect(url_for('ops.examination',kind=kind))
@@ -445,6 +448,17 @@ def configure_operations(app, db, Student, Employee):
             value=award.data.get(k)
             if value: objs=[s for s in objs if (s.class_name if k=='class_name' else details(s).get(k))==value]
         return objs
+
+    @bp.post('/assessment-category/<int:award_id>')
+    def assessment_category(award_id):
+        award=db.get_or_404(Workflow,award_id)
+        if award.kind!='awards': abort(404)
+        category=request.form.get('assessment_category','')
+        if category and category not in PERFORMANCE_CATEGORIES: raise ValueError('Choose a valid assessment category.')
+        award.data={**award.data,'assessment_category':category}
+        audit('Set assessment category',award=award.id,category=category);commit()
+        flash('Assessment category saved. Existing marks are unchanged.','success')
+        return redirect(url_for('ops.marks',award_id=award.id))
 
     @bp.route('/marks/<int:award_id>',methods=['GET','POST'])
     def marks(award_id):
@@ -720,7 +734,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v3')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v4')
 
     @app.route('/api/v1/summary')
     def summary_api():

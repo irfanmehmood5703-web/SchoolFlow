@@ -32,7 +32,7 @@ Generation deliberately refuses sandwich-leave rules, nonzero jump-step/max-limi
 
 ## Outstanding work
 
-- Yearly fee-increment configuration/application, nonzero percentage increments, fee-plan deletion, full reusable schedule configuration, original advanced fee generation, advance credit balances, complete print settings, fine calculation, exact report layouts/filters, certificates and Student 360.
+- Yearly fee-increment configuration/application, nonzero percentage increments, fee-plan deletion, full reusable schedule configuration, original advanced fee generation, advance credit balances, complete print settings, fine calculation, exact report layouts/filters, certificates, exact Student 360 reference layout and verified official result weightings.
 - Subject-wise student filtering, multi-select section/group/session award filtering, sorting/recheck behavior, return-date permission enforcement, parent-app publishing and complete teacher-performance comparison reports.
 - Shift policy enforcement; posting increments/security balances; leave approval to attendance; consecutive lecture editor/carry-forward; complete salary reporting/accounting and verified payroll formulas.
 - All 37 dashboard widgets and customization. Current dashboard shows selected database-backed aggregates/charts and links.
@@ -43,10 +43,18 @@ Generation deliberately refuses sandwich-leave rules, nonzero jump-step/max-limi
 
 `python -m unittest discover -s tests -v`
 
-40 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
+48 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
 
 The tests use an isolated in-memory database and fictional data. A passing suite does not verify missing workflows or production suitability.
 
 Student plan percentage increments are deliberately rejected unless 0: the yearly screen has been captured but no per-year amount/percentage rule has been verified. Discount reason is currently free text; a configured reference dropdown is pending. Initial Actual Fee values come from explicitly configured schedules, not from real reference pupils.
 
 UI verification: Flask renders all new forms in integration tests. Local browser viewport checks could not run because Chromium is absent in this runtime; live browser verification is recorded separately after deployment.
+
+## Student 360 performance update
+
+The user's clarification makes academic performance the central Student 360 feature: Weekly, Monthly, First Term and Second Term have separate totals, date-period breakdowns and subject summaries. Weekly periods use ISO weeks; monthly periods use calendar months; terms group by saved academic session, with paper year as fallback. New award lists can select the assessment category; existing lists can be classified from the marks page without changing marks. Existing unclassified results are shown explicitly and are never inferred from names or paper types. Numeric totals use summed obtained / maximum marks; A/L and unmarked papers are counted separately. No official weighting between assessment categories is invented.
+
+The same read-only view links profile, current and scheduled fee plans, challans, receipts, attendance, siblings, attachments and record history. Billing months and payment dates are separate filters; current outstanding balances are labelled as current balances, not historical as-of balances. Legacy starter attendance/results remain separate. The directory searches/paginates saved students and includes inactive pupils.
+
+Eight additional integration tests verify four-category separation, weighted-by-marks arithmetic, absence/leave/unmarked handling, unclassified/other-student isolation, date ranges, receipt dates/voiding, family links, student/staff attendance separation, read-only directory behavior and category changes without marks loss.

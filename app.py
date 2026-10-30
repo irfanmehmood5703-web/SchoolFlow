@@ -58,6 +58,8 @@ from reports import configure_reports
 configure_reports(app,db,Student,Employee)
 from student_fee_plans import configure_student_fee_plans
 configure_student_fee_plans(app,db,Student)
+from student_overview import configure_student_overview
+configure_student_overview(app,db,Student)
 
 @app.route('/')
 def home(): return redirect(url_for('ops.dashboard'))
