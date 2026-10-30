@@ -34,7 +34,7 @@ Generation deliberately refuses sandwich-leave rules, nonzero jump-step/max-limi
 
 - Yearly fee-increment configuration/application, nonzero percentage increments, fee-plan deletion, full reusable schedule configuration, original advanced fee generation, advance credit balances, complete print settings, fine calculation, exact report layouts/filters, certificates, exact Student 360 reference layout and verified official result weightings.
 - Subject-wise student filtering, multi-select section/group/session award filtering, sorting/recheck behavior, return-date permission enforcement, parent-app publishing and complete teacher-performance comparison reports.
-- Shift policy enforcement; posting increments/security balances; leave approval to attendance; consecutive lecture editor/carry-forward; complete salary reporting/accounting and verified payroll formulas.
+- Shift policy enforcement; posting increments/security balances; leave approval to attendance; consecutive lecture editor/carry-forward; full reference salary-report formatting/accounting and verified payroll formulas.
 - All 37 dashboard widgets and customization. Current dashboard shows selected database-backed aggregates/charts and links.
 - Institute login, tenant isolation, role-scoped app accounts, forgotten-password recovery and all four connected apps. The optional owner-summary endpoint fails closed unless `SCHOOLFLOW_API_TOKEN` is configured; it is not a completed mobile-app backend.
 - Durable deployment database, migrations, backups and secure file authorization. Current free service uses ephemeral SQLite. Never put real student, employee or financial data in this public pre-test environment.
@@ -43,7 +43,7 @@ Generation deliberately refuses sandwich-leave rules, nonzero jump-step/max-limi
 
 `python -m unittest discover -s tests -v`
 
-48 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
+54 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
 
 The tests use an isolated in-memory database and fictional data. A passing suite does not verify missing workflows or production suitability.
 
@@ -58,3 +58,11 @@ The user's clarification makes academic performance the central Student 360 feat
 The same read-only view links profile, current and scheduled fee plans, challans, receipts, attendance, siblings, attachments and record history. Billing months and payment dates are separate filters; current outstanding balances are labelled as current balances, not historical as-of balances. Legacy starter attendance/results remain separate. The directory searches/paginates saved students and includes inactive pupils.
 
 Eight additional integration tests verify four-category separation, weighted-by-marks arithmetic, absence/leave/unmarked handling, unclassified/other-student isolation, date ranges, receipt dates/voiding, family links, student/staff attendance separation, read-only directory behavior and category changes without marks loss.
+
+## HRM salary reports and eligibility
+
+Employee Salary Report now groups saved salary months by employee and totals earnings, deductions, net, paid and remaining amounts. Lecture-wise Salary Report shows saved per-month lecture count/amount, net, paid and payment status. Both support From/To month, campus, employee, payment-status filters, CSV and printable detail pages. Reports read salary snapshots, never current rate/plan recalculations. Older salary records without a lecture-detail snapshot display "Not captured" rather than reconstructing a potentially edited source register.
+
+New payroll requires every selected employee to have an approved plan and a saved joining date. Generation refuses a month before joining. A joining date after the first day of the month requires a confirmed proration rule for basic/full-plan earnings; pure lecture pay can use approved post-joining lectures only. New salaries capture joining date and per-entry lecture date/class/section/subject/count/amount. Existing salary records are not rewritten.
+
+Six new tests cover missing/future/midmonth joining dates, batch plan eligibility rollback, lecture joining-date bounds, immutable lecture details, employee aggregates/status/campus filters, CSV safety, legacy snapshot limits and invalid report filters. Existing payroll test employees now have explicit fictional joining dates.

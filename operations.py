@@ -176,7 +176,8 @@ def configure_operations(app, db, Student, Employee):
         if key in ('student-attendance','staff-attendance'): return redirect(url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student'))
         if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return redirect(url_for('reports.attendance',view=key))
         if key in ('salary-plans','update-salary'): return redirect(url_for('ops.plans'))
-        if key in ('generate-salary','pay-salary','salary-report','lecture-report'): return redirect(url_for('ops.payroll',view=key))
+        if key in ('salary-report','lecture-report'): return redirect(url_for('hrm_reports.report',view=key))
+        if key in ('generate-salary','pay-salary'): return redirect(url_for('ops.payroll',view=key))
         if key in ('date-sheets','awards'): return redirect(url_for('ops.examination',kind=key))
         if key=='roll-slips': return redirect(url_for('ops.rolls'))
         if key in SCHEMAS: return redirect(url_for('ops.register',kind=key))
@@ -552,12 +553,20 @@ def configure_operations(app, db, Student, Employee):
                 plans_list=Workflow.query.filter_by(kind='salary-plans',status='Approved').order_by(Workflow.id.desc()).all();seen=set();count=0
                 chosen=selected('employee_ids')
                 if not chosen: raise ValueError('Select employees.')
+                approved={int(p.data['employee_id']) for p in plans_list}
+                if not set(chosen)<=approved: raise ValueError('Every selected employee needs an approved salary plan. No payroll was saved.')
                 for p in plans_list:
                     eid=int(p.data['employee_id'])
                     if eid in seen or eid not in chosen: continue
                     seen.add(eid)
                     if Salary.query.filter_by(employee_id=eid,month=m).first(): continue
                     data=p.data
+                    staff=db.get_or_404(Employee,eid)
+                    joining=details(staff,'employee').get('joining_date')
+                    if not joining: raise ValueError('Complete the employee joining date before generating salary: '+staff.name)
+                    joined=day(joining);month_start=day(m+'-01');month_end=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))
+                    if joined>month_end: raise ValueError('Salary month is before the employee joining date: '+staff.name)
+                    if joined>month_start and (not data.get('lecture_wise') or data.get('include_plan_earnings')): raise ValueError('This employee joined during the salary month. Proration needs a verified rule; no full-month salary was assumed: '+staff.name)
                     if data.get('sandwich_leave'): raise ValueError('Sandwich-leave calculation requires a verified holiday/workday rule. No payroll was saved.')
                     if any(r.get('jump') or r.get('limit') for r in data['rules']): raise ValueError('Jump-step/max-limit deduction rules require verification. No payroll was saved.')
                     if data.get('annual_increment'): raise ValueError('Annual increment posting needs a verified reference rule. No payroll was saved.')
@@ -570,7 +579,9 @@ def configure_operations(app, db, Student, Employee):
                             amount=rule['amount']*events if rule['type']=='Abs' else int((Decimal(base)*rule['amount']*events/10000/days).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
                             deductions+=amount;breakdown.append(dict(status=rule['status'],count=counts[rule['status']],amount=amount))
                     lecture_rows=[r for r in Workflow.query.filter_by(kind='lecture-register',status='Approved').all() if int(r.data['employee_id'])==eid and r.data['date'][:7]==m]
-                    lecture_pay=sum(lecture_amount(r,m) for r in lecture_rows) if data.get('lecture_wise') else 0
+                    if data.get('lecture_wise') and any(day(r.data['date'])<joined for r in lecture_rows): raise ValueError('Approved lectures precede the employee joining date. Correct the lecture register before generating salary.')
+                    lecture_details=[dict(id=r.id,date=r.data['date'],class_name=r.data.get('class_name',''),section=r.data.get('section',''),subject=r.data.get('subject',''),lectures=int(r.data['lectures']),amount=lecture_amount(r,m)) for r in lecture_rows] if data.get('lecture_wise') else []
+                    lecture_pay=sum(row['amount'] for row in lecture_details)
                     earnings=(base+data['security_return'] if not data.get('lecture_wise') or data.get('include_plan_earnings') else 0)+lecture_pay
                     if data.get('lecture_incentive'): earnings+=data['incentive_per_lecture']*sum(r.lectures for r in attendance)
                     if data.get('all_present_bonus') and data.get('bonus_amount'): raise ValueError('All-present bonus eligibility requires an attendance-calendar rule. No payroll was saved.')
@@ -587,7 +598,7 @@ def configure_operations(app, db, Student, Employee):
                             advance_map[str(a.id)]=min(money(a.data['return_amount']),max(0,money(a.data['amount'])-reserved))
                     deductions+=data['security_payment']+advance_deduction
                     if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
-                    snapshot=dict(plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base)
+                    snapshot=dict(joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base)
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')
                 audit('Generate salary',month=m,count=count);commit();flash(f'{count} salaries generated. Existing employee/month salaries skipped.','success')
@@ -734,7 +745,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v4')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v5')
 
     @app.route('/api/v1/summary')
     def summary_api():

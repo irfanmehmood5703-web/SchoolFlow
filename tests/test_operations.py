@@ -13,7 +13,7 @@ class OperationTests(unittest.TestCase):
         self.m=app.extensions['ops_models'];self.rm=app.extensions['record_models']
         self.s=Student(admission_no='TEST-01',name='Test Pupil',father='Test Guardian',class_name='Test Class',status='Active')
         self.e=Employee(employee_no='TEST-E01',name='Test Teacher',role='Teacher',status='Active')
-        db.session.add_all([self.s,self.e]);db.session.commit()
+        db.session.add_all([self.s,self.e]);db.session.flush();db.session.add(self.rm['employee'](employee_id=self.e.id,data={'joining_date':'2000-01-01'}));db.session.commit()
         self.client=app.test_client();self.client.get('/workspace/dashboard')
         with self.client.session_transaction() as sess:self.csrf=sess['record_csrf']
     def tearDown(self):db.session.remove();db.drop_all();self.ctx.pop()
