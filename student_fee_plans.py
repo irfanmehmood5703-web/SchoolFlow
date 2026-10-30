@@ -1,7 +1,7 @@
 """Student-specific fee plans with server-side money validation and dated snapshots."""
 import hmac, re
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -95,7 +95,7 @@ def configure_student_fee_plans(app, db, Student):
             if latest and effective<latest.effective: raise ValueError('Choose the latest effective month or a later month. Historical plans are read-only.')
             try: pct=Decimal(request.form.get('percentage','0'))
             except InvalidOperation: raise ValueError('Enter a valid percentage.')
-            if not pct.is_finite() or pct!=0: raise ValueError('Percentage increments need the yearly calculation rule confirmed. Save individual fee discounts with percentage 0 for now.')
+            if not pct.is_finite() or pct<0 or pct>Decimal('999999999'): raise ValueError('Enter a non-negative percentage up to 999,999,999.')
             year=request.form.get('year','').strip()
             if year and (not year.isdigit() or not 1900<=int(year)<=9999): raise ValueError('Enter a valid fee plan year.')
             target=StudentFeePlan.query.filter_by(student_id=sid,effective=effective).first()
@@ -105,11 +105,19 @@ def configure_student_fee_plans(app, db, Student):
                 if f'discount_{i}' not in request.form or f'arrears_{i}' not in request.form: raise ValueError('The fee rows are incomplete. Reload the form.')
                 line['discount']=money(request.form.get(f'discount_{i}'))
                 line['arrears']=money(request.form.get(f'arrears_{i}'))
-                if line['discount']>line['actual']: raise ValueError('Discount cannot exceed Actual Fee: '+line['particular'])
-                line['net']=line['actual']-line['discount']
+                # Editing the same effective month reapplies its percentage to the original
+                # base, rather than compounding on every Save. A later month starts
+                # from the latest plan's resulting fee, allowing yearly compounding.
+                same_period=latest and effective==latest.effective and name==latest.data['schedule']
+                base_actual=line.get('base_actual',line['actual']) if same_period else line['actual']
+                if line['discount']>base_actual: raise ValueError('Discount cannot exceed the fee before increment: '+line['particular'])
+                base_net=base_actual-line['discount']
+                increment=int((Decimal(base_net)*pct/100).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+                if base_actual+increment>99999999900: raise ValueError('Fee after increment exceeds the supported amount.')
+                line.update(base_actual=base_actual,base_net=base_net,increment=increment,actual=base_actual+increment,net=base_net+increment)
             reason=request.form.get('reason','').strip(); notes=request.form.get('notes','').strip()
             if len(reason)>200 or len(notes)>5000: raise ValueError('Discount reason or notes are too long.')
-            data=dict(schedule=name,lines=lines,percentage='0',year=year,reason=reason,notes=notes)
+            data=dict(schedule=name,lines=lines,percentage=str(pct),year=year,reason=reason,notes=notes)
             old=dict(target.data) if target else None
             if target: target.data=data
             else: target=StudentFeePlan(student_id=sid,effective=effective,data=data);db.session.add(target)

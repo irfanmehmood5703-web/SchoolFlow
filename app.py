@@ -62,6 +62,8 @@ from student_overview import configure_student_overview
 configure_student_overview(app,db,Student)
 from hrm_reports import configure_hrm_reports
 configure_hrm_reports(app,db,Employee)
+from certificates import configure_certificates
+configure_certificates(app,db,Student)
 
 @app.route('/')
 def home(): return redirect(url_for('ops.dashboard'))

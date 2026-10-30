@@ -83,7 +83,7 @@ class OperationTests(unittest.TestCase):
         for layout in ['slip','signature','report','bank']:
             self.assertEqual(self.post('/workspace/payroll',month='2026-09',action=layout,ids=str(s.id)).status_code,200)
     def test_unverified_rules_do_not_generate_invented_payroll(self):
-        self.plan(sandwich_leave=True)
+        self.plan(annual_increment=10000)
         self.assertEqual(self.post('/workspace/payroll',month='2026-09',action='generate',employee_ids=str(self.e.id)).status_code,422)
         self.assertEqual(self.m['salary'].query.count(),0)
     def test_lecture_import_dedup_approval_and_payment(self):
@@ -111,5 +111,19 @@ class OperationTests(unittest.TestCase):
             self.assertEqual(self.post('/workspace/fee-action',action=layout,ids=str(b.id)).status_code,200)
         self.assertEqual(self.post('/workspace/family-payment',number='F-TEST',paid_date='2026-10-01',account='Cash',token='family_token_abcdefghijkl',**{f'amount_{b.id}':'100'}).status_code,302)
         self.assertEqual(b.paid,10000)
+
+
+    def test_sandwich_disabled_including_old_plan_flags(self):
+        self.plan(sandwich_leave=True)
+        self.assertEqual(self.post('/workspace/payroll',month='2026-09',action='generate',employee_ids=str(self.e.id)).status_code,302)
+        salary=self.m['salary'].query.one();self.assertFalse(salary.detail['plan']['sandwich_leave']);self.assertEqual(salary.net,1000000)
+        self.assertNotIn(b'name="sandwich_leave"',self.client.get('/workspace/salary-plans').data)
+    def test_exam_maximum_marks_blank_and_user_defined(self):
+        html=self.client.get('/workspace/examination/awards').data.decode();self.assertIn('name="total" type="number" min="0.01" step="0.01" value=""',html)
+        args=dict(name='Variable marks',subject=['Math','English','Science'],exam_date=['2026-09-01']*3,test_type=['Written']*3,total=['20','30','50'])
+        self.assertEqual(self.post('/workspace/examination/awards',**args).status_code,302)
+        w=self.m['workflow'].query.filter_by(kind='awards').one();self.assertEqual([p['total'] for p in w.data['papers']],[20,30,50])
+        args.update(name='Missing marks',total=['20','30']);self.assertEqual(self.post('/workspace/examination/awards',**args).status_code,422)
+        self.assertEqual(self.m['workflow'].query.filter_by(kind='awards').count(),1)
 
 if __name__=='__main__':unittest.main()

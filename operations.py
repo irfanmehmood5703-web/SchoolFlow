@@ -170,6 +170,7 @@ def configure_operations(app, db, Student, Employee):
     def entry(key):
         if key in ('students','employees'): return redirect('/records/'+('student' if key=='students' else 'employee'))
         if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return redirect(url_for('ops.fees',mode=key))
+        if key=='certificates': return redirect(url_for('certificates.index'))
         if key=='fee-plans': return redirect(url_for('student_plans.index'))
         if key=='payment-history': return redirect(url_for('ops.history'))
         if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return redirect(url_for('reports.fees',view=key))
@@ -426,7 +427,8 @@ def configure_operations(app, db, Student, Employee):
                 if i>=len(dates) or i>=len(types): raise ValueError('Every paper needs an exam date and test type.')
                 d=day(dates[i]);typ=types[i]
                 if typ not in ('Written','Oral','Practical'): raise ValueError('Select a valid test type.')
-                t=totals[i] if i<len(totals) else '100'
+                t=totals[i] if i<len(totals) else ''
+                if not t.strip(): raise ValueError('Enter total marks for every paper; no marks are prefilled.')
                 try: total=float(t)
                 except ValueError: raise ValueError('Total marks must be numeric.')
                 if not 0<total<=10000: raise ValueError('Total marks must be positive and at most 10,000.')
@@ -516,8 +518,9 @@ def configure_operations(app, db, Student, Employee):
             data=dict(employee_id=str(employee_id))
             for k in ['basic','security_return','security_payment','incentive_per_lecture','annual_increment','bonus_amount']:
                 data[k]=money(request.form.get(k,'0'))
-            for k in ['lecture_wise','lecture_incentive','all_present_bonus','sandwich_leave','include_plan_earnings']:
+            for k in ['lecture_wise','lecture_incentive','all_present_bonus','include_plan_earnings']:
                 data[k]=bool(request.form.get(k))
+            data['sandwich_leave']=False  # Disabled by the school for this phase.
             data['increment_month']=request.form.get('increment_month','')
             data['increment_type']=request.form.get('increment_type','Abs')
             data['rules']=[]
@@ -567,7 +570,7 @@ def configure_operations(app, db, Student, Employee):
                     joined=day(joining);month_start=day(m+'-01');month_end=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))
                     if joined>month_end: raise ValueError('Salary month is before the employee joining date: '+staff.name)
                     if joined>month_start and (not data.get('lecture_wise') or data.get('include_plan_earnings')): raise ValueError('This employee joined during the salary month. Proration needs a verified rule; no full-month salary was assumed: '+staff.name)
-                    if data.get('sandwich_leave'): raise ValueError('Sandwich-leave calculation requires a verified holiday/workday rule. No payroll was saved.')
+                    data={**data,'sandwich_leave':False}  # Never apply legacy sandwich flags.
                     if any(r.get('jump') or r.get('limit') for r in data['rules']): raise ValueError('Jump-step/max-limit deduction rules require verification. No payroll was saved.')
                     if data.get('annual_increment'): raise ValueError('Annual increment posting needs a verified reference rule. No payroll was saved.')
                     attendance=Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=day(m+'-01'),Daily.day<=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))).all()
@@ -745,7 +748,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v5')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v6')
 
     @app.route('/api/v1/summary')
     def summary_api():

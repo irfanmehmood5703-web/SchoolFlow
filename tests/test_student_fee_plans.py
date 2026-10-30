@@ -38,7 +38,7 @@ class StudentFeePlanTests(unittest.TestCase):
         self.assertIn(b'Fictional Student',self.c.get('/workspace/student-fee-plans?mode=update').data)
         self.assertEqual(self.c.get(f'/workspace/student-fee-plans/{self.s.id}/edit').status_code,200)
     def test_money_bounds_nan_and_unconfirmed_percentage(self):
-        for changes in [dict(discount_1='3500.01'),dict(discount_1='NaN'),dict(arrears_1='-1'),dict(percentage='10'),dict(year='abc'),dict(effective='2026-13')]:
+        for changes in [dict(discount_1='3500.01'),dict(discount_1='NaN'),dict(arrears_1='-1'),dict(percentage='-1'),dict(year='abc'),dict(effective='2026-13')]:
             self.assertEqual(self.save(**changes).status_code,422,changes);self.assertEqual(self.P.query.count(),0)
     def test_actual_cannot_be_overridden_and_incomplete_rows_rejected(self):
         data=self.form();data.pop('discount_1')
@@ -84,3 +84,17 @@ class StudentFeePlanTests(unittest.TestCase):
         self.assertEqual(self.P.query.one().data['lines'][0]['actual'],0)
         for path in ['', '?mode=update', '/generate',f'/{self.s.id}/edit']:
             self.assertEqual(self.c.get('/workspace/student-fee-plans'+path).status_code,200,path)
+
+    def test_increment_uses_discounted_fee_and_same_period_does_not_compound(self):
+        self.assertEqual(self.save(percentage='10',discount_1='1500').status_code,302)
+        line=self.P.query.one().data['lines'][1]
+        self.assertEqual((line['base_actual'],line['discount'],line['base_net'],line['increment'],line['actual'],line['net']),(350000,150000,200000,20000,370000,220000))
+        self.assertEqual(self.save(percentage='10',discount_1='1500').status_code,302)
+        self.assertEqual(self.P.query.one().data['lines'][1]['net'],220000)
+        self.generate();bill=self.m['bill'].query.one();self.assertEqual(bill.total,220000)
+        self.assertEqual(self.save(effective='2027-09',percentage='10',discount_1='1500').status_code,302)
+        future=self.P.query.filter_by(effective='2027-09').one();self.assertEqual(future.data['lines'][1]['net'],242000)
+        self.assertEqual(bill.total,220000)
+    def test_increment_rounding_and_excludes_arrears(self):
+        self.save(percentage='50',discount_1='3499.99',arrears_1='100')
+        line=self.P.query.one().data['lines'][1];self.assertEqual((line['net'],line['increment'],line['arrears']),(2,1,10000))

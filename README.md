@@ -25,3 +25,8 @@ python -m unittest discover -s tests -v
 Tests use an isolated in-memory database. Deployment uses `DATABASE_URL` if configured, otherwise SQLite. Existing starter tables are retained; old attendance/exam rows are readable at `/workspace/legacy-data`. `GET /healthz` reports database readiness.
 
 The existing Render service uses free ephemeral SQLite storage; restarts/redeploys can reset test data. A durable database and authentication are required before real use. All communication requests are logged without delivery. Four mobile apps are not connected.
+
+
+### Campus cards and certificates
+
+Admissions → Student Card and Certificates → choose campus → Set up certificate templates. Use School heading, logo & colours for your own school details, then choose a document and students. Preview has no issuance side effects. Edit saves campus-specific Header/Body/Footer content. Generate & Print assigns references and saves immutable documents in Certificate Logs. Print / Save PDF opens the browser print flow. Student QR Code supports active-pupil filters, selected columns, CSV/Excel and printable QR sheets. Use fictional data only on the public pre-test service.
