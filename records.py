@@ -218,6 +218,8 @@ def configure_records(app, db, Student, Employee):
             valid_subjects = {x[0] for x in choices.get("subject", []) if not x[2] or x[2] == data.get("class_name")}
             if any(s not in valid_subjects for s in data["subjects"]):
                 errors["subjects"] = "Choose subjects assigned to the selected class."
+            if data.get("leaving_date") and data.get("admission_date") and data["leaving_date"] < data["admission_date"]:
+                errors["leaving_date"] = "Leaving date cannot be before admission date."
             if data.get("birth_date") and data.get("admission_date") and data["birth_date"] > data["admission_date"]:
                 errors["birth_date"] = "Date of birth cannot be after admission date."
             if data.get("board_obtained") and not errors.get("board_obtained"):

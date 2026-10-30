@@ -196,5 +196,13 @@ class ReferenceRecordTests(unittest.TestCase):
         self.assertIn(b"No records match",r.data)
 
 
+    def test_leaving_date_for_certificates_is_saved_without_changing_status(self):
+        invalid=self.client.post('/records/student/new',data=self.student(leaving_date='2026-10-01'))
+        self.assertEqual(invalid.status_code,422);self.assertEqual(Student.query.count(),0)
+        valid=self.client.post('/records/student/new',data=self.student(leaving_date='2026-11-01'))
+        self.assertEqual(valid.status_code,302)
+        student=Student.query.one();detail=self.models['student'].query.one()
+        self.assertEqual(detail.data['leaving_date'],'2026-11-01');self.assertEqual(student.status,'Active')
+
 if __name__ == "__main__":
     unittest.main()
