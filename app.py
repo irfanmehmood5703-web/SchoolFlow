@@ -49,5 +49,15 @@ def hrm():
 @app.route('/settings')
 def settings(): return render_template('settings.html')
 
+from records import configure_records
+configure_records(app, db, Student, Employee)
+
+def admissions_entry():
+ return redirect(url_for('records.new_record' if request.method == 'POST' else 'records.record_list',kind='student'), code=307 if request.method == 'POST' else 302)
+def employees_entry():
+ return redirect(url_for('records.new_record' if request.method == 'POST' else 'records.record_list',kind='employee'), code=307 if request.method == 'POST' else 302)
+app.view_functions['admissions'] = admissions_entry
+app.view_functions['hrm'] = employees_entry
+
 with app.app_context(): db.create_all()
-if __name__=='__main__': app.run(host='0.0.0.0',port=int(os.getenv('PORT',5000)),debug=True)
+if __name__=='__main__': app.run(host='0.0.0.0',port=int(os.getenv('PORT',5000)),debug=os.getenv('FLASK_DEBUG') == '1')
