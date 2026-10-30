@@ -169,9 +169,10 @@ def configure_operations(app, db, Student, Employee):
     def entry(key):
         if key in ('students','employees'): return redirect('/records/'+('student' if key=='students' else 'employee'))
         if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return redirect(url_for('ops.fees',mode=key))
-        if key in ('payment-history','student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return redirect(url_for('ops.history',view=key))
+        if key=='payment-history': return redirect(url_for('ops.history'))
+        if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return redirect(url_for('reports.fees',view=key))
         if key in ('student-attendance','staff-attendance'): return redirect(url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student'))
-        if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return redirect(url_for('ops.attendance_report',view=key))
+        if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return redirect(url_for('reports.attendance',view=key))
         if key in ('salary-plans','update-salary'): return redirect(url_for('ops.plans'))
         if key in ('generate-salary','pay-salary','salary-report','lecture-report'): return redirect(url_for('ops.payroll',view=key))
         if key in ('date-sheets','awards'): return redirect(url_for('ops.examination',kind=key))
@@ -182,6 +183,7 @@ def configure_operations(app, db, Student, Employee):
         if key=='admission-approvals':
             return render('approvals.html',title=TITLES[key],key=key,rows=Student.query.filter_by(status='Waiting').all())
         if key=='salary-approvals': return redirect(url_for('ops.plans'))
+        if key=='teacher-performance': return redirect(url_for('reports.teacher_performance'))
         if key=='student-360': return redirect('/records/student?status=')
         return render('reference_pending.html',title=TITLES.get(key,key),key=key)
 

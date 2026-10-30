@@ -54,6 +54,8 @@ from records import configure_records
 from operations import configure_operations
 configure_records(app,db,Student,Employee)
 configure_operations(app,db,Student,Employee)
+from reports import configure_reports
+configure_reports(app,db,Student,Employee)
 
 @app.route('/')
 def home(): return redirect(url_for('ops.dashboard'))
