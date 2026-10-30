@@ -1,27 +1,27 @@
-# SchoolFlow — Phase 1 Test Build
+# SchoolFlow
 
-Functional starter build for testing four connected modules:
+Original green/white Flask school-management **pre-test** build. Top menus follow the supplied Admissions, Exam & Attendance and HRM reference sequence. Includes full student/employee record forms and initial fee, attendance, exam and payroll workflows.
 
-- Admissions: new student admission + student records
-- Attendance: student attendance with Present/Absent/Leave/Late
-- Exams: exam/subject marks and percentage
-- HRM: employee master records, designation, contact and basic salary
+**Not a completed reference-equivalent or production-ready release. Use fictional test records only.** Read [the build report](docs/PRETEST_BUILD.md) and the in-app Build Status page for incomplete workflows.
 
-## Local run
+## Run
 
-```bash
+```sh
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+. .venv/bin/activate
 pip install -r requirements.txt
+export SECRET_KEY='replace-with-a-long-random-value'
 python app.py
 ```
 
-Open `http://127.0.0.1:5000`.
+Open the dashboard and click **Set up test dropdowns**, then create fictional student/staff records. School choices are editable under School Settings. This build has no institution login or tenant isolation.
 
-## Free test deployment
+## Tests
 
-The repository includes `render.yaml` and a `Procfile` for a simple Python web deployment. SQLite is used by default for this test build. For production/multi-tenant use, configure PostgreSQL with `DATABASE_URL` and add authentication, institute isolation, permissions, migrations, backups and security hardening.
+```sh
+python -m unittest discover -s tests -v
+```
 
-## Important
+Tests use an isolated in-memory database. Deployment uses `DATABASE_URL` if configured, otherwise SQLite. Existing starter tables are retained; old attendance/exam rows are readable at `/workspace/legacy-data`. `GET /healthz` reports database readiness.
 
-This is a functional Phase 1 test build, not yet a production-complete school SaaS. It intentionally establishes the working database/UI foundation before the full multi-tenant and role-based architecture is added.
+The existing Render service uses free ephemeral SQLite storage; restarts/redeploys can reset test data. A durable database and authentication are required before real use. All communication requests are logged without delivery. Four mobile apps are not connected.
