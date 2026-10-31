@@ -135,6 +135,15 @@ class AdmissionCapacityTests(unittest.TestCase):
         summary=app.extensions['admission_capacity']['rows']()[0]
         self.assertEqual((summary['occupied'],summary['available']),(0,4))
 
+    def test_non_enrolled_summary_filter_includes_waiting_refused_and_inactive(self):
+        active=self.add();others=[self.add(status=status) for status in ('Waiting','Refused','Inactive')]
+        page=self.c.get('/records/student?status=non-active')
+        self.assertEqual(page.status_code,200);self.assertIn(b'3 matching records',page.data)
+        self.assertNotIn(active.name.encode(),page.data)
+        for pupil in others:self.assertIn(pupil.name.encode(),page.data)
+        csv=self.c.get('/records/student/export.csv?status=non-active')
+        self.assertNotIn(active.admission_no.encode(),csv.data)
+
     def test_two_sqlite_connections_cannot_take_the_last_seat(self):
         with tempfile.TemporaryDirectory() as directory:
             engine=create_engine('sqlite:///'+str(Path(directory)/'concurrent.db'),connect_args={'timeout':15})

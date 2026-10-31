@@ -417,7 +417,9 @@ def configure_records(app, db, Student, Employee):
             number = model.admission_no if kind == "student" else model.employee_no
             query = query.filter(or_(model.name.ilike(pattern, escape="\\"), number.ilike(pattern, escape="\\"), model.phone.ilike(pattern, escape="\\")))
         status = request.args.get("status", "Active")
-        if status:
+        if status == 'non-active':
+            query = query.filter(or_(model.status != 'Active', model.status.is_(None)))
+        elif status:
             query = query.filter(model.status == status)
         result = [(obj, read_data(kind, obj)) for obj in query.order_by(model.id.desc()).all()]
         for key in ("campus", "class_name", "section", "gender", "role"):
