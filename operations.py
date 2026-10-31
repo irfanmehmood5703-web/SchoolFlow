@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
@@ -159,7 +160,7 @@ def configure_operations(app, db, Student, Employee):
         return render_template(name, choices=choices, today=date.today().isoformat(), statuses=STATUSES, **kw)
 
     @app.context_processor
-    def nav_context(): return dict(module_menus=MENUS, build_label='Pre-test • fictional records only')
+    def nav_context(): return dict(module_menus=MENUS, menu_url=menu_url, build_label='Pre-test • fictional records only')
 
     @bp.before_request
     def csrf():
@@ -172,29 +173,34 @@ def configure_operations(app, db, Student, Employee):
         db.session.rollback()
         return render('operation_error.html',title='Please check this operation',error=str(exc)),422
 
+    def menu_url(key):
+        if key in ('students','employees'): return url_for('records.record_list',kind='student' if key=='students' else 'employee')
+        if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return url_for('ops.fees',mode=key)
+        if key=='certificates': return url_for('certificates.index')
+        if key=='fee-plans': return url_for('student_plans.index')
+        if key=='payment-history': return url_for('ops.history')
+        if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return url_for('reports.fees',view=key)
+        if key in ('student-attendance','staff-attendance'): return url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student')
+        if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return url_for('reports.attendance',view=key)
+        if key in ('salary-plans','update-salary'): return url_for('ops.plans')
+        if key in ('salary-report','lecture-report'): return url_for('hrm_reports.report',view=key)
+        if key in ('generate-salary','pay-salary'): return url_for('ops.payroll',view=key)
+        if key in ('date-sheets','awards'): return url_for('ops.examination',kind=key)
+        if key=='roll-slips': return url_for('ops.rolls')
+        if key in SCHEMAS: return url_for('ops.register',kind=key)
+        if key in ('sms-blaster','fee-intimation'): return url_for('ops.messages')
+        if key in ('sms-report','family-sms','notifications','staff-sms'): return url_for('ops.message_log',view=key)
+        if key=='admission-approvals':
+            return url_for('admission_limits.approvals')
+        if key=='salary-approvals': return url_for('ops.plans')
+        if key=='teacher-performance': return url_for('reports.teacher_performance')
+        if key=='student-360': return url_for('student_overview.index')
+        return url_for('ops.entry',key=key)
+
     @bp.route('/<key>')
     def entry(key):
-        if key in ('students','employees'): return redirect('/records/'+('student' if key=='students' else 'employee'))
-        if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return redirect(url_for('ops.fees',mode=key))
-        if key=='certificates': return redirect(url_for('certificates.index'))
-        if key=='fee-plans': return redirect(url_for('student_plans.index'))
-        if key=='payment-history': return redirect(url_for('ops.history'))
-        if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return redirect(url_for('reports.fees',view=key))
-        if key in ('student-attendance','staff-attendance'): return redirect(url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student'))
-        if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return redirect(url_for('reports.attendance',view=key))
-        if key in ('salary-plans','update-salary'): return redirect(url_for('ops.plans'))
-        if key in ('salary-report','lecture-report'): return redirect(url_for('hrm_reports.report',view=key))
-        if key in ('generate-salary','pay-salary'): return redirect(url_for('ops.payroll',view=key))
-        if key in ('date-sheets','awards'): return redirect(url_for('ops.examination',kind=key))
-        if key=='roll-slips': return redirect(url_for('ops.rolls'))
-        if key in SCHEMAS: return redirect(url_for('ops.register',kind=key))
-        if key in ('sms-blaster','fee-intimation'): return redirect(url_for('ops.messages'))
-        if key in ('sms-report','family-sms','notifications','staff-sms'): return redirect(url_for('ops.message_log',view=key))
-        if key=='admission-approvals':
-            return redirect(url_for('admission_limits.approvals'))
-        if key=='salary-approvals': return redirect(url_for('ops.plans'))
-        if key=='teacher-performance': return redirect(url_for('reports.teacher_performance'))
-        if key=='student-360': return redirect(url_for('student_overview.index'))
+        target=menu_url(key)
+        if target!=url_for('ops.entry',key=key):return redirect(target)
         return render('reference_pending.html',title=TITLES.get(key,key),key=key)
 
     @bp.route('/register/<kind>',methods=['GET','POST'])
@@ -770,17 +776,44 @@ def configure_operations(app, db, Student, Employee):
     def readiness(): return render('readiness.html',title='Pre-test Build Status')
 
     def dashboard_data():
-        students=Student.query.all();employees=Employee.query.all();bills=Bill.query.all();receipts=Receipt.query.filter_by(voided=False).all();today=date.today();m=today.strftime('%Y-%m')
-        present=Daily.query.filter_by(kind='student',day=today,status='Present').count();marked=Daily.query.filter_by(kind='student',day=today).count()
-        scores=Score.query.filter(Score.obtained!=None).all();average=round(sum(s.obtained/db.session.get(Workflow,s.award_id).data['papers'][s.paper]['total']*100 for s in scores)/len(scores),1) if scores else 0
-        return dict(students=len(students),active=sum(s.status=='Active' for s in students),employees=len(employees),active_employees=sum(s.status=='Active' for s in employees),present=present,marked=marked,attendance=Counter(x.status for x in Daily.query.filter_by(kind='student',day=today).all()),collected=sum(r.amount for r in receipts),this_month=sum(r.amount for r in receipts if str(r.day)[:7]==m),due=sum(b.remaining for b in bills),discount=sum(r.discount for r in receipts),unpaid=sum(b.remaining>0 for b in bills),defaulters=len({b.student_id for b in bills if b.remaining>0}),pending=Workflow.query.filter_by(status='Pending').count(),average=average,queries=Workflow.query.filter_by(kind='queries').count(),staff_counts=Counter(x.status for x in Daily.query.filter(Daily.kind=='staff',Daily.day>=today.replace(day=1),Daily.day<=today).all()),classes=Counter(s.class_name or 'Unassigned' for s in students if s.status=='Active'),months=[(f'{today.year}-{i:02d}',sum(b.total for b in bills if b.month==f'{today.year}-{i:02d}'),sum(r.amount for r in receipts if db.session.get(Bill,r.bill_id).month==f'{today.year}-{i:02d}')) for i in range(1,today.month+1)])
+        # Keep request work independent of pupil/score count: no per-row ORM
+        # lookups, no attachment/salary/certificate payloads, and one pass over
+        # scalar financial rows rather than rescanning receipts per month.
+        today=date.today();month_key=today.strftime('%Y-%m')
+        student_count,active=db.session.query(db.func.count(Student.id),db.func.sum(case((Student.status=='Active',1),else_=0))).one()
+        employee_count,active_employees=db.session.query(db.func.count(Employee.id),db.func.sum(case((Employee.status=='Active',1),else_=0))).one()
+        class_label=db.func.coalesce(db.func.nullif(Student.class_name,''),'Unassigned')
+        classes=Counter(dict(db.session.query(class_label,db.func.count(Student.id)).filter(Student.status=='Active').group_by(class_label).order_by(class_label).all()))
+        attendance=Counter(dict(db.session.query(Daily.status,db.func.count(Daily.id)).filter(Daily.kind=='student',Daily.day==today).group_by(Daily.status).all()))
+        staff_counts=Counter(dict(db.session.query(Daily.status,db.func.count(Daily.id)).filter(Daily.kind=='staff',Daily.day>=today.replace(day=1),Daily.day<=today).group_by(Daily.status).all()))
+        pending,queries=db.session.query(db.func.sum(case((Workflow.status=='Pending',1),else_=0)),db.func.sum(case((Workflow.kind=='queries',1),else_=0))).one()
+        bill_months={};billed=Counter();due=0;unpaid=0;defaulters=set()
+        for row in db.session.query(Bill.id,Bill.student_id,Bill.month,Bill.lines,Bill.paid,Bill.discount).all():
+            total=sum(line['amount'] for line in row.lines);remaining=total-row.paid-row.discount
+            bill_months[row.id]=row.month;billed[row.month]+=total;due+=remaining
+            if remaining>0:unpaid+=1;defaulters.add(row.student_id)
+        collected=this_month=discount=0;by_bill_month=Counter()
+        for row in db.session.query(Receipt.bill_id,Receipt.amount,Receipt.discount,Receipt.day).filter(Receipt.voided==False).all():
+            collected+=row.amount;discount+=row.discount
+            if str(row.day)[:7]==month_key:this_month+=row.amount
+            by_bill_month[bill_months.get(row.bill_id)]+=row.amount
+        scores=db.session.query(Score.award_id,Score.paper,Score.obtained).filter(Score.obtained!=None).all()
+        award_ids=list({row.award_id for row in scores});papers={}
+        for offset in range(0,len(award_ids),900):
+            papers.update({row.id:row.data['papers'] for row in db.session.query(Workflow.id,Workflow.data).filter(Workflow.id.in_(award_ids[offset:offset+900])).all()})
+        average=round(sum(row.obtained/papers[row.award_id][row.paper]['total']*100 for row in scores)/len(scores),1) if scores else 0
+        months=[(f'{today.year}-{number:02d}',billed[f'{today.year}-{number:02d}'],by_bill_month[f'{today.year}-{number:02d}']) for number in range(1,today.month+1)]
+        return dict(students=student_count,active=active or 0,employees=employee_count,active_employees=active_employees or 0,
+                    present=attendance['Present'],marked=sum(attendance.values()),attendance=attendance,staff_counts=staff_counts,
+                    collected=collected,this_month=this_month,due=due,discount=discount,unpaid=unpaid,defaulters=len(defaulters),
+                    pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months)
 
     @bp.route('/dashboard')
     def dashboard(): return app.extensions['dashboard_render']()
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v10')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v11')
 
     @app.route('/api/v1/summary')
     def summary_api():

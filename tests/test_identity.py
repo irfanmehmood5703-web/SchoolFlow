@@ -73,6 +73,16 @@ class IdentityTests(unittest.TestCase):
             token = sess['record_csrf']
         return client.post('/auth/login', data={'_csrf':token, 'email':'OWNER@example.invalid', 'password':password})
 
+    def test_inline_admission_options_are_isolated_between_schools(self):
+        self.assertEqual(self.login().status_code,302)
+        token=self.csrf()
+        self.assertEqual(self.client.post('/records/options',data={'_csrf':token,'category':'class_name','value':'Only School A Class'}).status_code,200)
+        self.assertIn(b'Only School A Class',self.client.get('/records/student/new').data)
+        self.assertEqual(self.login('TEST-B').status_code,302)
+        page=self.client.get('/records/student/new')
+        self.assertNotIn(b'Only School A Class',page.data)
+        self.assertIn(b'Christianity',page.data)
+
     def test_public_landing_and_every_workspace_entry_is_gated(self):
         self.assertIn(b'More time for', self.client.get('/').data)
         for path in ['/workspace/dashboard', '/records/student', '/records/files/1', '/workspace/certificates', '/admissions', '/hrm', '/attendance', '/exams', '/settings']:

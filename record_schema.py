@@ -155,3 +155,16 @@ DEMO_CHOICES = {
 
 CATEGORIES = {f["category"]: f["label"] for sections in [STUDENT_SECTIONS, EMPLOYEE_SECTIONS]
               for _, fields in sections for f in fields if f["category"]}
+
+# Available in every institute without requiring demo data. School-specific
+# campuses/classes/fee plans remain institute-owned settings.
+STANDARD_CHOICES = {
+    "gender": ["Male", "Female", "Other"],
+    "religion": ["Islam", "Christianity", "Hinduism", "Sikhism", "Buddhism", "Other", "Not specified"],
+    "nationality": ["Pakistani", "Other"],
+    "blood_group": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"],
+    "admission_source": ["School Visit", "Parent Referral", "Staff Referral", "Website", "Social Media", "Advertisement", "Other"],
+    "disability": ["None", "Visual", "Hearing", "Physical", "Learning", "Other", "Not specified"],
+    "mother_tongue": ["Urdu", "Punjabi", "English", "Sindhi", "Pashto", "Balochi", "Saraiki", "Hindko", "Other"],
+    "guardian_relation": ["Father", "Mother", "Guardian", "Other"],
+}

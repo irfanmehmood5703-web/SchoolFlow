@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
-from record_schema import (CATEGORIES, DEMO_CHOICES, EMPLOYEE_SECTIONS, FAMILY_KEYS,
+from record_schema import (CATEGORIES, DEMO_CHOICES, STANDARD_CHOICES, EMPLOYEE_SECTIONS, FAMILY_KEYS,
                            STUDENT_COMMUNICATION, STUDENT_SECTIONS)
 
 MAX_FILE = 5 * 1024 * 1024
@@ -73,7 +73,7 @@ def configure_records(app, db, Student, Employee):
         filename = db.Column(db.String(180), nullable=False)
         mime = db.Column(db.String(100), nullable=False)
         photo = db.Column(db.Boolean, nullable=False, default=False)
-        content = db.Column(db.LargeBinary, nullable=False)
+        content = db.deferred(db.Column(db.LargeBinary, nullable=False))
         sha256 = db.Column(db.String(64), nullable=False)
 
     class RecordEvent(db.Model):
@@ -110,33 +110,34 @@ def configure_records(app, db, Student, Employee):
                 abort(400, "Your form session expired. Reload the page and try again.")
 
     def setup_choices():
-        result = {k: [] for k in CATEGORIES}
+        result = {k: [(v, v, "") for v in STANDARD_CHOICES.get(k, [])] for k in CATEGORIES}
         for row in RecordSettings.query.order_by(RecordSettings.value).all():
-            result.setdefault(row.category, []).append((row.value, row.value, row.class_name))
+            item = (row.value, row.value, row.class_name)
+            if item not in result.setdefault(row.category, []):
+                result[row.category].append(item)
         return result
 
-    def defaults(kind):
+    def defaults(kind, for_create=True):
         if kind == "student":
             data = dict(admission_date=date.today().isoformat(), family_mode="new", religion="Islam",
                 nationality="Pakistani", guardian_relation="Father", status="Active", subjects=[],
                 visitors=[{} for _ in range(3)], father_contact=True, app_sms=True, parent_notification=True)
         else:
-            highest = db.session.query(db.func.max(Employee.id)).scalar() or 0
-            candidate = str(highest + 1)
-            while Employee.query.filter_by(employee_no=candidate).first():
-                highest += 1
+            candidate = ''
+            if for_create:
+                highest = db.session.query(db.func.max(Employee.id)).scalar() or 0
                 candidate = str(highest + 1)
+                while Employee.query.filter_by(employee_no=candidate).first():
+                    highest += 1
+                    candidate = str(highest + 1)
             data = dict(employee_no=candidate, marital_status="Married", joining_date=date.today().isoformat(),
                 lecture_assigned="0", app_active=True, diary_approval="required", award_permission="update",
                 attendance_permission="update", contact_absentee="not_allowed", fee_access="not_allowed",
                 salary_access="not_allowed")
         return data
 
-    def read_data(kind, obj):
-        model = StudentDetails if kind == "student" else EmployeeDetails
-        key = "student_id" if kind == "student" else "employee_id"
-        detail = model.query.filter_by(**{key: obj.id}).first()
-        data = defaults(kind)
+    def compose_data(kind, obj, detail, family=None):
+        data = defaults(kind, for_create=False)
         if detail:
             data.update(detail.data or {})
         base = ("name", "admission_no", "father", "class_name", "phone", "status") if kind == "student" else ("name", "employee_no", "role", "phone", "status")
@@ -144,16 +145,48 @@ def configure_records(app, db, Student, Employee):
             data[key] = getattr(obj, key)
         if kind == "student":
             data["bio_id"] = data.get("bio_id") or str(obj.id)
-            if detail and detail.family_id:
-                family = db.session.get(RecordFamily, detail.family_id)
-                if family:
-                    data.update(family.data)
-                    data.update(family_no=family.number, family_id=str(family.id), family_mode="existing")
+            if family:
+                data.update(family.data)
+                data.update(family_no=family.number, family_id=str(family.id), family_mode="existing")
         else:
             data["username"] = detail.username if detail else ""
             data["app_active"] = detail.app_active if detail else False
             data.pop("password", None)
         return data
+
+    def read_data(kind, obj):
+        model = StudentDetails if kind == 'student' else EmployeeDetails
+        key = 'student_id' if kind == 'student' else 'employee_id'
+        detail = model.query.filter_by(**{key:obj.id}).first()
+        family = db.session.get(RecordFamily,detail.family_id) if kind=='student' and detail and detail.family_id else None
+        return compose_data(kind,obj,detail,family)
+
+    def batch_maps(kind, objects):
+        model = StudentDetails if kind=='student' else EmployeeDetails
+        key = 'student_id' if kind=='student' else 'employee_id'
+        ids = [obj.id for obj in objects]
+        details = {}
+        # Keep IN clauses portable without one query per pupil/family.
+        for offset in range(0,len(ids),900):
+            details.update({getattr(row,key):row for row in model.query.filter(getattr(model,key).in_(ids[offset:offset+900])).all()})
+        family_ids = list({row.family_id for row in details.values() if kind=='student' and row.family_id})
+        families = {}
+        for offset in range(0,len(family_ids),900):
+            families.update({row.id:row for row in RecordFamily.query.filter(RecordFamily.id.in_(family_ids[offset:offset+900])).all()})
+        return details,families
+
+    def read_many(kind, objects):
+        details,families=batch_maps(kind,objects)
+        return [(obj,compose_data(kind,obj,details.get(obj.id),families.get(details[obj.id].family_id) if kind=='student' and obj.id in details else None)) for obj in objects]
+
+    def raw_many(kind, objects):
+        details,families=batch_maps(kind,objects);result={}
+        for obj in objects:
+            detail=details.get(obj.id);data=dict(detail.data or {}) if detail else {}
+            family=families.get(detail.family_id) if kind=='student' and detail else None
+            if family:data.update(family.data,family_no=family.number)
+            result[obj.id]=data
+        return result
 
     def validate_form(kind, obj):
         sections = STUDENT_SECTIONS if kind == "student" else EMPLOYEE_SECTIONS
@@ -408,8 +441,10 @@ def configure_records(app, db, Student, Employee):
         obj = get_obj(kind, id)
         return save_record(kind, obj) if request.method == "POST" else render_form(kind, obj)
 
-    def filtered_rows(kind):
+    def filtered_query(kind):
         model = Student if kind == "student" else Employee
+        detail_model = StudentDetails if kind=='student' else EmployeeDetails
+        detail_key = detail_model.student_id if kind=='student' else detail_model.employee_id
         q = request.args.get("q", "").strip()[:160]
         query = model.query
         if q:
@@ -421,28 +456,35 @@ def configure_records(app, db, Student, Employee):
             query = query.filter(or_(model.status != 'Active', model.status.is_(None)))
         elif status:
             query = query.filter(model.status == status)
-        result = [(obj, read_data(kind, obj)) for obj in query.order_by(model.id.desc()).all()]
+        query = query.outerjoin(detail_model,detail_key==model.id)
         for key in ("campus", "class_name", "section", "gender", "role"):
             value = request.args.get(key, "")
             if value:
-                result = [(o, d) for o, d in result if d.get(key) == value]
-        return result
+                column = model.class_name if key=='class_name' and kind=='student' else model.role if key=='role' and kind=='employee' else detail_model.data[key].as_string()
+                query = query.filter(column==value)
+        return query
+
+    def filtered_rows(kind):
+        model=Student if kind=='student' else Employee
+        return read_many(kind,filtered_query(kind).order_by(model.id.desc()).all())
 
     @bp.route("/<kind>")
     def record_list(kind):
         if kind not in ("student", "employee"):
             abort(404)
-        result = filtered_rows(kind)
+        query = filtered_query(kind)
         model = Student if kind == "student" else Employee
         try:
             page = max(1, int(request.args.get("page", 1)))
             limit = min(100, max(10, int(request.args.get("limit", 25))))
         except ValueError:
             abort(400)
-        total = len(result)
+        total = query.count()
         page = min(page, max(1, (total + limit - 1)//limit))
+        result = read_many(kind,query.order_by(model.id.desc()).offset((page-1)*limit).limit(limit).all())
         return render_template("record_list.html", title="Manage "+("Students" if kind == "student" else "Employees"),
-            kind=kind, rows=result[(page-1)*limit:page*limit], total=total, page=page, limit=limit,
+            kind=kind, rows=result, total=total, page=page, limit=limit,
+            photos={row.owner_id: row.id for row in RecordFile.query.with_entities(RecordFile.owner_id, RecordFile.id).filter(RecordFile.owner_kind==kind, RecordFile.photo.is_(True), RecordFile.owner_id.in_([obj.id for obj, _ in result])).order_by(RecordFile.id.desc()).all()},
             pages=max(1, (total+limit-1)//limit), choices=setup_choices(),
             active=model.query.filter_by(status="Active").count(), all_count=model.query.count())
 
@@ -497,6 +539,24 @@ def configure_records(app, db, Student, Employee):
         response.headers["Content-Disposition"] = f'attachment; filename="schoolflow-{kind}-records.csv"'
         return response
 
+    @bp.route("/options", methods=["POST"])
+    def add_option():
+        category = request.form.get("category", "")
+        value = request.form.get("value", "").strip()
+        cls = request.form.get("class_name", "").strip() if category == "subject" else ""
+        if category not in CATEGORIES or not value or len(value) > 160 or len(cls) > 160:
+            return jsonify(error="Choose a field and enter an option up to 160 characters."), 422
+        existing = RecordSettings.query.filter_by(category=category, value=value, class_name=cls).first()
+        if not existing and value not in STANDARD_CHOICES.get(category, []):
+            db.session.add(RecordSettings(category=category, value=value, class_name=cls))
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                if not RecordSettings.query.filter_by(category=category, value=value, class_name=cls).first():
+                    raise
+        return jsonify(value=value, label=value, category=category, class_name=cls)
+
     @bp.route("/settings", methods=["GET", "POST"])
     def settings():
         errors = {}
@@ -516,6 +576,7 @@ def configure_records(app, db, Student, Employee):
         return render_template("record_settings.html", title="Record Settings", categories=CATEGORIES,
             choices=setup_choices(), errors=errors), 422 if errors else 200
 
+    app.extensions['record_helpers']=dict(raw_many=raw_many,read_many=read_many)
     app.register_blueprint(bp)
 
     @app.cli.command("seed-record-demo-options")

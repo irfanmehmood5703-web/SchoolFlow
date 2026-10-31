@@ -3,6 +3,7 @@ import hmac, re
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
+from sqlalchemy import String,cast,and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from operations import money
@@ -76,12 +77,30 @@ def configure_student_fee_plans(app, db, Student):
 
     @bp.get('')
     def index():
-        mode=request.args.get('mode','create'); students=Student.query.filter_by(status='Active').order_by(Student.id).all()
-        campus=request.args.get('campus',''); class_name=request.args.get('class_name',''); q=request.args.get('q','').strip().lower()
-        scoped=[s for s in students if (not campus or details(s).get('campus')==campus) and (not class_name or s.class_name==class_name)]
-        with_plan=sum(current(s.id) is not None for s in scoped)
-        rows=[(s,details(s),current(s.id)) for s in scoped if (current(s.id) is not None)==(mode=='update') and (not q or q in f'{s.name} {s.father} {s.admission_no} {s.id} {s.phone}'.lower())]
-        return render('student_fee_plan_list.html',title='Manage Fee Plans',rows=rows,mode=mode,with_plan=with_plan,without_plan=len(scoped)-with_plan,campuses=sorted({details(s).get('campus','') for s in students}-{''}),classes=sorted({s.class_name for s in students if s.class_name}))
+        mode=request.args.get('mode','create')
+        if mode not in ('create','update'):raise ValueError('Choose Create or Update fee plans.')
+        try:page=max(1,int(request.args.get('page','1')));size=int(request.args.get('size','25'))
+        except ValueError:raise ValueError('Choose valid fee-plan pagination.')
+        if size not in (25,50,100):raise ValueError('Choose 25, 50 or 100 rows.')
+        campus=request.args.get('campus','');class_name=request.args.get('class_name','');q=request.args.get('q','').strip().lower()
+        Details=rm['student']
+        latest=db.session.query(StudentFeePlan.student_id,db.func.max(StudentFeePlan.effective).label('effective')).group_by(StudentFeePlan.student_id).subquery()
+        scoped=Student.query.outerjoin(Details,Details.student_id==Student.id).outerjoin(latest,latest.c.student_id==Student.id).filter(Student.status=='Active')
+        if campus:scoped=scoped.filter(Details.data['campus'].as_string()==campus)
+        if class_name:scoped=scoped.filter(Student.class_name==class_name)
+        count=scoped.count();with_plan=scoped.filter(latest.c.student_id!=None).count()
+        matching=scoped.filter(latest.c.student_id!=None if mode=='update' else latest.c.student_id==None)
+        if q:
+            text=db.func.lower(db.func.coalesce(Student.name,'')+' '+db.func.coalesce(Student.father,'')+' '+Student.admission_no+' '+cast(Student.id,String)+' '+db.func.coalesce(Student.phone,''))
+            matching=matching.filter(text.contains(q,autoescape=True))
+        total=matching.count();pages=max(1,(total+size-1)//size);page=min(page,pages)
+        students=matching.order_by(Student.id).offset((page-1)*size).limit(size).all()
+        raw=app.extensions['record_helpers']['raw_many']('student',students)
+        plans={plan.student_id:plan for plan in StudentFeePlan.query.join(latest,and_(StudentFeePlan.student_id==latest.c.student_id,StudentFeePlan.effective==latest.c.effective)).filter(StudentFeePlan.student_id.in_([s.id for s in students])).all()} if students else {}
+        rows=[(s,raw[s.id],plans.get(s.id)) for s in students]
+        campuses=[row[0] for row in db.session.query(Details.data['campus'].as_string()).join(Student,Student.id==Details.student_id).filter(Student.status=='Active').distinct().order_by(Details.data['campus'].as_string()).all() if row[0]]
+        classes=[row[0] for row in db.session.query(Student.class_name).filter(Student.status=='Active').distinct().order_by(Student.class_name).all() if row[0]]
+        return render('student_fee_plan_list.html',title='Manage Fee Plans',rows=rows,mode=mode,with_plan=with_plan,without_plan=count-with_plan,campuses=campuses,classes=classes,page=page,pages=pages,total=total,size=size)
 
     @bp.route('/<int:sid>/edit',methods=['GET','POST'])
     def edit(sid):

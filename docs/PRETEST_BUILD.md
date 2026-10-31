@@ -130,3 +130,8 @@ Selected approvals are all-or-nothing across cohorts: all IDs must still be Wait
 Twelve additional integration tests cover read-only GETs, unlimited/zero/full seats, section sharing and independent campus/class/session scopes, atomic approvals, refusal/profile history, stale IDs and filters, CSRF/version/occupied-minimum checks, same-class editing, refused/inactive activation, transfer rollback, withdrawing to free a seat, dashboard counts and two concurrent SQLite connections competing for the last seat. Total: 118 tests. Existing institute databases require `flask --app app institute-upgrade` for the new capacity and write-gate tables.
 
 The record-list non-enrolled summary now links to an explicit non-active filter that includes Waiting, Refused, Inactive and other non-enrolled statuses, matching the displayed count. The exact Inactive filter remains available. CSV uses the same filter. A regression test covers this distinction.
+
+
+## Admission dropdown/photo fixes and navigation performance
+
+See ../PERFORMANCE.md for the repeatable 500-student benchmark, admission form fixes, 125-test validation and free-host wake-up limitations. The build marker is schoolflow-pretest-v11. This does not complete the remaining production requirements.

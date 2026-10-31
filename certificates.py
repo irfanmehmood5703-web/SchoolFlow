@@ -33,7 +33,7 @@ def configure_certificates(app,db,Student):
         id=db.Column(db.Integer,primary_key=True)
         campus=db.Column(db.String(160),nullable=False,unique=True)
         data=db.Column(db.JSON,nullable=False,default=dict)
-        logo=db.Column(db.LargeBinary)
+        logo=db.deferred(db.Column(db.LargeBinary))
         logo_mime=db.Column(db.String(30))
         version=db.Column(db.Integer,nullable=False,default=1)
         __mapper_args__={'version_id_col':version}
@@ -65,12 +65,12 @@ def configure_certificates(app,db,Student):
         document_name=db.Column(db.String(160),nullable=False)
         student_name=db.Column(db.String(160),nullable=False)
         reference=db.Column(db.String(60),nullable=False)
-        snapshot=db.Column(db.JSON,nullable=False)
-        html=db.Column(db.Text,nullable=False,default='')
+        snapshot=db.deferred(db.Column(db.JSON,nullable=False))
+        html=db.deferred(db.Column(db.Text,nullable=False,default=''))
         created=db.Column(db.DateTime,nullable=False,default=lambda:datetime.now(ZoneInfo('UTC')))
     app.extensions['certificate_models']=dict(campus=CertificateCampus,template=CertificateTemplate,batch=CertificateBatch,issue=CertificateIssue)
     def now():return datetime.now(ZoneInfo('Asia/Karachi'))
-    def campuses():return sorted({x.value for x in rm['settings'].query.filter_by(category='campus').all()}|{x.campus for x in CertificateCampus.query.all()})
+    def campuses():return sorted({x.value for x in rm['settings'].query.filter_by(category='campus').all()}|{x[0] for x in db.session.query(CertificateCampus.campus).all()})
     def commit():
         try:db.session.commit()
         except (IntegrityError,StaleDataError):db.session.rollback();raise ValueError('This record was already saved or changed. Reload before retrying.')
@@ -90,15 +90,17 @@ def configure_certificates(app,db,Student):
     def duplicate(exc):
         db.session.rollback();return render_template('operation_error.html',title='Reload this operation',error='This setup or print request was already saved. Reload to view the saved result.'),422
     def campus_for(template):return db.get_or_404(CertificateCampus,template.campus_id)
-    def selected_campus():
-        name=request.values.get('campus','') or (campuses()[0] if campuses() else '')
-        if name and name not in campuses():raise ValueError('Choose a configured campus.')
+    def selected_campus(names=None):
+        if names is None: names=campuses()
+        name=request.values.get('campus','') or (names[0] if names else '')
+        if name and name not in names:raise ValueError('Choose a configured campus.')
         return name
     def filtered_students(campus,active=False):
         rows=Student.query.order_by(Student.id).all();result=[]
+        raw=app.extensions['record_helpers']['raw_many']('student',rows)
         q=request.values.get('q','').strip().lower()
         for s in rows:
-            d=details(s)
+            d=raw[s.id]
             if campus and d.get('campus')!=campus:continue
             if active and s.status!='Active':continue
             if q and q not in f'{s.id} {s.admission_no} {s.name} {s.father} {d.get("roll_no","")}'.lower():continue
@@ -178,27 +180,37 @@ def configure_certificates(app,db,Student):
         columns=request.values.getlist('columns') or ([] if request.values.get('columns_configured') else [key for key,label in qr_columns])
         if not columns or not set(columns)<={key for key,label in qr_columns}:raise ValueError('Choose at least one valid export / print column.')
         return list(dict.fromkeys(columns))
-    def qr_values(s,d):
-        photo=rm['file'].query.filter_by(owner_kind='student',owner_id=s.id,photo=True).first()
+    def photos_for(students):
+        ids=[s.id for s in students];result={};File=rm['file']
+        for offset in range(0,len(ids),900):
+            for row in db.session.query(File.id,File.owner_id).filter(File.owner_kind=='student',File.photo==True,File.owner_id.in_(ids[offset:offset+900])).order_by(File.id).all():
+                result.setdefault(row.owner_id,row)
+        return result
+    def qr_values(s,d,photos):
+        photo=photos.get(s.id)
         return dict(sid=s.id,roll=d.get('roll_no') or s.admission_no,name=s.name,father=s.father or '',campus=d.get('campus',''),**{'class':s.class_name},section=d.get('section',''),gender=d.get('gender',''),photo=url_for('records.record_file',id=photo.id) if photo else '',qr=qr_payload(s))
 
     @bp.route('',methods=['GET'])
     def index():
-        campus=selected_campus();tab=request.args.get('tab','cards')
+        campus_names=campuses();campus=selected_campus(campus_names);tab=request.args.get('tab','cards')
         if tab not in ('cards','logs','qr'):abort(404)
         c=CertificateCampus.query.filter_by(campus=campus).first()
         templates=CertificateTemplate.query.filter_by(campus_id=c.id).all() if c else []
         page=num(request.args.get('page','1'),'page');size=num(request.args.get('size','100' if tab=='qr' else '25'),'page size');columns=selected_columns()
         if page<1 or size not in (25,50,100):raise ValueError('Choose a valid page and page size.')
-        all_rows=filtered_students(campus,active=tab=='qr');total=len(all_rows);rows=all_rows[(page-1)*size:page*size]
-        issues=CertificateIssue.query.filter_by(campus=campus).order_by(CertificateIssue.id.desc()).all() if campus else []
+        all_rows=filtered_students(campus,active=tab=='qr') if tab!='logs' else [];total=len(all_rows);rows=all_rows[(page-1)*size:page*size]
+        issues=CertificateIssue.query.filter_by(campus=campus).order_by(CertificateIssue.id.desc()).all() if campus and tab=='logs' else []
         q=request.args.get('q','').strip().lower()
         if q:issues=[r for r in issues if q in f'{r.student_name} {r.document_name} {r.reference} {r.student_id}'.lower()]
         if tab=='logs':total=len(issues);issues=issues[(page-1)*size:page*size]
         if request.args.get('export') in ('csv','xlsx'):
             if tab=='logs':return csv_response(['Reference','Certificate','SID','Student','Campus','Generated At (Karachi)'],[[r.reference,r.document_name,r.student_id,r.student_name,r.campus,local_time(r.created)] for r in issues],'certificate-logs')
-            return csv_response([dict(qr_columns)[key] for key in columns],[[qr_values(s,d)[key] for key in columns] for s,d in all_rows],'student-qr' if tab=='qr' else 'certificate-students')
-        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campuses(),campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=CATALOG,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in rm['settings'].query.filter_by(category=category).all()],photo=lambda sid:rm['file'].query.filter_by(owner_kind='student',owner_id=sid,photo=True).first(),local_time=local_time)
+            photos=photos_for([s for s,d in all_rows]);export_rows=[]
+            for s,d in all_rows:
+                values=qr_values(s,d,photos);export_rows.append([values[key] for key in columns])
+            return csv_response([dict(qr_columns)[key] for key in columns],export_rows,'student-qr' if tab=='qr' else 'certificate-students')
+        photos=photos_for([s for s,d in rows]);option_rows=rm['settings'].query.filter(rm['settings'].category.in_(['class_name','section','gender'])).all()
+        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=CATALOG,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time)
     def local_time(value):
         return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p') if value.tzinfo is None else value.astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p')
 
@@ -341,10 +353,13 @@ def configure_certificates(app,db,Student):
     def qr_print():
         campus=selected_campus();ids=list(dict.fromkeys(num(x,'student selection') for x in request.form.getlist('student_ids')))
         if not ids or len(ids)>100:raise ValueError('Select between 1 and 100 students to print QR codes.')
-        students=[]
+        pupils=Student.query.filter(Student.id.in_(ids)).all()
+        if len(pupils)!=len(ids):abort(404)
+        raw=app.extensions['record_helpers']['raw_many']('student',pupils)
+        photos=photos_for(pupils);by_id={s.id:s for s in pupils};students=[]
         for sid in ids:
-            s=db.get_or_404(Student,sid)
-            if s.status!='Active' or details(s).get('campus')!=campus:raise ValueError('Select active students from the chosen campus.')
-            photo=rm['file'].query.filter_by(owner_kind='student',owner_id=s.id,photo=True).first();students.append((s,details(s),photo))
-        return render_template('student_qr_print.html',title='Student QR Codes',students=students,columns=selected_columns(),qr_columns=qr_columns,qr_values=qr_values)
+            s=by_id[sid];d=raw[sid]
+            if s.status!='Active' or d.get('campus')!=campus:raise ValueError('Select active students from the chosen campus.')
+            students.append((s,d,photos.get(s.id)))
+        return render_template('student_qr_print.html',title='Student QR Codes',students=students,columns=selected_columns(),qr_columns=qr_columns,qr_values=lambda s,d:qr_values(s,d,photos))
     app.register_blueprint(bp)

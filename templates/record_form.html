@@ -14,6 +14,7 @@
     {% if f.kind == 'family' %}{% for family in families %}<option value="{{family.id}}" {{'selected' if family.id|string == value|string else ''}}>{{family.number}} · {{family.data.get('father','')}}</option>{% endfor %}
     {% else %}
       {% set opts = f.options if f.options else choices.get(f.category, []) %}
+      {% if not opts %}<option value="" disabled>No options yet — use Add option below</option>{% endif %}
       {% set ns = namespace(found=false) %}
       {% for item in opts %}
         {% if item[0] == value %}{% set ns.found = true %}{% endif %}
@@ -22,6 +23,7 @@
       {% if value and not ns.found and f.kind != 'subjects' %}<option value="{{value}}" selected>{{value}}</option>{% endif %}
     {% endif %}
   </select>
+  {% if f.category %}<details class="option-editor" data-category="{{f.category}}" data-target="{{f.key}}"><summary>Add {{f.label}} option</summary><label for="new-{{f.key}}">New {{f.label}}</label><input id="new-{{f.key}}" type="text" maxlength="160" autocomplete="off"><button type="button" class="button secondary add-option">Add option</button><small class="option-feedback" role="status">Saved for this school. Your form stays open.</small></details>{% endif %}
   {% elif f.kind == 'textarea' %}<textarea id="{{f.key}}" name="{{f.key}}" rows="3" maxlength="5000">{{value}}</textarea>
   {% else %}<input id="{{f.key}}" name="{{f.key}}" type="{{'text' if f.kind == 'digits' else ('number' if f.kind in ['number','integer'] else f.kind)}}" value="{{'' if f.kind == 'password' else value}}" {% if f.required %}required{% endif %} {% if f.kind in ['number','integer'] %}min="0" step="{{'1' if f.kind == 'integer' else 'any'}}"{% endif %} {% if f.kind == 'digits' %}inputmode="numeric" pattern="[0-9]*"{% endif %} {% if f.kind == 'password' %}autocomplete="new-password" minlength="10"{% else %}maxlength="160"{% endif %} {% if errors.get(f.key) %}aria-invalid="true" aria-describedby="error-{{f.key}}"{% endif %}>
   {% endif %}
@@ -40,7 +42,7 @@
 <input type="hidden" name="_csrf" value="{{record_csrf}}">
 {% for heading, fields in sections %}
 <section class="form-card" id="section-{{loop.index}}"><div class="section-heading"><span>{{'%02d'|format(loop.index)}}</span><h2>{{heading}}</h2></div>
-{% if loop.first %}<div class="profile-upload"><div class="profile-placeholder">{% if photo %}<img src="{{url_for('records.record_file',id=photo.id)}}" alt="Saved profile photo">{% else %}<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="22" r="12"/><path d="M10 59c0-17 10-24 22-24s22 7 22 24z"/></svg>{% endif %}</div><div><label for="photo">{{'Student Photo' if kind == 'student' else 'Official Profile Photo'}}</label><input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP, up to 5 MB. Save to apply changes.</small>{% if photo %}<label class="check"><input type="checkbox" name="remove_photo" value="1">Remove Image</label>{% endif %}{% if errors.get('photo') %}<p class="field-error">{{errors.photo}}</p>{% endif %}</div></div>{% endif %}
+{% if loop.first %}<div class="profile-upload"><div class="profile-placeholder" id="photo-preview">{% if photo %}<img src="{{url_for('records.record_file',id=photo.id)}}" alt="Saved profile photo">{% else %}<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="22" r="12"/><path d="M10 59c0-17 10-24 22-24s22 7 22 24z"/></svg>{% endif %}</div><div><label for="photo">{{'Student Photo' if kind == 'student' else 'Official Profile Photo'}}</label><input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG or WebP, up to 5 MB. A preview appears when you choose a file. Save to keep the photo.</small><small id="photo-feedback" role="status"></small>{% if photo %}<label class="check"><input type="checkbox" name="remove_photo" value="1">Remove Image</label>{% endif %}{% if errors.get('photo') %}<p class="field-error">{{errors.photo}}</p>{% endif %}</div></div>{% endif %}
 <div class="fields-grid">{% for f in fields %}{{render_field(f)}}{% endfor %}</div>
 {% if kind == 'student' and loop.index == 1 %}<div class="subsection"><h3>Visitors Info</h3><div class="table"><table><thead><tr><th>Name</th><th>Phone</th><th>Relation</th><th>Address</th><th>Notes</th></tr></thead><tbody>{% for i in range(3) %}<tr>{% for k in ['name','phone','relation','address','notes'] %}<td><input name="visitor_{{i}}_{{k}}" aria-label="Visitor {{i+1}} {{k}}" value="{{data.get('visitors',[{},{},{}])[i].get(k,'')}}" maxlength="500"></td>{% endfor %}</tr>{% endfor %}</tbody></table></div></div>{% endif %}
 {% if kind == 'employee' and heading == 'Contact Details' %}<p class="muted">Employee documents can be added in the Attach Documents section below.</p>{% endif %}
@@ -53,5 +55,5 @@
 {% if kind == 'student' %}<section class="form-card"><h2>Communication preferences</h2><div class="check-grid">{% for key, label in communication %}<label class="check"><input type="checkbox" name="{{key}}" value="1" {{'checked' if data.get(key) else ''}}>{{label}}</label>{% endfor %}</div><p class="muted">Preferences are saved with this record. SMS and app delivery need a connected provider; this build does not send messages.</p></section>{% endif %}
 <div class="form-actions">{% if kind == 'student' %}<button class="button secondary" name="save_action" value="back">Save and Go Back</button><button class="button secondary" name="save_action" value="new">Save and Add New</button><button class="button" name="save_action" value="view">Save and View</button>{% else %}<button class="button secondary" name="save_action" value="back">Save &amp; Show All Employees</button><button class="button" name="save_action" value="salary">Save &amp; Create Salary Plan</button>{% endif %}</div>
 </form></div>
-<script src="{{url_for('static',filename='records.js')}}" defer></script>
+<script src="{{asset_url('records.js')}}" defer></script>
 {% endblock %}

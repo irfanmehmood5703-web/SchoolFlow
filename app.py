@@ -18,6 +18,8 @@ app.config.update(
     PUBLIC_DEMO_ENABLED=os.getenv('PUBLIC_DEMO_ENABLED', '1') == '1',
     INSTITUTE_DATABASE_DIR=os.getenv('INSTITUTE_DATABASE_DIR'),
 )
+from performance import configure_performance
+configure_performance(app)
 db=SQLAlchemy(app, session_options={'class_': InstituteSession})
 
 class Student(db.Model):

@@ -204,5 +204,40 @@ class ReferenceRecordTests(unittest.TestCase):
         student=Student.query.one();detail=self.models['student'].query.one()
         self.assertEqual(detail.data['leaving_date'],'2026-11-01');self.assertEqual(student.status,'Active')
 
+
+    def test_standard_options_work_without_demo_setup_and_custom_options_stay_available(self):
+        self.models['settings'].query.delete();db.session.commit()
+        page=self.client.get('/records/student/new').data
+        for value in [b'Male',b'Female',b'Christianity',b'Hinduism',b'Other',b'AB-',b'Unknown',b'Urdu',b'Punjabi',b'School Visit']:
+            self.assertIn(b'value="'+value+b'"',page)
+        for category,value in [('campus','Own Campus'),('class_name','Own Class'),('section','B'),('academic_session','2027-28'),('group_name','Science'),('fee_plan','Own Fee Plan'),('house','Blue')]:
+            r=self.client.post('/records/options',data={'_csrf':self.csrf,'category':category,'value':value})
+            self.assertEqual(r.status_code,200);self.assertEqual(r.json['value'],value)
+            self.assertEqual(self.client.post('/records/options',data={'_csrf':self.csrf,'category':category,'value':value}).status_code,200)
+            self.assertEqual(self.models['settings'].query.filter_by(category=category,value=value).count(),1)
+        self.assertEqual(self.client.post('/records/options',data={'_csrf':'bad','category':'campus','value':'No'}).status_code,400)
+        self.assertEqual(self.client.post('/records/options',data={'_csrf':self.csrf,'category':'not-a-field','value':'No'}).status_code,422)
+        r=self.client.post('/records/student/new',data=self.student(campus='Own Campus',class_name='Own Class',section='B',academic_session='2027-28',group_name='Science',fee_plan='Own Fee Plan',house='Blue',class_of_admission='Own Class',religion='Other',subjects=[]))
+        self.assertEqual(r.status_code,302)
+        saved=self.models['student'].query.one().data
+        self.assertEqual(saved['religion'],'Other');self.assertEqual(saved['campus'],'Own Campus');self.assertEqual(saved['class_of_admission'],'Own Class')
+
+    def test_uploaded_photo_displays_in_profile_edit_list_and_can_be_replaced_removed(self):
+        from PIL import Image
+        def photo(color):
+            stream=io.BytesIO();Image.new('RGB',(24,32),color).save(stream,format='PNG');return stream.getvalue()
+        original=photo('green');data=self.student();data['photo']=(io.BytesIO(original),'portrait.png')
+        r=self.client.post('/records/student/new',data=data,content_type='multipart/form-data');self.assertEqual(r.status_code,302)
+        pupil=Student.query.one();sid=pupil.id
+        f=self.models['file'].query.one();url=f'/records/files/{f.id}'
+        image=self.client.get(url);self.assertEqual(image.data,original);self.assertEqual(image.mimetype,'image/png');self.assertIn('no-store',image.headers['Cache-Control'])
+        for path in [f'/records/student/{sid}',f'/records/student/{sid}/edit','/records/student']:
+            self.assertIn(url.encode(),self.client.get(path).data,path)
+        replacement=photo('blue');data=self.student(family_mode='existing',family_id=str(self.models['family'].query.one().id));data['photo']=(io.BytesIO(replacement),'new.png')
+        self.assertEqual(self.client.post(f'/records/student/{sid}/edit',data=data,content_type='multipart/form-data').status_code,302)
+        self.assertEqual(self.models['file'].query.count(),1);self.assertEqual(self.models['file'].query.one().content,replacement)
+        self.assertEqual(self.client.post(f'/records/student/{sid}/edit',data=self.student(remove_photo='1',family_mode='existing',family_id=str(self.models['family'].query.one().id))).status_code,302)
+        self.assertEqual(self.models['file'].query.count(),0)
+
 if __name__ == "__main__":
     unittest.main()
