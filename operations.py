@@ -215,6 +215,9 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/register/<kind>',methods=['GET','POST'])
     def register(kind):
         if kind not in SCHEMAS: abort(404)
+        if kind=='fee-plans':
+            if request.method=='POST':raise ValueError('Configure fee schedules in Core Settings → Fee Settings.')
+            return redirect(url_for('fee_setup.schedules'))
         if kind=='shifts':return redirect(url_for('school_settings.assign_shifts'),code=307 if request.method=='POST' else 302)
         schema=SCHEMAS[kind]
         if request.method=='POST':
@@ -292,6 +295,8 @@ def configure_operations(app, db, Student, Employee):
 
     @bp.route('/generate-challans',methods=['GET','POST'])
     def generate_challans():
+        if request.method=='GET':return redirect(url_for('student_plans.generate'))
+        app.extensions['admission_capacity']['lock']()
         plans=Workflow.query.filter_by(kind='fee-plans',status='Active').all()
         if request.method=='POST':
             m=month(request.form.get('month'));p=db.get_or_404(Workflow,int(request.form.get('plan_id','0')))
@@ -303,9 +308,14 @@ def configure_operations(app, db, Student, Employee):
                 s=db.get_or_404(Student,id)
                 assigned=app.extensions.get('student_fee_plan_model')
                 if assigned and assigned.query.filter_by(student_id=id).first(): raise ValueError('This student has an assigned fee plan. Use Generate from Student Fee Plans to apply the saved discounts.')
+                helper=app.extensions['fee_setup_helpers'];data=details(s)
+                if (p.data.get('campus') and p.data['campus']!=data.get('campus')) or (p.data.get('class_name') and p.data['class_name']!=s.class_name):raise ValueError('Choose a schedule for the student campus and class.')
+                if helper['scoped_schedule'](s,p.data['name']):raise ValueError('Assign this configured schedule to the student, then generate from Student Fee Plans.')
+                rule=helper['effective_rule'](p.data['particular'])
+                if not helper['eligible'](rule,m,not Bill.query.filter_by(student_id=id).first(),True):continue
                 source=f'plan:{p.id}:student:{id}:month:{m}'
                 if Bill.query.filter_by(source=source).first(): continue
-                db.session.add(Bill(student_id=id,month=m,due=day(m+'-'+str(p.data['due_day']).zfill(2)),lines=[{'particular':p.data['particular'],'amount':amount}],source=source));created+=1
+                db.session.add(Bill(student_id=id,month=m,due=day(m+'-'+str(p.data['due_day']).zfill(2)),lines=[{'particular':p.data['particular'],'display_name':rule['label'],'amount':amount,'billing_rule':rule}],source=source));created+=1
             audit('Generate challans',count=created,month=m);commit();flash(f'{created} challans generated; duplicates skipped.','success')
             return redirect(url_for('ops.fees',mode='payments'))
         return render('generate_fees.html',title='Generate Fee Challans',plans=plans,students=people(active=False))
@@ -845,7 +855,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v15')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v16')
 
     @app.route('/api/v1/summary')
     def summary_api():

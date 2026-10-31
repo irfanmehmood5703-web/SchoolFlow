@@ -61,7 +61,7 @@ def configure_reports(app,db,Student,Employee):
             for (day,account),values in sorted(group.items()):rows.append([day,account,values[2],cash(values[0]),cash(values[1])])
             return response(view,['Payment Date','Receiving Account','Receipts','Collected','Discount'],rows,dict(Collected=cash(sum(v[0] for v in group.values())),Discount=cash(sum(v[1] for v in group.values()))))
         if view=='class-fees':
-            particular=request.args.get('particular','');groups=defaultdict(lambda:[0,0,0,0,False])
+            particular=app.extensions['fee_setup_helpers']['resolve'](request.args.get('particular',''));groups=defaultdict(lambda:[0,0,0,0,False])
             for b in billing:
                 for line in b.lines:
                     if particular and line['particular']!=particular:continue
@@ -69,7 +69,7 @@ def configure_reports(app,db,Student,Employee):
                     key=(students[b.student_id].class_name or 'Unassigned',line['particular']);g=groups[key];g[0]+=line['amount'];g[3]+=1
                     if len(b.lines)==1:g[1]+=b.paid;g[2]+=b.discount
                     else:g[4]=True
-            rows=[[cls,part,count,cash(billed),cash(paid) if not unknown else 'Allocation unavailable',cash(discount) if not unknown else 'Allocation unavailable',cash(billed-paid-discount) if not unknown else 'Allocation unavailable'] for (cls,part),(billed,paid,discount,count,unknown) in sorted(groups.items())]
+            rows=[[cls,app.extensions['fee_setup_helpers']['label'](part),count,cash(billed),cash(paid) if not unknown else 'Allocation unavailable',cash(discount) if not unknown else 'Allocation unavailable',cash(billed-paid-discount) if not unknown else 'Allocation unavailable'] for (cls,part),(billed,paid,discount,count,unknown) in sorted(groups.items())]
             return response(view,['Class','Particular','Challans','Payable','Paid','Discount','Remaining'],rows,note='Payments on older multi-particular challans have no line allocation. Such values are explicitly unavailable, rather than estimated.')
         if view=='monthly-defaulters':
             groups=defaultdict(lambda:[0,0,0,0])

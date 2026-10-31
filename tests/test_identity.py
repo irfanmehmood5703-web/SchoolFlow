@@ -150,6 +150,21 @@ class IdentityTests(unittest.TestCase):
         for path in ['/workspace/core/hrm/attendance-lock','/workspace/core/exam/subject-options','/workspace/core/hrm/designation-options','/workspace/core/hrm/employee-qr/1.svg']:
             self.assertEqual(public.get(path).status_code,302)
 
+    def test_fee_heads_scoped_schedules_and_previews_are_isolated(self):
+        other=app.test_client();self.login();self.login('TEST-B',client=other)
+        for client,name in [(self.client,'Only School A'),(other,'Only School B')]:
+            with client.session_transaction() as session:token=session['record_csrf']
+            response=client.post('/workspace/core/fees/heads',data={'_csrf':token,'version':'0','action':'save','key':'Custom Fee','label':name+' Fee','timing':'monthly'})
+            self.assertEqual(response.status_code,302)
+            client.post('/records/options',data={'_csrf':token,'category':'class_name','value':'Test Class'})
+            response=client.post('/workspace/core/fees/schedules',data={'_csrf':token,'version':'0','action':'save','name':name+' Plan','campuses':['Campus '+name],'classes':['Test Class'],'due_day':'10','head_key':['Custom Fee'],'head_version_0':'1','amount_0':'1000'})
+            self.assertEqual(response.status_code,302)
+        for client,expected,excluded in [(self.client,b'Only School A',b'Only School B'),(other,b'Only School B',b'Only School A')]:
+            for path in ['/workspace/core/fees/heads','/workspace/core/fees/schedules','/workspace/core/fees/preview/1?month=2026-09']:
+                response=client.get(path);self.assertEqual(response.status_code,200);self.assertIn(expected,response.data);self.assertNotIn(excluded,response.data)
+        public=app.test_client()
+        for path in ['/workspace/core/fees/heads','/workspace/core/fees/schedules','/workspace/core/fees/preview/1']:self.assertEqual(public.get(path).status_code,302)
+
     def test_workspace_writes_stay_in_selected_database(self):
         self.login()
         with self.client.session_transaction() as sess: token = sess['record_csrf']

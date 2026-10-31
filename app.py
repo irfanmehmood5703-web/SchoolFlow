@@ -82,6 +82,8 @@ from institute_setup import configure_institute_setup
 configure_institute_setup(app,db)
 from school_settings import configure_school_settings
 configure_school_settings(app,db,Student,Employee)
+from fee_setup import configure_fee_setup
+configure_fee_setup(app,db,Student)
 
 @app.route('/')
 def home():

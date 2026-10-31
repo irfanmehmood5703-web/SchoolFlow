@@ -49,8 +49,13 @@ def configure_student_fee_plans(app, db, Student):
             if data.get('campus') and data['campus']!=d.get('campus'): continue
             if data.get('class_name') and data['class_name']!=s.class_name: continue
             result.setdefault(data['name'],[]).append(w)
+        helper=app.extensions.get('fee_setup_helpers')
+        if helper:
+            for row in helper['for_student'](s,d):result.setdefault(row.name,[])
         return result
     def rows_for(s,name):
+        helper=app.extensions.get('fee_setup_helpers');configured=helper['scoped_schedule'](s,name) if helper else None
+        if configured:return helper['assigned_rows'](configured)
         group=templates(s).get(name)
         if not group: raise ValueError('Choose a configured fee schedule for this campus and class.')
         amounts={}
@@ -71,6 +76,7 @@ def configure_student_fee_plans(app, db, Student):
         if request.method=='POST':
             token=request.form.get('_csrf',''); expected=session.get('record_csrf','')
             if not token or not expected or not hmac.compare_digest(token,expected): abort(400)
+            app.extensions['admission_capacity']['lock']()
     @bp.errorhandler(ValueError)
     def error(exc):
         db.session.rollback();return render('operation_error.html',title='Check fee plan',error=str(exc)),422
@@ -106,7 +112,10 @@ def configure_student_fee_plans(app, db, Student):
     def edit(sid):
         s=db.get_or_404(Student,sid); latest=current(sid); names=templates(s)
         name=request.values.get('schedule') or (latest.data.get('schedule') if latest else details(s).get('fee_plan')) or next(iter(names),'')
+        refresh=request.values.get('refresh_schedule')=='1';helper=app.extensions['fee_setup_helpers'];configured=helper['scoped_schedule'](s,name)
+        fresh=not latest or name!=latest.data.get('schedule') or refresh
         if request.method=='POST':
+            if fresh and configured and request.form.get('schedule_revision')!=f'{configured.id}:{configured.version}':raise ValueError('The schedule changed. Reload before assigning its amounts.')
             if s.status!='Active': raise ValueError('Fee plans can only be assigned to active students.')
             origin=f'{latest.id}:{latest.version}' if latest else 'new'
             if request.form.get('origin')!=origin: raise ValueError('The student plan changed. Reload before saving.')
@@ -119,7 +128,7 @@ def configure_student_fee_plans(app, db, Student):
             if year and (not year.isdigit() or not 1900<=int(year)<=9999): raise ValueError('Enter a valid fee plan year.')
             target=StudentFeePlan.query.filter_by(student_id=sid,effective=effective).first()
             # Reuse a saved snapshot only if its schedule is unchanged; a changed schedule loads configured amounts.
-            lines=[dict(x) for x in latest.data['lines']] if latest and name==latest.data['schedule'] else rows_for(s,name)
+            lines=[dict(x) for x in latest.data['lines']] if latest and name==latest.data['schedule'] and not refresh else rows_for(s,name)
             for i,line in enumerate(lines):
                 if f'discount_{i}' not in request.form or f'arrears_{i}' not in request.form: raise ValueError('The fee rows are incomplete. Reload the form.')
                 line['discount']=money(request.form.get(f'discount_{i}'))
@@ -127,7 +136,7 @@ def configure_student_fee_plans(app, db, Student):
                 # Editing the same effective month reapplies its percentage to the original
                 # base, rather than compounding on every Save. A later month starts
                 # from the latest plan's resulting fee, allowing yearly compounding.
-                same_period=latest and effective==latest.effective and name==latest.data['schedule']
+                same_period=latest and effective==latest.effective and name==latest.data['schedule'] and not refresh
                 base_actual=line.get('base_actual',line['actual']) if same_period else line['actual']
                 if line['discount']>base_actual: raise ValueError('Discount cannot exceed the fee before increment: '+line['particular'])
                 base_net=base_actual-line['discount']
@@ -136,16 +145,22 @@ def configure_student_fee_plans(app, db, Student):
                 line.update(base_actual=base_actual,base_net=base_net,increment=increment,actual=base_actual+increment,net=base_net+increment)
             reason=request.form.get('reason','').strip(); notes=request.form.get('notes','').strip()
             if len(reason)>200 or len(notes)>5000: raise ValueError('Discount reason or notes are too long.')
-            data=dict(schedule=name,lines=lines,percentage=str(pct),year=year,reason=reason,notes=notes)
+            metadata=helper['snapshot'](configured) if fresh and configured else ({key:latest.data[key] for key in ('schedule_id','schedule_version','due_day') if key in latest.data} if latest else {})
+            data=dict(schedule=name,lines=lines,percentage=str(pct),year=year,reason=reason,notes=notes,**metadata)
             old=dict(target.data) if target else None
             if target: target.data=data
             else: target=StudentFeePlan(student_id=sid,effective=effective,data=data);db.session.add(target)
             db.session.add(Audit(action='Save student fee plan',data=dict(student_id=sid,effective=effective,before=old,after=data)))
             commit();flash('Student fee plan saved. Existing challans retain their saved amounts.','success')
             return redirect(url_for('student_plans.view',sid=sid,plan_id=target.id))
-        if latest and name==latest.data['schedule']: lines=latest.data['lines']
+        if latest and name==latest.data['schedule'] and not refresh: lines=latest.data['lines']
         else: lines=rows_for(s,name) if name in names else []
-        return render('student_fee_plan_edit.html',title='Update Fee Plan' if latest else 'Create Fee Plan',s=s,d=details(s),plan=latest,lines=lines,names=names,name=name,origin=f'{latest.id}:{latest.version}' if latest else 'new',today=date.today().isoformat(),total=totals([dict(x,net=x['actual']-x['discount']) for x in lines]))
+        if refresh and latest and name==latest.data['schedule']:
+            previous={x['particular']:x for x in latest.data['lines']}
+            for line in lines:
+                old=previous.get(line['particular'],{})
+                line.update(discount=old.get('discount',0),arrears=old.get('arrears',0))
+        return render('student_fee_plan_edit.html',refresh=refresh,schedule_revision=f'{configured.id}:{configured.version}' if configured else '',title='Update Fee Plan' if latest else 'Create Fee Plan',s=s,d=details(s),plan=latest,lines=lines,names=names,name=name,origin=f'{latest.id}:{latest.version}' if latest else 'new',today=date.today().isoformat(),total=totals([dict(x,net=x['actual']-x['discount']) for x in lines]))
 
     @bp.get('/<int:sid>')
     def view(sid):
@@ -165,13 +180,17 @@ def configure_student_fee_plans(app, db, Student):
         all_heads=sorted({x['particular'] for p in StudentFeePlan.query.all() for x in p.data['lines'] if x['net'] or x['arrears']})
         if request.method=='POST':
             at=month(request.form.get('month'))
-            try: due=date.fromisoformat(request.form.get('due',''))
-            except ValueError: raise ValueError('Choose a valid due date.')
+            override=request.form.get('due','');due=None
+            if override:
+                try:due=date.fromisoformat(override)
+                except ValueError:raise ValueError('Choose a valid due date.')
             try: ids=list(dict.fromkeys(int(x) for x in request.form.getlist('student_ids')))
             except ValueError: raise ValueError('Invalid student selection.')
             heads=set(request.form.getlist('particular'))
-            if not ids or not heads or not heads<=set(all_heads): raise ValueError('Select students and the fee particulars to charge for this run.')
-            count=0
+            mode=request.form.get('timing_mode','selected')
+            if mode not in ('selected','auto'):raise ValueError('Choose automatic timings or selected particulars.')
+            if not ids or (mode=='selected' and not heads) or not heads<=set(all_heads): raise ValueError('Select students and the fee particulars to charge for this run.')
+            count=0;skipped=0;helper=app.extensions['fee_setup_helpers']
             for sid in ids:
                 s=db.get_or_404(Student,sid);p=current(sid,at)
                 if s.status!='Active' or not p: raise ValueError('Each selected student must be active with a plan effective by the challan month.')
@@ -179,20 +198,26 @@ def configure_student_fee_plans(app, db, Student):
                 if Bill.query.filter_by(source=source).first(): continue
                 # An earlier manually generated bill requires review, not a second monthly bill.
                 if Bill.query.filter_by(student_id=sid,month=at).first(): raise ValueError('A challan already exists for a selected student in this month. Review it before generating another.')
+                first=not Bill.query.filter_by(student_id=sid).first()
                 used={line.get('arrears_key') for bill in Bill.query.filter_by(student_id=sid).all() for line in bill.lines}
                 lines=[]; claim_heads=[]
                 for x in p.data['lines']:
-                    if x['particular'] not in heads: continue
-                    if x['net']: lines.append(dict(particular=x['particular'],amount=x['net'],actual=x['actual'],plan_discount=x['discount'],plan_id=p.id))
+                    rule=helper['effective_rule'](x['particular'],x);selected=x['particular'] in heads
+                    if not selected and (mode=='selected' or rule['timing'] in ('manual','fine')):continue
+                    if x['net'] and helper['eligible'](rule,at,first,selected):lines.append(dict(particular=x['particular'],display_name=rule['label'],amount=x['net'],actual=x['actual'],plan_discount=x['discount'],plan_id=p.id,billing_rule=rule))
                     key=f"student:{sid}:particular:{x['particular']}"
                     if request.form.get('include_arrears')=='on' and x['arrears'] and key not in used and not FeeArrearsClaim.query.filter_by(student_id=sid,particular=x['particular']).first():
-                        lines.append(dict(particular=x['particular']+' — First Time Arrears',amount=x['arrears'],arrears_key=key,plan_id=p.id));claim_heads.append(x['particular'])
-                if not lines: raise ValueError('The selected particulars have no amount to charge for a student.')
-                bill=Bill(student_id=sid,month=at,due=due,lines=lines,source=source);db.session.add(bill)
+                        lines.append(dict(particular=x['particular']+' — First Time Arrears',display_name=rule['label']+' — First Time Arrears',amount=x['arrears'],arrears_key=key,plan_id=p.id));claim_heads.append(x['particular'])
+                if not lines:
+                    if 'timing_mode' not in request.form:raise ValueError('The selected particulars have no amount to charge for a student.')
+                    skipped+=1;continue
+                if due is None and not p.data.get('due_day'):raise ValueError('Enter a due-date override for student plans without a saved due day.')
+                bill_due=due or helper['due'](at,p.data['due_day'])
+                bill=Bill(student_id=sid,month=at,due=bill_due,lines=lines,source=source);db.session.add(bill)
                 for head in claim_heads: db.session.add(FeeArrearsClaim(student_id=sid,particular=head,bill=bill))
                 count+=1
-            db.session.add(Audit(action='Generate assigned fee challans',data=dict(month=at,count=count,particulars=sorted(heads))))
-            commit();flash(f'{count} challans generated; already generated student/month combinations skipped.','success')
+            db.session.add(Audit(action='Generate assigned fee challans',data=dict(month=at,count=count,skipped=skipped,mode=mode,particulars=sorted(heads))))
+            commit();flash(f'{count} challans generated; {skipped} students had no due charges. Existing student/month combinations skipped.','success')
             return redirect(url_for('ops.fees',mode='payments'))
         return render('student_fee_plan_generate.html',title='Generate from Student Fee Plans',students=[s for s in students if current(s.id)],heads=all_heads,today=date.today().isoformat())
     app.register_blueprint(bp)
