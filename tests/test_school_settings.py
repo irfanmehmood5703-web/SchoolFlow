@@ -202,3 +202,11 @@ class SchoolSettingsTests(unittest.TestCase):
         values=[row[0].value for row in sheet.iter_rows(min_row=2)]
         self.assertIn("'=TEST-FORMULA",values)
         self.assertEqual(self.ops['audit'].query.count(),before)
+
+    def test_root_settings_forms_submit_to_their_visible_page(self):
+        response=self.c.post('/workspace/core/exam',data={'_csrf':self.csrf,'version':'0','written':'Root Theory','decimals':'2'})
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(self.config('exam:display').data['written'],'Root Theory')
+        response=self.c.post('/workspace/core/hrm',data={'_csrf':self.csrf,'version':'0','action':'reset'})
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(self.config('hrm:employee-fields').data,{})

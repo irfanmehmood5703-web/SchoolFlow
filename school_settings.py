@@ -246,7 +246,7 @@ def configure_school_settings(app,db,Student,Employee):
         else:raise ValueError('Choose a valid lock action.')
         save_config('hrm:attendance-lock',data);audit('Change attendance cutoff',before=old,after=data,action=action)
 
-    @bp.route('/<module>',defaults={'page':None})
+    @bp.route('/<module>',defaults={'page':None},methods=['GET','POST'])
     @bp.route('/<module>/<page>',methods=['GET','POST'])
     def index(module,page):
         if module not in ('exam','hrm'):abort(404)
