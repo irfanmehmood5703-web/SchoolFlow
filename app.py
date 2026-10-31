@@ -78,6 +78,9 @@ configure_payroll_calendar(app,db)
 from admission_capacity import configure_admission_capacity
 configure_admission_capacity(app,db,Student)
 
+from institute_setup import configure_institute_setup
+configure_institute_setup(app,db)
+
 @app.route('/')
 def home():
     from flask import render_template

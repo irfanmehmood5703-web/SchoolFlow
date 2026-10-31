@@ -280,6 +280,8 @@ def configure_records(app, db, Student, Employee):
         for start, end in pairs:
             if data.get(start) and data.get(end) and data[start] > data[end]:
                 errors[end] = "End date cannot be before start date."
+        if kind == 'student' and app.extensions.get('institute_setup_helpers'):
+            errors.update(app.extensions['institute_setup_helpers']['validate_admission'](data,read_data(kind,obj) if obj else None))
         return data, errors
 
     def incoming_files():
@@ -328,6 +330,9 @@ def configure_records(app, db, Student, Employee):
 
     def render_form(kind, obj=None, data=None, errors=None, response_status=200):
         data = data if data is not None else (read_data(kind, obj) if obj else defaults(kind))
+        if kind=='student' and obj is None and request.method=='GET':
+            Profile=app.extensions['institute_setup_models']['profile'];profile=db.session.get(Profile,1)
+            if profile and profile.data.get('current_session'):data.setdefault('academic_session',profile.data['current_session'])
         files = RecordFile.query.filter_by(owner_kind=kind, owner_id=obj.id).all() if obj else []
         photo = next((f for f in files if f.photo), None)
         families = RecordFamily.query.order_by(RecordFamily.number).all()

@@ -135,3 +135,17 @@ The record-list non-enrolled summary now links to an explicit non-active filter 
 ## Admission dropdown/photo fixes and navigation performance
 
 See ../PERFORMANCE.md for the repeatable 500-student benchmark, admission form fixes, 125-test validation and free-host wake-up limitations. The build marker is schoolflow-pretest-v11. This does not complete the remaining production requirements.
+
+## Institute Setup and admission relationships — pre-test v12
+
+Core Settings now opens `/workspace/core/institute`. School profile/logo, campus metadata/active status, campus-class maps (sections, groups, assigned session, fee-plan names) and current session/academic year dates are stored in the institute database. Every saved change records an audit entry and uses optimistic version checks; map/campus changes share the admission write gate. Profile owner details do not change account credentials. Logo uploads are decoded, size checked and re-encoded as PNG without original metadata; private school logo responses are no-store.
+
+RecordSettings remains the shared catalog for Admissions, Exam & Attendance and HRM. A configured schedule name can also be selected in a map. The first map for a campus enables explicit map-based admission validation for that campus; unmapped legacy campuses preserve their existing catalog behavior. Inactive campuses and disabled maps reject new admission combinations. Unchanged historical selections may be retained when editing a record without changing its status. Activations/approvals are checked against current enabled maps. Existing students, fees, results and attendance are not silently reassigned when setup changes.
+
+The student form loads mapping data through an authenticated, institute-scoped endpoint; child dropdowns follow campus/class choices. The current session initializes new forms, and a mapped class supplies its assigned session. Class of Admission remains a historical catalog field. Adding a catalog value alone does not silently map it to a campus. The server rechecks links after obtaining the admission gate, even if a visitor submits a manipulated form or uses a stale page.
+
+Attendance now retains campus/class/section/session filters after POST; student attendance and award-list roster filters use SQL joins instead of per-person detail lookups. School identity/logo appears in the shared header across the four current modules.
+
+Validation: 136 integration tests pass, including the existing suite, read-only setup GET, link validation/atomic rollback, independent campus maps, disabled maps, stale saves, private logo validation, current-session defaults, historical-record retention, admission approval gate, attendance filter retention and two-institute setup isolation. JavaScript syntax checked with `node --check static/records.js`.
+
+Existing institute databases require `flask --app app institute-upgrade` before using this version. The demo test host remains ephemeral; no real institute has been provisioned there. This release does not complete the 13-reference-screen Institute Setup workflow: fee-head timing/minimum/maximum rules, late/attendance fine policies, challan branding, bulk student import, detailed Exam Settings/HRM Settings and production permissions/storage still require implementation. The saved academic-year range is setup metadata in this release; it does not yet constrain all exam/attendance/report dates. No Old/New duplicate menu is added. Sandwich Leave stays disabled under the user's current instruction.

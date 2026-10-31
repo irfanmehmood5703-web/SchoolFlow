@@ -1,5 +1,52 @@
 'use strict';
 document.addEventListener('DOMContentLoaded', () => {
+  const admissionForm = document.querySelector('form[data-kind="student"]');
+  let admissionMappings;
+  let applyAdmissionMap = () => {};
+  if (admissionForm) {
+    const keys = ['campus','class_name','section','group_name','academic_session','fee_plan'];
+    const fields = Object.fromEntries(keys.map(key => [key, document.getElementById(key)]));
+    const original = Object.fromEntries(keys.map(key => [key, fields[key].value]));
+    const catalog = Object.fromEntries(keys.map(key => [key, [...fields[key].options].filter(o => o.value).map(o => ({value:o.value,label:o.textContent}))]));
+    const feedback = document.getElementById('admission-map-feedback');
+    function setChoices(key, allowed, preserve) {
+      const select = fields[key], value = select.value;
+      const values = allowed === null ? catalog[key].map(o => o.value) : allowed;
+      select.replaceChildren(new Option('Select ' + select.labels[0].textContent.replace('*','').trim(),''));
+      [...new Set(values)].forEach(v => select.add(new Option(v,v)));
+      if (value && !values.includes(value) && preserve) select.add(new Option(value + ' (saved selection)',value));
+      select.value = [...select.options].some(o => o.value === value) ? value : '';
+    }
+    applyAdmissionMap = () => {
+      if (!admissionMappings) return;
+      const preserve = admissionForm.dataset.existing === 'true' && keys.every(k => fields[k].value === original[k]);
+      const campus = fields.campus.value;
+      const inactive = admissionMappings.campuses[campus] === false;
+      const mapped = Object.prototype.hasOwnProperty.call(admissionMappings.maps,campus);
+      const maps = admissionMappings.maps[campus] || [];
+      setChoices('class_name',mapped ? maps.map(r => r.class_name) : null,preserve);
+      const row = maps.find(r => r.class_name === fields.class_name.value);
+      for (const [key,source] of [['section','sections'],['group_name','groups'],['fee_plan','fee_plans']]) {
+        setChoices(key,mapped ? (row?.[source] || []) : null,preserve);
+      }
+      setChoices('academic_session',mapped ? (row ? [row.academic_session] : []) : null,preserve);
+      if (row && !fields.academic_session.value) fields.academic_session.value = row.academic_session;
+      feedback.textContent = inactive ? 'This campus is inactive. New admissions need an active campus.' : mapped ?
+        'Choices follow the saved campus/class map. Change the map in Core Settings → Institute Setup to offer another combination.' :
+        'This campus has no class map yet. Existing catalog choices remain available; set up its links in Core Settings → Institute Setup.';
+      document.getElementById('class_name').dispatchEvent(new Event('subjects-refresh'));
+    };
+    fields.campus.addEventListener('change',applyAdmissionMap);
+    fields.class_name.addEventListener('change',applyAdmissionMap);
+    fetch('/workspace/core/admission-options').then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(data => { admissionMappings = data; applyAdmissionMap(); }).catch(() => {
+      feedback.textContent = 'Could not load the class map. Reload before saving; the server still checks your selections.';
+    });
+    admissionForm.addEventListener('catalog-option-added', event => {
+      const category = event.detail.category;
+      if (catalog[category]) catalog[category].push({value:event.detail.value,label:event.detail.label});
+      applyAdmissionMap();
+    });
+  }
   const photo = document.getElementById('photo');
   const preview = document.getElementById('photo-preview');
   const photoFeedback = document.getElementById('photo-feedback');
@@ -48,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!option) { option = new Option(item.label, item.value); if (item.category === 'subject') option.dataset.class = item.class_name; select.add(option); }
           if (other === editor) option.selected = true;
         });
+        admissionForm?.dispatchEvent(new CustomEvent('catalog-option-added',{detail:item}));
         document.getElementById(editor.dataset.target).dispatchEvent(new Event('change'));
         status.textContent = 'Option added and selected.'; input.value = ''; editor.open = false;
       } catch (error) { status.textContent = error.message; }
@@ -104,5 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   classSelect?.addEventListener('change', filterSubjects);
+  classSelect?.addEventListener('subjects-refresh', filterSubjects);
   filterSubjects();
 });

@@ -53,6 +53,11 @@ def configure_admission_capacity(app,db,Student):
         # cohorts, so a simultaneous limit edit cannot race a student save.
         lock()
         if obj:db.session.refresh(obj)
+        setup=app.extensions.get('institute_setup_helpers')
+        if setup:
+            old_data=app.extensions['record_helpers']['read_many']('student',[obj])[0][1] if obj else None
+            errors=setup['validate_admission'](data,old_data,fresh=True)
+            if errors:raise ValueError(next(iter(errors.values())))
         if data.get('status')!='Active':return False
         target=(data.get('campus',''),data.get('class_name',''),data.get('academic_session',''))
         old=Details.query.filter_by(student_id=obj.id).populate_existing().first() if obj else None
@@ -153,6 +158,11 @@ def configure_admission_capacity(app,db,Student):
         if len(rows)!=len(ids) or any(s.status!='Waiting' for s,d in rows):
             raise ValueError('A selected record changed or is outside these filters. Reload and select waiting students only.')
         if action=='approve':
+            setup=app.extensions.get('institute_setup_helpers')
+            if setup:
+                for student,data in rows:
+                    errors=setup['validate_admission']({**data,'class_name':student.class_name,'status':'Active'},fresh=True)
+                    if errors:raise ValueError('Admission cannot be allowed: '+next(iter(errors.values())))
             requested=Counter(cohort(s,d) for s,d in rows);occupied=active_counts()
             for key,number in requested.items():
                 limit=db.session.get(AdmissionCapacity,key)

@@ -83,6 +83,19 @@ class IdentityTests(unittest.TestCase):
         self.assertNotIn(b'Only School A Class',page.data)
         self.assertIn(b'Christianity',page.data)
 
+    def test_core_profile_and_mapping_payload_are_school_private(self):
+        self.assertEqual(self.client.get('/workspace/core/institute').status_code,302)
+        self.assertEqual(self.client.get('/workspace/core/admission-options').status_code,302)
+        self.login();token=self.csrf()
+        response=self.client.post('/workspace/core/institute',data={'_csrf':token,'action':'profile','version':'0','name':'Private School A Setup'})
+        self.assertEqual(response.status_code,302)
+        self.assertIn(b'Private School A Setup',self.client.get('/workspace/core/institute').data)
+        self.client.post('/workspace/core/institute',data={'_csrf':token,'action':'campus','version':'0','campus':'Private Campus A','active':'1'})
+        self.assertIn('Private Campus A',self.client.get('/workspace/core/admission-options').json['campuses'])
+        self.login('TEST-B')
+        self.assertNotIn(b'Private School A Setup',self.client.get('/workspace/core/institute').data)
+        self.assertNotIn('Private Campus A',self.client.get('/workspace/core/admission-options').json['campuses'])
+
     def test_public_landing_and_every_workspace_entry_is_gated(self):
         self.assertIn(b'More time for', self.client.get('/').data)
         for path in ['/workspace/dashboard', '/records/student', '/records/files/1', '/workspace/certificates', '/admissions', '/hrm', '/attendance', '/exams', '/settings']:

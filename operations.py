@@ -144,12 +144,16 @@ def configure_operations(app, db, Student, Employee):
         return [(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
     def people(kind='student', active=True):
         cls=Student if kind=='student' else Employee
-        objs=cls.query.order_by(cls.id).all()
-        for k in ('campus','class_name','section','academic_session'):
-            v=request.values.get(k,'')
-            if v: objs=[x for x in objs if (x.class_name if k=='class_name' and kind=='student' else details(x,kind).get(k))==v]
-        if active: objs=[x for x in objs if x.status=='Active']
-        return objs
+        detail=rm['student' if kind=='student' else 'employee']
+        owner=detail.student_id if kind=='student' else detail.employee_id
+        query=cls.query.outerjoin(detail,owner==cls.id)
+        if active:query=query.filter(cls.status=='Active')
+        for key in ('campus','class_name','section','academic_session'):
+            value=request.values.get(key,'')
+            if value:
+                column=Student.class_name if key=='class_name' and kind=='student' else detail.data[key].as_string()
+                query=query.filter(column==value)
+        return query.order_by(cls.id).all()
     def selected(name='ids'):
         try: return list(dict.fromkeys(int(x) for x in request.form.getlist(name)))
         except ValueError: raise ValueError('Invalid selection.')
@@ -419,7 +423,7 @@ def configure_operations(app, db, Student, Employee):
                 count+=1
             if request.form.get('send'): queue('Attendance',[p.id for p in objs],audience=kind)
             audit('Save attendance',kind=kind,day=str(d),count=count);commit();flash(f'{count} attendance records saved.','success')
-            return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat()))
+            return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat(),**{k:request.form[k] for k in ('campus','class_name','section','academic_session') if request.form.get(k)}))
         existing={r.person_id:r for r in Daily.query.filter_by(kind=kind,day=d).all()}
         return render('take_attendance.html',title='Staff Attendance' if kind=='staff' else 'Student Attendance',kind=kind,people=objs,existing=existing,day=d,details=lambda p:details(p,people_kind))
 
@@ -468,11 +472,12 @@ def configure_operations(app, db, Student, Employee):
         return render('examination.html',title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
 
     def award_students(award):
-        objs=Student.query.filter_by(status='Active').all()
-        for k in ('class_name','campus','section','gender','group_name','academic_session'):
-            value=award.data.get(k)
-            if value: objs=[s for s in objs if (s.class_name if k=='class_name' else details(s).get(k))==value]
-        return objs
+        Details=rm['student']
+        query=Student.query.outerjoin(Details,Details.student_id==Student.id).filter(Student.status=='Active')
+        for key in ('class_name','campus','section','gender','group_name','academic_session'):
+            value=award.data.get(key)
+            if value:query=query.filter((Student.class_name if key=='class_name' else Details.data[key].as_string())==value)
+        return query.order_by(Student.id).all()
 
     @bp.post('/assessment-category/<int:award_id>')
     def assessment_category(award_id):
@@ -813,7 +818,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v11')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v12')
 
     @app.route('/api/v1/summary')
     def summary_api():
