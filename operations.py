@@ -358,8 +358,8 @@ def configure_operations(app, db, Student, Employee):
         action=request.form.get('action');ids=selected()
         rows=Bill.query.filter(Bill.id.in_(ids)).with_for_update().all()
         if not rows: raise ValueError('Select at least one challan.')
-        if action in ('horizontal','vertical','family'):
-            return render('challan_print.html',title='Family Challans' if action=='family' else 'Fee Challans',rows=rows,layout=action,student=lambda id:db.session.get(Student,id),details=details,copies=['Student','Bank','Office'],settings=request.form)
+        if action in ('branded','horizontal','vertical','family'):
+            return render('challan_print.html',title='Family Challans' if action=='family' else 'Fee Challans',**app.extensions['challan_branding_helpers']['print_context'](rows,action,request.form))
         if action=='freeze' or action=='unfreeze':
             for b in rows: b.frozen=action=='freeze'
             audit(action,ids=ids);commit();return redirect(url_for('ops.fees',mode='payments'))
@@ -855,7 +855,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v16')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v17')
 
     @app.route('/api/v1/summary')
     def summary_api():

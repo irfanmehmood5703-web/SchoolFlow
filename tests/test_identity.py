@@ -165,6 +165,28 @@ class IdentityTests(unittest.TestCase):
         public=app.test_client()
         for path in ['/workspace/core/fees/heads','/workspace/core/fees/schedules','/workspace/core/fees/preview/1']:self.assertEqual(public.get(path).status_code,302)
 
+    def test_challan_branding_preview_and_print_are_tenant_private(self):
+        from challan_branding import DEFAULTS,FLAGS
+        other=app.test_client();self.login();self.login('TEST-B',client=other)
+        for client,name in [(self.client,'Only School A'),(other,'Only School B')]:
+            with client.session_transaction() as session:token=session['record_csrf']
+            data={**DEFAULTS,'_csrf':token,'version':'0','action':'save','note':name+' payment instructions'}
+            for flag in FLAGS:
+                data.pop(flag,None)
+                if DEFAULTS[flag]:data[flag]='1'
+            self.assertEqual(client.post('/workspace/core/fees/challan-branding',data=data).status_code,302)
+            data.update(action='preview',version='1')
+            preview=client.post('/workspace/core/fees/challan-branding',data=data)
+            self.assertEqual(preview.status_code,200);self.assertIn((name+' payment instructions').encode(),preview.data)
+            printed=client.post('/workspace/fee-action',data={'_csrf':token,'action':'branded','ids':'1'})
+            self.assertEqual(printed.status_code,200);self.assertIn((name+' payment instructions').encode(),printed.data)
+            self.assertNotIn(('Only School B' if name=='Only School A' else 'Only School A').encode(),printed.data)
+            self.assertIn('no-store',printed.headers['Cache-Control'])
+        public=app.test_client()
+        self.assertEqual(public.get('/workspace/core/fees/challan-branding').status_code,302)
+        self.assertEqual(public.post('/workspace/core/fees/challan-branding',data={'action':'preview'}).status_code,302)
+        self.assertEqual(public.post('/workspace/fee-action',data={'action':'branded','ids':'1'}).status_code,302)
+
     def test_workspace_writes_stay_in_selected_database(self):
         self.login()
         with self.client.session_transaction() as sess: token = sess['record_csrf']
