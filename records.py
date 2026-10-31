@@ -115,6 +115,9 @@ def configure_records(app, db, Student, Employee):
             item = (row.value, row.value, row.class_name)
             if item not in result.setdefault(row.category, []):
                 result[row.category].append(item)
+        if app.extensions.get('school_settings_helpers'):
+            order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
+            result['subject']=sorted(result.get('subject',[]),key=lambda item:(order.get(item[0],1000000),item[0],item[2]))
         return result
 
     def defaults(kind, for_create=True):
@@ -202,6 +205,7 @@ def configure_records(app, db, Student, Employee):
                 value = request.form.get(key, "").strip()
                 if f["kind"] == "checkbox":
                     data[key] = key in request.form
+                    if f["required"] and not data[key]:errors[key]="This field must be checked."
                     continue
                 if f["kind"] == "subjects":
                     data[key] = request.form.getlist(key)

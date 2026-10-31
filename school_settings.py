@@ -59,9 +59,15 @@ def configure_school_settings(app,db,Student,Employee):
         q=SchoolSettingItem.query.filter_by(kind=kind)
         if scope is not None:q=q.filter_by(scope=scope)
         rows=q.order_by(SchoolSettingItem.name,SchoolSettingItem.id).all()
+        if kind in ('subject','subject-group'):rows=sorted(rows,key=lambda r:(r.data.get('order',1000000),r.name))
         if has_request_context() and request.method=='GET':cache[key]=rows;request.school_settings_items=cache
         return rows
-    def options(category):return sorted({r.value for r in rm['settings'].query.filter_by(category=category).all()})
+    def options(category):
+        values=sorted({r.value for r in rm['settings'].query.filter_by(category=category).all()})
+        if category=='subject':
+            order={r.name:i for i,r in enumerate(items('subject'))}
+            values.sort(key=lambda v:(order.get(v,1000000),v))
+        return values
     def value(key,required=False,limit=160):
         result=request.form.get(key,'').strip()
         if (required and not result) or len(result)>limit:raise ValueError('Check '+key.replace('_',' ')+'.')
@@ -92,6 +98,8 @@ def configure_school_settings(app,db,Student,Employee):
         version(row)
         duplicate=SchoolSettingItem.query.filter_by(kind=kind,scope=scope,name=name).first()
         if duplicate and (not row or duplicate.id!=row.id):raise ValueError('That name or layout is already configured for this campus.')
+        if kind in ('subject','subject-group'):
+            data={**data,'order':row.data.get('order',1000000) if row else max([r.data.get('order',0) for r in items(kind)]+[0])+1}
         if row:row.name=name;row.scope=scope;row.data=data
         else:row=SchoolSettingItem(kind=kind,name=name,scope=scope,data=data);db.session.add(row)
         return row
@@ -262,7 +270,7 @@ def configure_school_settings(app,db,Student,Employee):
             if row.kind!=kind:abort(404)
         if request.method=='POST':
             action=value('action') or 'save'
-            allowed={'employee-fields':('save','reset'),'attendance-lock':('save','unlock-daily','unlock-monthly'),'display':('save',),'sms':('save',),'weightage':('save',),'branding':('save','preview','delete'),'print-templates':('save','preview','delete')}.get(page,('save','delete'))
+            allowed={'employee-fields':('save','reset'),'attendance-lock':('save','unlock-daily','unlock-monthly'),'display':('save',),'sms':('save',),'weightage':('save',),'branding':('save','preview','delete'),'print-templates':('save','preview','delete'),'subject-groups':('save','delete','reorder'),'subjects':('save','delete','reorder')}.get(page,('save','delete'))
             if action not in allowed:raise ValueError('Choose a valid action.')
             if page in CATALOG_PAGES:catalog_mutation(page)
             elif page=='attendance-lock':lock_mutation()
@@ -296,6 +304,11 @@ def configure_school_settings(app,db,Student,Employee):
                 for r in items('test-type',campus):payload[str(r.id)]=number(request.form.get('weight_'+str(r.id),'0'))
                 if sum(Decimal(x) for x in payload.values())>100:raise ValueError('Total weightage cannot exceed 100%.')
                 save_config(key,payload)
+            elif action=='reorder':
+                current=items(kind);ordered=request.form.getlist('order_ids');lookup={str(r.id):r for r in current}
+                if len(ordered)!=len(lookup) or set(ordered)!=set(lookup):raise ValueError('The list changed. Reload before reordering.')
+                if any(request.form.get('version_'+sid)!=str(r.version) for sid,r in lookup.items()):raise ValueError('The list changed. Reload before reordering.')
+                for position,sid in enumerate(ordered,1):lookup[sid].data={**lookup[sid].data,'order':position}
             else:
                 row=edit_item(kind);version(row)
                 if action=='delete':
@@ -306,6 +319,7 @@ def configure_school_settings(app,db,Student,Employee):
                     if kind=='subject' and (any(row.name in r.data.get('subjects',[]) for r in items('class-subjects')) or any(p.get('subject')==row.name for w in W.query.filter(W.kind.in_(['awards','date-sheets'])).all() for p in w.data.get('papers',[]))):raise ValueError('This subject is in use.')
                     if kind=='subject-group' and any(r.data.get('group')==row.name for r in items('subject')):raise ValueError('This group contains subjects.')
                     if kind=='subject':
+                        if rm['settings'].query.filter(rm['settings'].category=='subject',rm['settings'].value==row.name,rm['settings'].class_name!='').first():raise ValueError('This subject is assigned to a class in the shared catalog.')
                         if any(row.name in r.data.get('subjects',[]) for r in rm['student'].query.all()):raise ValueError('This subject is saved on student records.')
                         rm['settings'].query.filter_by(category='subject',value=row.name,class_name='').delete()
                     if kind=='allowance' and any(any(a.get('id')==row.id for a in w.data.get('allowances',[])) for w in W.query.filter_by(kind='salary-plans').all()):raise ValueError('This pay head is used by a salary plan.')

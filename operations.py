@@ -141,7 +141,11 @@ def configure_operations(app, db, Student, Employee):
         if kind in ('employee','teacher','student'):
             cls=Student if kind=='student' else Employee
             return [(str(x.id),x.name) for x in cls.query.order_by(cls.name).all() if kind!='teacher' or 'teacher' in (x.role or '').lower()]
-        return [(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
+        values=[(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
+        if kind=='subject' and app.extensions.get('school_settings_helpers'):
+            order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
+            values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
+        return values
     def people(kind='student', active=True):
         cls=Student if kind=='student' else Employee
         detail=rm['student' if kind=='student' else 'employee']
@@ -839,7 +843,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v13')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v14')
 
     @app.route('/api/v1/summary')
     def summary_api():

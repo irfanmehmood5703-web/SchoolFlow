@@ -222,3 +222,46 @@ class SchoolSettingsTests(unittest.TestCase):
         page=self.c.get('/workspace/core/hrm/increment-sheet?campus=Campus+A&from=2026-09&to=2026-09')
         self.assertEqual(page.status_code,200);self.assertIn(b'Campus A increment footer',page.data);self.assertIn(b'Test only',page.data)
         self.assertNotIn(b'Campus A increment footer',self.c.get('/workspace/core/hrm/increment-sheet?campus=Campus+B').data)
+
+    def test_subject_reordering_is_versioned_atomic_and_used_in_admission_options(self):
+        self.post('exam','subject-groups',name='Academics')
+        self.post('exam','subjects',name='Zulu',group='Academics')
+        self.post('exam','subjects',name='Alpha',group='Academics')
+        rows=self.m['item'].query.filter_by(kind='subject').all();byname={r.name:r for r in rows}
+        d=self.rm['student'].query.filter_by(student_id=1).one();d.data={**d.data,'subjects':['Zulu']}
+        award=self.ops['workflow'](kind='awards',status='Active',data={'name':'Preserved award','papers':[{'subject':'Zulu','total':20}]})
+        db.session.add(award);db.session.flush();score=self.ops['score'](award_id=award.id,student_id=1,paper=0,obtained=18);db.session.add(score);db.session.commit()
+        ordered=[str(byname['Alpha'].id),str(byname['Zulu'].id)]
+        versions={'version_'+str(r.id):str(r.version) for r in rows}
+        self.assertEqual(self.post('exam','subjects',action='reorder',order_ids=ordered,**versions).status_code,302)
+        page=self.c.get('/records/student/new').data
+        subject_select=re.search(rb'<select id="subjects".*?</select>',page,re.S).group()
+        self.assertLess(subject_select.index(b'Alpha'),subject_select.index(b'Zulu'))
+        self.assertEqual(d.data['subjects'],['Zulu']);self.assertEqual(award.data['papers'][0]['subject'],'Zulu');self.assertEqual(score.obtained,18)
+        self.assertEqual(self.post('exam','subjects',action='reorder',order_ids=list(reversed(ordered)),**versions).status_code,422)
+        fresh={'version_'+str(r.id):str(r.version) for r in rows}
+        self.assertEqual(self.post('exam','subjects',action='reorder',order_ids=[ordered[0],ordered[0]],**fresh).status_code,422)
+        self.assertEqual([r.name for r in sorted(rows,key=lambda r:r.data['order'])],['Alpha','Zulu'])
+        groups=self.m['item'].query.filter_by(kind='subject-group').all()
+        self.assertIn(b'data-settings-order',self.c.get('/workspace/core/exam/subject-groups').data)
+        self.assertEqual(self.post('exam','subject-groups',action='reorder',order_ids=[str(r.id) for r in groups],**{'version_'+str(r.id):str(r.version) for r in groups}).status_code,302)
+
+    def test_legacy_class_subject_assignment_prevents_catalog_delete(self):
+        self.post('exam','subject-groups',name='Academics');self.post('exam','subjects',name='Math',group='Academics')
+        subject=self.item('subject');db.session.add(self.rm['settings'](category='subject',value='Math',class_name='Class A'));db.session.commit()
+        self.assertEqual(self.post('exam','subjects',id=subject.id,version=str(subject.version),action='delete').status_code,422)
+        self.assertEqual(self.rm['settings'].query.filter_by(category='subject',value='Math').count(),2)
+
+    def test_editor_css_is_preserved_and_html_preview_cannot_execute_scripts(self):
+        html='<p style="font-family:Georgia;font-size:18px;color:#176b4a;background-color:#e7f3ec" onclick="bad()">Safe heading</p><img src=x onerror="bad()">'
+        response=self.post('hrm','branding',name='Salary Slip Report',header=html,action='preview')
+        self.assertEqual(response.status_code,200);self.assertNotIn(b'onerror=',response.data);self.assertNotIn(b'onclick="bad()',response.data)
+        self.assertIn(b'font-family:Georgia',response.data);self.assertIn(b'aria-label="header font"',response.data)
+        self.assertEqual(self.m['item'].query.count(),0)
+
+    def test_required_employee_checkbox_is_enforced(self):
+        fields={'visible_app_active':'1','required_app_active':'1'}
+        self.assertEqual(self.post('hrm','employee-fields',**fields).status_code,302)
+        form=dict(_csrf=self.csrf,name='Required checkbox',father_name='Guardian',gender='Female',marital_status='Married',phone='00000000000',campus='Campus A',department='Academics',designation_group='Teaching',role='Class Teacher',employment_type='Permanent',employee_no='E-3',joining_date='2000-01-01')
+        response=self.c.post('/records/employee/new',data=form);self.assertEqual(response.status_code,422);self.assertIn(b'This field must be checked.',response.data)
+        form['app_active']='1';self.assertEqual(self.c.post('/records/employee/new',data=form).status_code,302)
