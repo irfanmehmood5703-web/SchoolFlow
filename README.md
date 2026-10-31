@@ -30,3 +30,9 @@ The existing Render service uses free ephemeral SQLite storage; restarts/redeplo
 ### Campus cards and certificates
 
 Admissions → Student Card and Certificates → choose campus → Set up certificate templates. Use School heading, logo & colours for your own school details, then choose a document and students. Preview has no issuance side effects. Edit saves campus-specific Header/Body/Footer content. Generate & Print assigns references and saves immutable documents in Certificate Logs. Print / Save PDF opens the browser print flow. Student QR Code supports active-pupil filters, selected columns, CSV/Excel and printable QR sheets. Use fictional data only on the public pre-test service.
+
+### Client accounts and manual payroll rules
+
+SchoolFlow is the product; each client uses its own school name/code. Operator-generated logins/passwords are supported; see [private client provisioning](docs/IDENTITY.md#vendor-generated-client-credentials). Email-style login generation does not create an email mailbox.
+
+HRM salary plans and payroll link to the Payroll Working Calendar. Set actual working dates/holidays before joining-month salary or daily percentage deductions. Manual increments use the existing Increment form: choose an employee, amount and effective month, approve, then enable Apply approved manual salary increments on their salary plan. The plan’s Basic Salary excludes those approved amounts; no fixed increment or automatic annual repetition is assumed. Saved salary detail/slips retain the working-day calculation and increment sources.

@@ -71,6 +71,8 @@ configure_certificates(app,db,Student)
 configure_identity(app,db)
 from dashboard import configure_dashboard
 configure_dashboard(app,db)
+from payroll_calendar import configure_payroll_calendar
+configure_payroll_calendar(app,db)
 
 @app.route('/')
 def home():

@@ -18,7 +18,7 @@ flask --app app institute-create
 
 The interactive command asks for institute code, school name, owner email and a
 12–128-character password (hidden, with confirmation). Passwords use Werkzeug
-scrypt hashing. No password is printed, committed, or assigned by default.
+scrypt hashing. No password is printed or committed. For vendor-generated credentials, use the separate command below.
 Codes are case-insensitive, 3–40 letters/numbers/hyphens. `DEMO` is reserved.
 The first owner can sign in after the command succeeds. School data starts empty;
 configure school dropdowns and campus certificate headings after signing in.
@@ -91,3 +91,16 @@ The free Render service has ephemeral local files. Keep **fictional records only
 until persistent control and school storage, role permissions, migration/backup
 operations and email recovery are completed. Real institutes have not been
 provisioned on that public test service.
+
+
+## Vendor-generated client credentials
+
+SchoolFlow remains the product name. Provision each customer with their own school name and institute code:
+
+```sh
+flask --app app institute-create-generated --code CLIENT-001 --name 'Client School Name' --credentials-file /private/client-001-credentials.json
+```
+
+Choose an existing private directory outside the application checkout. The destination must be a new file: existing files and symlinks are rejected. The command generates a random password and defaults the login to `owner@client-001.schoolflow.invalid`. The plaintext handover file uses permissions 0600; passwords are never printed. The identity database stores only the password hash. Transfer the credentials privately to the client, and manage/delete the handover file according to your credential-handling process. Never put it in source control or a public message.
+
+An optional `--login` supplies a different login email. This command does not create email inboxes, verify domain ownership, or connect a mail provider. A generated .invalid login is an account identifier only. Client provisioning remains operator-only; a customer owner cannot create other institutes. No real clients were provisioned by this update.

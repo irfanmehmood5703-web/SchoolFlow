@@ -5,6 +5,8 @@ SQLite file for each institute. No public registration or shared demo credential
 """
 import hashlib
 import hmac
+import json
+import os
 import re
 import secrets
 import time
@@ -257,6 +259,39 @@ def configure_identity(app, db):
             db.session.rollback()
             raise click.ClickException(str(error))
         click.echo(f'Institute {school.code} created. Owner can now sign in. No pupil records were copied.')
+
+    @app.cli.command('institute-create-generated')
+    @click.option('--code',required=True,help='Client institute code, e.g. CLIENT-001.')
+    @click.option('--name',required=True,help='The client school name, not the SchoolFlow product name.')
+    @click.option('--login',default=None,help='Optional owner login email. This does not create a mailbox.')
+    @click.option('--credentials-file',required=True,type=click.Path(dir_okay=False,path_type=Path),help='New private file for one-time handover. Never commit this file.')
+    def institute_create_generated(code,name,login,credentials_file):
+        """Vendor provisions a client with a generated login and random password."""
+        code=code.strip().upper()
+        if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',code) or code=='DEMO':
+            raise click.ClickException('Choose a valid non-DEMO institute code.')
+        email=(login or f'owner@{code.lower()}.schoolflow.invalid').strip().casefold()
+        password=secrets.token_urlsafe(24)
+        if credentials_file.resolve().is_relative_to(Path(app.root_path).resolve()):
+            raise click.ClickException('Save private credentials outside the application checkout.')
+        # Exclusive creation also rejects symlinks and accidental overwrites.
+        try:
+            descriptor=os.open(credentials_file,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        except OSError:
+            raise click.ClickException('Choose a new writable private credentials file.')
+        try:
+            with os.fdopen(descriptor,'w',encoding='utf-8') as output:
+                json.dump(dict(product='SchoolFlow',school_name=name.strip(),institute_code=code,
+                               login=email,password=password,mailbox_created=False),output,indent=2)
+                output.flush();os.fsync(output.fileno())
+            school=provision(code,name,email,password)
+        except Exception as error:
+            db.session.rollback()
+            credentials_file.unlink(missing_ok=True)
+            if isinstance(error,ValueError):raise click.ClickException(str(error))
+            raise
+        click.echo(f'Client {school.code} created. Private handover file saved. No password was printed.')
+        click.echo('Generated email-style logins are identifiers only; no mailbox or email delivery was created.')
 
     @app.cli.command('institute-reset-password')
     @click.option('--code', prompt='Institute code')

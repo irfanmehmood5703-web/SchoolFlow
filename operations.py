@@ -7,6 +7,7 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template, r
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
+from payroll_calendar import joining_pay
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 
 
@@ -106,7 +107,12 @@ def configure_operations(app, db, Student, Employee):
         data = db.Column(db.JSON, nullable=False)
         created = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    class SalaryIncrementRequest(db.Model):
+        token=db.Column(db.String(100),primary_key=True)
+        workflow_id=db.Column(db.Integer,db.ForeignKey('workflow.id'),nullable=False,unique=True)
+
     app.extensions['ops_models'] = dict(workflow=Workflow,bill=Bill,receipt=Receipt,daily=Daily,score=Score,salary=Salary,audit=Audit)
+    app.extensions['salary_increment_request_model']=SalaryIncrementRequest
     app.jinja_env.filters['cash'] = lambda x: f'{(x or 0)/100:,.2f}'
     app.jinja_env.globals.update(zip=zip)
 
@@ -201,6 +207,9 @@ def configure_operations(app, db, Student, Employee):
                 if kind not in ('increments','advances','leave-approvals','lecture-register'): raise ValueError('This record type does not use approval actions.')
                 rows=Workflow.query.filter(Workflow.id.in_(selected()),Workflow.kind==kind).with_for_update().all()
                 if not rows: raise ValueError('Select at least one record.')
+                if kind=='increments' and action in ('reject','delete'):
+                    used={row['id'] for salary in Salary.query.all() for row in salary.detail.get('manual_increments',[])}
+                    if any(x.id in used for x in rows):raise ValueError('A selected increment is already captured in a salary. Its saved source cannot be cancelled.')
                 for x in rows:
                     if x.status=='Paid': raise ValueError('Paid records cannot be changed.')
                     x.status={'approve':'Approved','reject':'Rejected','delete':'Voided'}[action]
@@ -221,16 +230,27 @@ def configure_operations(app, db, Student, Employee):
                 if data.get('from_date') and data.get('to_date') and data['from_date']>data['to_date']: raise ValueError('End date must follow start date.')
                 if kind=='fee-plans' and not 1<=int(data['due_day'])<=28: raise ValueError('Due day must be between 1 and 28 for this pre-test build.')
                 if kind=='advances' and (money(data['amount'])==0 or money(data['return_amount'])==0 or money(data['return_amount'])>money(data['amount'])): raise ValueError('Monthly return must be positive and no greater than the advance.')
+                if kind=='increments' and not money(data['amount']):raise ValueError('Enter a positive manual salary increment amount.')
+                if kind=='increments':
+                    token=request.form.get('increment_token','')
+                    if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}',token):raise ValueError('Reload the increment form before saving.')
+                    previous=db.session.get(SalaryIncrementRequest,token)
+                    if previous:
+                        if db.session.get(Workflow,previous.workflow_id).data!=data:raise ValueError('This increment submission was already used with different details. Reload the form.')
+                        flash('This increment was already saved. No duplicate was created.','success')
+                        return redirect(url_for('ops.register',kind=kind))
                 state='Pending' if kind in ('increments','advances','leave-approvals') else 'Active'
                 if kind=='lecture-register':
                     state='Approved' if data.get('approve') else 'Pending'
                     if not int(data['lectures']): raise ValueError('Lectures must be positive.')
                 obj=Workflow(kind=kind,data=data,status=state);db.session.add(obj)
+                if kind=='increments':
+                    db.session.flush();db.session.add(SalaryIncrementRequest(token=token,workflow_id=obj.id))
                 audit('Create '+kind);commit()
                 flash('Record saved.','success')
             return redirect(url_for('ops.register',kind=kind))
         rows=Workflow.query.filter_by(kind=kind).filter(Workflow.status!='Voided').order_by(Workflow.id.desc()).all()
-        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows)
+        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,increment_token=secrets.token_urlsafe(24))
 
     @bp.route('/approve-students',methods=['POST'])
     def approve_students():
@@ -518,8 +538,10 @@ def configure_operations(app, db, Student, Employee):
             data=dict(employee_id=str(employee_id))
             for k in ['basic','security_return','security_payment','incentive_per_lecture','annual_increment','bonus_amount']:
                 data[k]=money(request.form.get(k,'0'))
-            for k in ['lecture_wise','lecture_incentive','all_present_bonus','include_plan_earnings']:
+            for k in ['lecture_wise','lecture_incentive','all_present_bonus','include_plan_earnings','apply_manual_increments']:
                 data[k]=bool(request.form.get(k))
+            if data['apply_manual_increments'] and data['lecture_wise'] and not data['include_plan_earnings']:
+                raise ValueError('Manual salary increments adjust monthly basic. For lecture-only staff, update their lecture rate instead.')
             data['sandwich_leave']=False  # Disabled by the school for this phase.
             data['increment_month']=request.form.get('increment_month','')
             data['increment_type']=request.form.get('increment_type','Abs')
@@ -552,7 +574,6 @@ def configure_operations(app, db, Student, Employee):
             action=request.form.get('action')
             if action=='generate':
                 if m>=today.strftime('%Y-%m'): raise ValueError('Pre-test payroll generates completed previous months only.')
-                if request.form.get('prorated'): raise ValueError('Proration rules require a verified worked example; no salary was generated.')
                 plans_list=Workflow.query.filter_by(kind='salary-plans',status='Approved').order_by(Workflow.id.desc()).all();seen=set();count=0
                 chosen=selected('employee_ids')
                 if not chosen: raise ValueError('Select employees.')
@@ -569,23 +590,36 @@ def configure_operations(app, db, Student, Employee):
                     if not joining: raise ValueError('Complete the employee joining date before generating salary: '+staff.name)
                     joined=day(joining);month_start=day(m+'-01');month_end=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))
                     if joined>month_end: raise ValueError('Salary month is before the employee joining date: '+staff.name)
-                    if joined>month_start and (not data.get('lecture_wise') or data.get('include_plan_earnings')): raise ValueError('This employee joined during the salary month. Proration needs a verified rule; no full-month salary was assumed: '+staff.name)
+                    pays_basic=not data.get('lecture_wise') or data.get('include_plan_earnings')
+                    working_calendar=db.session.get(app.extensions['payroll_calendar_model'],m)
+                    if working_calendar and not working_calendar.working_dates:raise ValueError('The saved working calendar has no working dates. Review it first.')
+                    if joined>month_start and pays_basic and not working_calendar:
+                        raise ValueError('Set this salary month\'s working calendar before calculating joining-month pay: '+staff.name)
+                    if request.form.get('attendance_based') and not working_calendar and any(r.get('type')=='Percent' and r.get('amount') for r in data['rules']):
+                        raise ValueError('Set the working calendar before calculating percentage-of-daily-basic deductions.')
                     data={**data,'sandwich_leave':False}  # Never apply legacy sandwich flags.
                     if any(r.get('jump') or r.get('limit') for r in data['rules']): raise ValueError('Jump-step/max-limit deduction rules require verification. No payroll was saved.')
                     if data.get('annual_increment'): raise ValueError('Annual increment posting needs a verified reference rule. No payroll was saved.')
-                    attendance=Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=day(m+'-01'),Daily.day<=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))).all()
-                    counts=Counter(r.status for r in attendance);deductions=0;breakdown=[]
-                    base=data['basic'];days=calendar.monthrange(int(m[:4]),int(m[5:]))[1]
+                    increment_rows=[row for row in Workflow.query.filter_by(kind='increments',status='Approved').order_by(Workflow.id).all()
+                                    if int(row.data['employee_id'])==eid and row.data['effective']<=m] if pays_basic and data.get('apply_manual_increments') else []
+                    increment_details=[dict(id=row.id,amount=money(row.data['amount']),effective=row.data['effective'],reason=row.data.get('reason','')) for row in increment_rows]
+                    monthly_basic=data['basic']+sum(row['amount'] for row in increment_details)
+                    proration=joining_pay(m,joined,monthly_basic,working_calendar.working_dates) if pays_basic and joined>month_start else None
+                    base=proration['payable_basic'] if proration else monthly_basic
+                    attendance=Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=max(joined,month_start),Daily.day<=month_end).all()
+                    deduction_attendance=[row for row in attendance if not working_calendar or row.day.isoformat() in working_calendar.working_dates]
+                    counts=Counter(r.status for r in deduction_attendance);deductions=0;breakdown=[]
+                    days=len(working_calendar.working_dates) if working_calendar else calendar.monthrange(int(m[:4]),int(m[5:]))[1]
                     if request.form.get('attendance_based'):
                         for rule in data['rules']:
                             n=max(0,counts[rule['status']]-rule['allowed']);events=min(1,n) if rule['frequency']=='Once' else n
-                            amount=rule['amount']*events if rule['type']=='Abs' else int((Decimal(base)*rule['amount']*events/10000/days).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+                            amount=rule['amount']*events if rule['type']=='Abs' else int((Decimal(monthly_basic)*rule['amount']*events/10000/days).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
                             deductions+=amount;breakdown.append(dict(status=rule['status'],count=counts[rule['status']],amount=amount))
                     lecture_rows=[r for r in Workflow.query.filter_by(kind='lecture-register',status='Approved').all() if int(r.data['employee_id'])==eid and r.data['date'][:7]==m]
                     if data.get('lecture_wise') and any(day(r.data['date'])<joined for r in lecture_rows): raise ValueError('Approved lectures precede the employee joining date. Correct the lecture register before generating salary.')
                     lecture_details=[dict(id=r.id,date=r.data['date'],class_name=r.data.get('class_name',''),section=r.data.get('section',''),subject=r.data.get('subject',''),lectures=int(r.data['lectures']),amount=lecture_amount(r,m)) for r in lecture_rows] if data.get('lecture_wise') else []
                     lecture_pay=sum(row['amount'] for row in lecture_details)
-                    earnings=(base+data['security_return'] if not data.get('lecture_wise') or data.get('include_plan_earnings') else 0)+lecture_pay
+                    earnings=(base+data['security_return'] if pays_basic else 0)+lecture_pay
                     if data.get('lecture_incentive'): earnings+=data['incentive_per_lecture']*sum(r.lectures for r in attendance)
                     if data.get('all_present_bonus') and data.get('bonus_amount'): raise ValueError('All-present bonus eligibility requires an attendance-calendar rule. No payroll was saved.')
                     advance_deduction=0
@@ -601,7 +635,9 @@ def configure_operations(app, db, Student, Employee):
                             advance_map[str(a.id)]=min(money(a.data['return_amount']),max(0,money(a.data['amount'])-reserved))
                     deductions+=data['security_payment']+advance_deduction
                     if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
-                    snapshot=dict(joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base)
+                    snapshot=dict(joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
+                                  base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,
+                                  working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates)) if working_calendar else None)
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')
                 audit('Generate salary',month=m,count=count);commit();flash(f'{count} salaries generated. Existing employee/month salaries skipped.','success')
@@ -748,7 +784,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v8')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v9')
 
     @app.route('/api/v1/summary')
     def summary_api():
