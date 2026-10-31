@@ -4,6 +4,7 @@ import secrets
 from datetime import date
 from flask import Flask, redirect, request, url_for
 from flask_sqlalchemy import SQLAlchemy
+from identity import InstituteSession, configure_identity
 
 app = Flask(__name__)
 app.config.update(
@@ -13,8 +14,11 @@ app.config.update(
     SCHOOLFLOW_API_TOKEN=os.getenv('SCHOOLFLOW_API_TOKEN'),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', '1' if os.getenv('RENDER') else '0') == '1',
+    PUBLIC_DEMO_ENABLED=os.getenv('PUBLIC_DEMO_ENABLED', '1') == '1',
+    INSTITUTE_DATABASE_DIR=os.getenv('INSTITUTE_DATABASE_DIR'),
 )
-db=SQLAlchemy(app)
+db=SQLAlchemy(app, session_options={'class_': InstituteSession})
 
 class Student(db.Model):
     id=db.Column(db.Integer,primary_key=True)
@@ -64,9 +68,12 @@ from hrm_reports import configure_hrm_reports
 configure_hrm_reports(app,db,Employee)
 from certificates import configure_certificates
 configure_certificates(app,db,Student)
+configure_identity(app,db)
 
 @app.route('/')
-def home(): return redirect(url_for('ops.dashboard'))
+def home():
+    from flask import render_template
+    return render_template('landing.html')
 
 @app.route('/admissions',methods=['GET','POST'])
 def admissions():
@@ -93,7 +100,7 @@ def headers(response):
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Referrer-Policy']='same-origin'
     response.headers['X-Frame-Options']='SAMEORIGIN'
-    if request.path.startswith(('/workspace','/records','/api')):
+    if request.path.startswith(('/workspace','/records','/api','/auth')):
         response.headers['Cache-Control']='no-store'
     return response
 

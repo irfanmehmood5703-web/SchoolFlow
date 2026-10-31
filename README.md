@@ -14,7 +14,7 @@ export SECRET_KEY='replace-with-a-long-random-value'
 python app.py
 ```
 
-Open the dashboard and click **Set up test dropdowns**, then create fictional student/staff records. School choices are editable under School Settings. This build has no institution login or tenant isolation.
+Open the public landing page and choose **Explore the test demo**, then click **Set up test dropdowns** on the dashboard. Create fictional student/staff records only. School choices are editable under School Settings. Provisioned institutes use a separate owner login and isolated SQLite workspace database; the public demo never selects an institute database. See [Institute login and isolation](docs/IDENTITY.md).
 
 ## Tests
 

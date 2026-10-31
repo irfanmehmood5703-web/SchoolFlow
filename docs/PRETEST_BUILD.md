@@ -1,4 +1,4 @@
-# SchoolFlow pre-test build — 30 October 2026
+# SchoolFlow pre-test build — 31 October 2026
 
 This is an initial functional pre-test build. It is **not** the complete reference-equivalent release requested by the user. Menu presence does not imply that every referenced workflow is implemented. The application includes an explicit Build Status page.
 
@@ -36,14 +36,14 @@ Sandwich leave is disabled at the school’s request, including old plan flags. 
 - Subject-wise student filtering, multi-select section/group/session award filtering, sorting/recheck behavior, return-date permission enforcement, parent-app publishing and complete teacher-performance comparison reports.
 - Shift policy enforcement; posting increments/security balances; leave approval to attendance; consecutive lecture editor/carry-forward; full reference salary-report formatting/accounting and verified payroll formulas.
 - All 37 dashboard widgets and customization. Current dashboard shows selected database-backed aggregates/charts and links.
-- Institute login, tenant isolation, role-scoped app accounts, forgotten-password recovery and all four connected apps. The optional owner-summary endpoint fails closed unless `SCHOOLFLOW_API_TOKEN` is configured; it is not a completed mobile-app backend.
+- Teacher/Parent/Owner-app role-scoped API accounts, email password recovery and all four connected apps. Institute Code and web-owner login with separate institute SQLite databases are implemented for testing. The optional owner-summary endpoint fails closed unless `SCHOOLFLOW_API_TOKEN` is configured; it is not a completed mobile-app backend.
 - Durable deployment database, migrations, backups and secure file authorization. Current free service uses ephemeral SQLite. Never put real student, employee or financial data in this public pre-test environment.
 
 ## Validation
 
 `python -m unittest discover -s tests -v`
 
-74 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
+86 integration tests cover complete record persistence, attachments and password redaction, family linking, validation rollback, CSV safety, menu rendering, fee duplicate/overpayment/reversal/atomicity, installment conservation, attendance upserts, marks bounds and A/L, payroll duplicate prevention/snapshots/pay/unpay, unverified-rule refusal, lecture import idempotency, CSRF disabled message delivery, bill-month versus receipt-date reporting, no-challan students, mixed-bill allocation limits, consecutive absence dates and teacher-performance averages, student plan create/update/view, server-controlled actual fees, discount bounds, stale edit protection, effective-month snapshots, once-only arrears, assigned monthly duplicate prevention and atomic batch rollback.
 
 The tests use an isolated in-memory database and fictional data. A passing suite does not verify missing workflows or production suitability.
 
@@ -82,3 +82,14 @@ All 15 document types are functional original editable defaults. Eleven designs 
 Paper Total Marks now starts blank, including newly added subject rows; the server requires an explicit positive maximum for each paper. 20/30/50-mark papers are tested independently. Sandwich leave is absent from the salary-plan controls and is never applied, including legacy enabled flags. Other unverified payroll automation remains pending.
 
 Leaving Date is now an optional field in the student Office Information section and is available to certificate tags. It cannot precede Admission Date and does not automatically change enrolment status. Preview links to the student editor for missing birth/admission/leaving dates and class-of-admission details.
+
+
+## Institute sign-in and isolation — 31 October
+
+The root now serves an original green/white landing page, followed by Institute Code and a school-specific owner email/password form. All workspace, record, file and API routes require a valid owner session or an explicit public-demo session. Unknown institute codes do not provision databases. No shared admin password or public registration exists. Forgotten password clearly directs users to administrator recovery until email delivery is configured. Operator CLI commands provision owners and reset passwords; owner password revisions and account/school deactivation revoke existing sessions.
+
+The control database holds hashed owners and institute registrations. Each institute gets a separate SQLite file under a random immutable storage identity. SQLAlchemy routes workspace models, relationships and Core queries to the selected institute engine for that request; identity models stay on the control engine. The ORM identity map is cleared before school selection. The original fictional database remains the demo. No records are automatically copied to a new institute. QR payloads include the institute storage scope.
+
+Twelve identity tests additionally cover the public entry/gates, sign-in normalization and CSRF rotation, two schools with identical pupil IDs/admission numbers/file IDs, reads/edits/exports/settings/files/QR separation, write routing, demo manipulation, expired sessions, account revision and school deactivation, login throttling, operator-only provisioning and accurate password-help messaging. All 86 tests pass. This is a tested owner-login foundation, not completed role-based mobile-app authorization.
+
+Current free deployment remains ephemeral. Real institute accounts have not been provisioned on the public test service. Persistent control AND institute storage, migration/backup operations and full role permissions remain necessary before real school data. See IDENTITY.md for operator commands and limits.

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import bleach,qrcode
 from bleach.css_sanitizer import CSSSanitizer
 from qrcode.image.svg import SvgPathImage
-from flask import Blueprint,abort,flash,redirect,render_template,request,session,url_for
+from flask import Blueprint,abort,flash,redirect,render_template,request,session,url_for,g
 from markupsafe import Markup,escape
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -126,7 +126,8 @@ def configure_certificates(app,db,Student):
         for row in rows:writer.writerow(["'"+str(x) if str(x).lstrip().startswith(('=','+','-','@')) else str(x) for x in row])
         response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"';return response
     def qr_payload(s):
-        token=hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:student-qr:{s.id}:{s.admission_no}'.encode(),hashlib.sha256).hexdigest()
+        namespace=(getattr(g,'school_identity',None) or {}).get('scope','DEMO')
+        token=hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:student-qr:{namespace}:{s.id}:{s.admission_no}'.encode(),hashlib.sha256).hexdigest()
         return 'schoolflow:student:'+token
     @bp.get('/qr/<int:sid>.svg')
     def qr(sid):
