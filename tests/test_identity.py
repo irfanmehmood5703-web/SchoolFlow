@@ -187,6 +187,27 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(public.post('/workspace/core/fees/challan-branding',data={'action':'preview'}).status_code,302)
         self.assertEqual(public.post('/workspace/fee-action',data={'action':'branded','ids':'1'}).status_code,302)
 
+    def test_bulk_fee_increment_previews_and_confirmation_are_tenant_bound(self):
+        import re,html
+        P=app.extensions['student_fee_plan_model']
+        for institute_id,amount in ((self.a,100000),(self.b,200000)):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](institute_id)
+                db.session.add(P(student_id=1,effective='2026-01',data=dict(schedule='Plan',percentage='0',year='2026',lines=[dict(particular='Tuition',actual=amount,net=amount,discount=0,arrears=0)])))
+                db.session.commit();db.session.remove()
+        other=app.test_client();self.login();self.login('TEST-B',client=other)
+        path='/workspace/core/fees/increments'
+        with self.client.session_transaction() as sess:csrf_a=sess['record_csrf']
+        with other.session_transaction() as sess:csrf_b=sess['record_csrf']
+        preview=self.client.post(path,data=dict(_csrf=csrf_a,action='preview',student_ids='1',effective='2027-01',year='2027',percentage='10'))
+        self.assertEqual(preview.status_code,200);self.assertIn(b'Only School A',preview.data);self.assertNotIn(b'Only School B',preview.data)
+        token=html.unescape(re.search(rb'name="preview_token" value="([^"]+)"',preview.data)[1].decode())
+        self.assertEqual(other.post(path,data=dict(_csrf=csrf_b,action='apply',preview_token=token)).status_code,422)
+        self.assertEqual(self.client.post(path,data=dict(_csrf=csrf_a,action='apply',preview_token=token)).status_code,302)
+        self.assertIn(b'1,100.00',self.client.get(path).data);self.assertIn(b'2,000.00',other.get(path).data);self.assertNotIn(b'1,100.00',other.get(path).data)
+        public=app.test_client();self.assertEqual(public.get(path).status_code,302)
+        self.assertEqual(public.post(path,data=dict(action='apply',preview_token=token)).status_code,302)
+
     def test_workspace_writes_stay_in_selected_database(self):
         self.login()
         with self.client.session_transaction() as sess: token = sess['record_csrf']

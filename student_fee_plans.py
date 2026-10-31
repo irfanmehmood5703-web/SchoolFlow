@@ -10,6 +10,26 @@ from operations import money
 
 PARTICULARS = ('Admission Fee','Tuition Fee','Annual Charges','Tie and Badge Amount','File Charges','Books Payment','Badge Amount','Registration Fee')
 
+def fee_percentage(raw):
+    try: pct=Decimal(raw)
+    except InvalidOperation: raise ValueError('Enter a valid percentage.')
+    if not pct.is_finite() or pct<0 or pct>Decimal('999999999'):raise ValueError('Enter a non-negative percentage up to 999,999,999.')
+    return pct
+
+
+def increment_lines(lines,pct,same_period):
+    result=[]
+    for source in lines:
+        line=dict(source)
+        base_actual=line.get('base_actual',line['actual']) if same_period else line['actual']
+        if line['discount']>base_actual:raise ValueError('Discount cannot exceed the fee before increment: '+line['particular'])
+        base_net=base_actual-line['discount']
+        increment=int((Decimal(base_net)*pct/100).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+        if base_actual+increment>99999999900:raise ValueError('Fee after increment exceeds the supported amount.')
+        line.update(base_actual=base_actual,base_net=base_net,increment=increment,actual=base_actual+increment,net=base_net+increment)
+        result.append(line)
+    return result
+
 def configure_student_fee_plans(app, db, Student):
     bp = Blueprint('student_plans', __name__, url_prefix='/workspace/student-fee-plans')
     models=app.extensions['ops_models']; Workflow=models['workflow']; Bill=models['bill']; Audit=models['audit']
@@ -121,9 +141,7 @@ def configure_student_fee_plans(app, db, Student):
             if request.form.get('origin')!=origin: raise ValueError('The student plan changed. Reload before saving.')
             effective=month(request.form.get('effective'))
             if latest and effective<latest.effective: raise ValueError('Choose the latest effective month or a later month. Historical plans are read-only.')
-            try: pct=Decimal(request.form.get('percentage','0'))
-            except InvalidOperation: raise ValueError('Enter a valid percentage.')
-            if not pct.is_finite() or pct<0 or pct>Decimal('999999999'): raise ValueError('Enter a non-negative percentage up to 999,999,999.')
+            pct=fee_percentage(request.form.get('percentage','0'))
             year=request.form.get('year','').strip()
             if year and (not year.isdigit() or not 1900<=int(year)<=9999): raise ValueError('Enter a valid fee plan year.')
             target=StudentFeePlan.query.filter_by(student_id=sid,effective=effective).first()
@@ -133,16 +151,9 @@ def configure_student_fee_plans(app, db, Student):
                 if f'discount_{i}' not in request.form or f'arrears_{i}' not in request.form: raise ValueError('The fee rows are incomplete. Reload the form.')
                 line['discount']=money(request.form.get(f'discount_{i}'))
                 line['arrears']=money(request.form.get(f'arrears_{i}'))
-                # Editing the same effective month reapplies its percentage to the original
-                # base, rather than compounding on every Save. A later month starts
-                # from the latest plan's resulting fee, allowing yearly compounding.
-                same_period=latest and effective==latest.effective and name==latest.data['schedule'] and not refresh
-                base_actual=line.get('base_actual',line['actual']) if same_period else line['actual']
-                if line['discount']>base_actual: raise ValueError('Discount cannot exceed the fee before increment: '+line['particular'])
-                base_net=base_actual-line['discount']
-                increment=int((Decimal(base_net)*pct/100).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
-                if base_actual+increment>99999999900: raise ValueError('Fee after increment exceeds the supported amount.')
-                line.update(base_actual=base_actual,base_net=base_net,increment=increment,actual=base_actual+increment,net=base_net+increment)
+            # Same-period saves recalculate the original base; later months carry forward.
+            same_period=latest and effective==latest.effective and name==latest.data['schedule'] and not refresh
+            lines=increment_lines(lines,pct,same_period)
             reason=request.form.get('reason','').strip(); notes=request.form.get('notes','').strip()
             if len(reason)>200 or len(notes)>5000: raise ValueError('Discount reason or notes are too long.')
             metadata=helper['snapshot'](configured) if fresh and configured else ({key:latest.data[key] for key in ('schedule_id','schedule_version','due_day') if key in latest.data} if latest else {})

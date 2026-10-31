@@ -86,6 +86,8 @@ from fee_setup import configure_fee_setup
 configure_fee_setup(app,db,Student)
 from challan_branding import configure_challan_branding
 configure_challan_branding(app,db,Student)
+from fee_increments import configure_fee_increments
+configure_fee_increments(app,db,Student)
 
 @app.route('/')
 def home():
