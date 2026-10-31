@@ -69,6 +69,8 @@ configure_hrm_reports(app,db,Employee)
 from certificates import configure_certificates
 configure_certificates(app,db,Student)
 configure_identity(app,db)
+from dashboard import configure_dashboard
+configure_dashboard(app,db)
 
 @app.route('/')
 def home():

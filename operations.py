@@ -741,14 +741,14 @@ def configure_operations(app, db, Student, Employee):
         students=Student.query.all();employees=Employee.query.all();bills=Bill.query.all();receipts=Receipt.query.filter_by(voided=False).all();today=date.today();m=today.strftime('%Y-%m')
         present=Daily.query.filter_by(kind='student',day=today,status='Present').count();marked=Daily.query.filter_by(kind='student',day=today).count()
         scores=Score.query.filter(Score.obtained!=None).all();average=round(sum(s.obtained/db.session.get(Workflow,s.award_id).data['papers'][s.paper]['total']*100 for s in scores)/len(scores),1) if scores else 0
-        return dict(students=len(students),active=sum(s.status=='Active' for s in students),employees=len(employees),active_employees=sum(s.status=='Active' for s in employees),present=present,marked=marked,attendance=Counter(x.status for x in Daily.query.filter_by(kind='student',day=today).all()),collected=sum(r.amount for r in receipts),this_month=sum(r.amount for r in receipts if str(r.day)[:7]==m),due=sum(b.remaining for b in bills),discount=sum(r.discount for r in receipts),unpaid=sum(b.remaining>0 for b in bills),defaulters=len({b.student_id for b in bills if b.remaining>0}),pending=Workflow.query.filter_by(status='Pending').count(),average=average,queries=Workflow.query.filter_by(kind='queries').count(),staff_counts=Counter(x.status for x in Daily.query.filter(Daily.kind=='staff',Daily.day>=today.replace(day=1)).all()),classes=Counter(s.class_name or 'Unassigned' for s in students if s.status=='Active'),months=[(f'{today.year}-{i:02d}',sum(b.total for b in bills if b.month==f'{today.year}-{i:02d}'),sum(r.amount for r in receipts if db.session.get(Bill,r.bill_id).month==f'{today.year}-{i:02d}')) for i in range(1,today.month+1)])
+        return dict(students=len(students),active=sum(s.status=='Active' for s in students),employees=len(employees),active_employees=sum(s.status=='Active' for s in employees),present=present,marked=marked,attendance=Counter(x.status for x in Daily.query.filter_by(kind='student',day=today).all()),collected=sum(r.amount for r in receipts),this_month=sum(r.amount for r in receipts if str(r.day)[:7]==m),due=sum(b.remaining for b in bills),discount=sum(r.discount for r in receipts),unpaid=sum(b.remaining>0 for b in bills),defaulters=len({b.student_id for b in bills if b.remaining>0}),pending=Workflow.query.filter_by(status='Pending').count(),average=average,queries=Workflow.query.filter_by(kind='queries').count(),staff_counts=Counter(x.status for x in Daily.query.filter(Daily.kind=='staff',Daily.day>=today.replace(day=1),Daily.day<=today).all()),classes=Counter(s.class_name or 'Unassigned' for s in students if s.status=='Active'),months=[(f'{today.year}-{i:02d}',sum(b.total for b in bills if b.month==f'{today.year}-{i:02d}'),sum(r.amount for r in receipts if db.session.get(Bill,r.bill_id).month==f'{today.year}-{i:02d}')) for i in range(1,today.month+1)])
 
     @bp.route('/dashboard')
-    def dashboard(): return render('dashboard.html',title='Dashboard',stats=dashboard_data())
+    def dashboard(): return app.extensions['dashboard_render']()
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v7')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v8')
 
     @app.route('/api/v1/summary')
     def summary_api():
