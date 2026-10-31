@@ -80,6 +80,8 @@ configure_admission_capacity(app,db,Student)
 
 from institute_setup import configure_institute_setup
 configure_institute_setup(app,db)
+from school_settings import configure_school_settings
+configure_school_settings(app,db,Student,Employee)
 
 @app.route('/')
 def home():

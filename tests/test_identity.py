@@ -136,6 +136,20 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(a.status_code, 200); self.assertEqual(b.status_code, 200)
         self.assertNotEqual(a.data, b.data)
 
+    def test_school_settings_and_subject_mappings_cannot_cross_tenants(self):
+        other=app.test_client();self.login();self.login('TEST-B',client=other)
+        with self.client.session_transaction() as sess:token=sess['record_csrf']
+        result=self.client.post('/workspace/core/exam/display',data={'_csrf':token,'version':'0','decimals':'3','written':'School A Theory'})
+        self.assertEqual(result.status_code,302)
+        self.assertIn(b'School A Theory',self.client.get('/workspace/core/exam/display').data)
+        self.assertNotIn(b'School A Theory',other.get('/workspace/core/exam/display').data)
+        # Catalog values remain bound to the authenticated institute too.
+        self.client.post('/workspace/core/hrm/departments',data={'_csrf':token,'version':'0','name':'Only School A Department','action':'save'})
+        self.assertNotIn(b'Only School A Department',other.get('/workspace/core/hrm/departments').data)
+        public=app.test_client()
+        for path in ['/workspace/core/hrm/attendance-lock','/workspace/core/exam/subject-options','/workspace/core/hrm/designation-options']:
+            self.assertEqual(public.get(path).status_code,302)
+
     def test_workspace_writes_stay_in_selected_database(self):
         self.login()
         with self.client.session_transaction() as sess: token = sess['record_csrf']

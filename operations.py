@@ -159,7 +159,7 @@ def configure_operations(app, db, Student, Employee):
         except ValueError: raise ValueError('Invalid selection.')
     def queue(subject, ids, audience='parent'):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
-        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs)))
+        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience))))
     def render(name, **kw):
         return render_template(name, choices=choices, today=date.today().isoformat(), statuses=STATUSES, **kw)
 
@@ -191,6 +191,7 @@ def configure_operations(app, db, Student, Employee):
         if key in ('generate-salary','pay-salary'): return url_for('ops.payroll',view=key)
         if key in ('date-sheets','awards'): return url_for('ops.examination',kind=key)
         if key=='roll-slips': return url_for('ops.rolls')
+        if key=='shifts':return url_for('school_settings.assign_shifts')
         if key in SCHEMAS: return url_for('ops.register',kind=key)
         if key in ('sms-blaster','fee-intimation'): return url_for('ops.messages')
         if key in ('sms-report','family-sms','notifications','staff-sms'): return url_for('ops.message_log',view=key)
@@ -210,6 +211,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/register/<kind>',methods=['GET','POST'])
     def register(kind):
         if kind not in SCHEMAS: abort(404)
+        if kind=='shifts':return redirect(url_for('school_settings.assign_shifts'),code=307 if request.method=='POST' else 302)
         schema=SCHEMAS[kind]
         if request.method=='POST':
             action=request.form.get('action','save')
@@ -405,11 +407,13 @@ def configure_operations(app, db, Student, Employee):
         d=day(request.values.get('day',date.today().isoformat()));people_kind='student' if kind=='student' else 'employee'
         objs=people(people_kind)
         if request.method=='POST':
+            app.extensions['admission_capacity']['lock']()
+            app.extensions['school_settings_helpers']['attendance_guard'](kind,d)
             count=0
             for p in objs:
                 status=request.form.get('status_'+str(p.id))
                 if not status: continue
-                if status not in STATUSES: raise ValueError('Invalid attendance status.')
+                if status not in STATUSES or status=='Sandwich Leave': raise ValueError('Invalid or disabled attendance status.')
                 row=Daily.query.filter_by(kind=kind,person_id=p.id,day=d).first()
                 if not row: row=Daily(kind=kind,person_id=p.id,day=d);db.session.add(row)
                 row.status=status
@@ -421,11 +425,13 @@ def configure_operations(app, db, Student, Employee):
                     if val and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',val): raise ValueError('Enter valid times.')
                     setattr(row,k,val)
                 count+=1
-            if request.form.get('send'): queue('Attendance',[p.id for p in objs],audience=kind)
+            if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience=kind)
             audit('Save attendance',kind=kind,day=str(d),count=count);commit();flash(f'{count} attendance records saved.','success')
             return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat(),**{k:request.form[k] for k in ('campus','class_name','section','academic_session') if request.form.get(k)}))
         existing={r.person_id:r for r in Daily.query.filter_by(kind=kind,day=d).all()}
-        return render('take_attendance.html',title='Staff Attendance' if kind=='staff' else 'Student Attendance',kind=kind,people=objs,existing=existing,day=d,details=lambda p:details(p,people_kind))
+        shift_details=app.extensions['record_helpers']['raw_many'](people_kind,objs)
+        schedules={p.id:app.extensions['school_settings_helpers']['shift'](kind,p,shift_details.get(p.id,{}),d) for p in objs}
+        return render('take_attendance.html',schedules=schedules,locked=bool(kind=='staff' and app.extensions['school_settings_helpers']['config']('hrm:attendance-lock').get('daily','') and str(d)<=app.extensions['school_settings_helpers']['config']('hrm:attendance-lock')['daily']),title='Staff Attendance' if kind=='staff' else 'Student Attendance',kind=kind,people=objs,existing=existing,day=d,details=lambda p:details(p,people_kind))
 
     @bp.route('/attendance-report')
     def attendance_report():
@@ -446,10 +452,13 @@ def configure_operations(app, db, Student, Employee):
             name=request.form.get('name','').strip()
             if not name: raise ValueError('Name is required.')
             if any(x.data.get('name')==name for x in Workflow.query.filter_by(kind=kind).all()): raise ValueError('Name must be unique.')
+            exam_type=request.form.get('exam_test_type','')
+            if exam_type and exam_type not in app.extensions['school_settings_helpers']['exam_types'](request.form.get('campus','')):raise ValueError('Choose a test type configured for this campus.')
             papers=[]
             subjects=request.form.getlist('subject');dates=request.form.getlist('exam_date');types=request.form.getlist('test_type');totals=request.form.getlist('total');teachers=request.form.getlist('teacher')
             for i,subject in enumerate(subjects):
                 if not subject: raise ValueError('Subject is required on every row.')
+                if not app.extensions['school_settings_helpers']['subject_allowed'](request.form.get('campus',''),request.form.get('class_name',''),subject):raise ValueError('Choose subjects assigned to this campus and class.')
                 if i>=len(dates) or i>=len(types): raise ValueError('Every paper needs an exam date and test type.')
                 d=day(dates[i]);typ=types[i]
                 if typ not in ('Written','Oral','Practical'): raise ValueError('Select a valid test type.')
@@ -465,11 +474,11 @@ def configure_operations(app, db, Student, Employee):
             data={k:request.form.get(k,'').strip()[:1000] for k in ('name','print_heading','campus','class_name','section','gender','group_name','academic_session','return_date','sort_order','student_filter')}
             category=request.form.get('assessment_category','')
             if category and category not in PERFORMANCE_CATEGORIES: raise ValueError('Choose a valid assessment category.')
-            data.update(papers=papers,recheck=bool(request.form.get('recheck')),assessment_category=category)
+            data.update(papers=papers,recheck=bool(request.form.get('recheck')),assessment_category=category,exam_test_type=exam_type)
             if data.get('return_date'): day(data['return_date'])
             obj=Workflow(kind=kind,data=data,status='Active');db.session.add(obj);audit('Create '+kind);commit()
             return redirect(url_for('ops.marks',award_id=obj.id)) if kind=='awards' else redirect(url_for('ops.examination',kind=kind))
-        return render('examination.html',title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
+        return render('examination.html',configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
 
     def award_students(award):
         Details=rm['student']
@@ -550,6 +559,10 @@ def configure_operations(app, db, Student, Employee):
             if data['apply_manual_increments'] and data['lecture_wise'] and not data['include_plan_earnings']:
                 raise ValueError('Manual salary increments adjust monthly basic. For lecture-only staff, update their lecture rate instead.')
             data['sandwich_leave']=False  # Disabled by the school for this phase.
+            data['allowances']=[]
+            for head in app.extensions['school_settings_helpers']['items']('allowance'):
+                amount=money(request.form.get('allowance_'+str(head.id),'0'))
+                if amount:data['allowances'].append(dict(id=head.id,name=head.name,amount=amount,**head.data))
             data['increment_month']=request.form.get('increment_month','')
             data['increment_type']=request.form.get('increment_type','Abs')
             data['rules']=[]
@@ -564,7 +577,7 @@ def configure_operations(app, db, Student, Employee):
             if obj: obj.data=data;obj.status='Pending'
             else: db.session.add(Workflow(kind='salary-plans',data=data,status='Pending'))
             audit('Save salary plan',employee=employee_id);commit();flash('Salary plan saved for approval.','success');return redirect(url_for('ops.plans'))
-        return render('salary_plans.html',title='Create / Update Salary Plan',rows=Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all(),employee=lambda id:db.session.get(Employee,int(id)),data=obj.data if obj else {},edit=edit,deduction_types=deduction_types)
+        return render('salary_plans.html',title='Create / Update Salary Plan',rows=Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all(),employee=lambda id:db.session.get(Employee,int(id)),data=obj.data if obj else {},edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'))
 
     def lecture_amount(entry,month_value):
         if entry.data.get('rate_override'): return money(entry.data['rate_override'])*int(entry.data['lectures'])
@@ -627,6 +640,9 @@ def configure_operations(app, db, Student, Employee):
                     lecture_details=[dict(id=r.id,date=r.data['date'],class_name=r.data.get('class_name',''),section=r.data.get('section',''),subject=r.data.get('subject',''),lectures=int(r.data['lectures']),amount=lecture_amount(r,m)) for r in lecture_rows] if data.get('lecture_wise') else []
                     lecture_pay=sum(row['amount'] for row in lecture_details)
                     earnings=(base+data['security_return'] if pays_basic else 0)+lecture_pay
+                    if pays_basic:
+                        earnings+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Earning')
+                        deductions+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Deduction')
                     if data.get('lecture_incentive'): earnings+=data['incentive_per_lecture']*sum(r.lectures for r in attendance)
                     if data.get('all_present_bonus') and data.get('bonus_amount'): raise ValueError('All-present bonus eligibility requires an attendance-calendar rule. No payroll was saved.')
                     advance_deduction=0
@@ -669,7 +685,7 @@ def configure_operations(app, db, Student, Employee):
             elif action in ('slip','signature','report','bank'):
                 rows=Salary.query.filter(Salary.id.in_(selected())).all()
                 if not rows: raise ValueError('Select salaries to print.')
-                return render('salary_print.html',title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
+                return render('salary_print.html',details=details,title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
             else: raise ValueError('Invalid salary action.')
             return redirect(url_for('ops.payroll',view=view,month=m))
         rows=Salary.query.filter_by(month=m).order_by(Salary.id.desc()).all()
@@ -696,7 +712,8 @@ def configure_operations(app, db, Student, Employee):
             if not ids: raise ValueError('Select recipients.')
             if any(not db.session.get(Student,id) for id in ids): raise ValueError('Invalid recipient.')
             queue(body[:5000],ids);commit();flash('Request recorded: provider not configured. No message was sent.','info');return redirect(url_for('ops.message_log'))
-        return render('messages.html',title='SMS Blaster / Fee Intimation',students=people(active=False))
+        campus=request.args.get('campus','');templates=app.extensions['school_settings_helpers']['config']('exam:sms:'+campus)
+        return render('messages.html',sms_templates=templates,title='SMS Blaster / Fee Intimation',students=people(active=False))
 
     @bp.route('/message-log')
     def message_log():
@@ -818,7 +835,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v12')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v13')
 
     @app.route('/api/v1/summary')
     def summary_api():

@@ -142,10 +142,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const classSelect = document.getElementById('class_name');
   const subjects = document.getElementById('subjects');
+  let subjectMappings;
   function filterSubjects() {
     if (!subjects || !classSelect) return;
     [...subjects.options].forEach(option => {
-      const allowed = !option.dataset.class || option.dataset.class === classSelect.value;
+      const campus=document.getElementById('campus')?.value;
+      const linked=subjectMappings?.[campus]?.[classSelect.value];
+      const allowed = (!option.dataset.class || option.dataset.class === classSelect.value) && (!linked || linked.includes(option.value));
       option.hidden = !allowed;
       option.disabled = !allowed;
       if (!allowed) option.selected = false;
@@ -153,5 +156,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   classSelect?.addEventListener('change', filterSubjects);
   classSelect?.addEventListener('subjects-refresh', filterSubjects);
+  if(subjects){
+    document.getElementById('campus')?.addEventListener('change',filterSubjects);
+    fetch('/workspace/core/exam/subject-options').then(r=>r.ok?r.json():Promise.reject()).then(data=>{subjectMappings=data;filterSubjects()}).catch(()=>{});
+  }
+  const role=document.getElementById('role'),group=document.getElementById('designation_group');
+  if(role&&group)fetch('/workspace/core/hrm/designation-options').then(r=>r.ok?r.json():Promise.reject()).then(links=>{
+    const update=()=>[...role.options].forEach(o=>{const valid=!links[o.value]||links[o.value]===group.value;o.hidden=!valid;o.disabled=!valid;if(!valid&&o.selected)role.value=''});
+    group.addEventListener('change',update);update();
+  }).catch(()=>{});
   filterSubjects();
 });

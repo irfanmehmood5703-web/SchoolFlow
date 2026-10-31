@@ -130,7 +130,7 @@ def configure_records(app, db, Student, Employee):
                 while Employee.query.filter_by(employee_no=candidate).first():
                     highest += 1
                     candidate = str(highest + 1)
-            data = dict(employee_no=candidate, marital_status="Married", joining_date=date.today().isoformat(),
+            data = dict(employee_no=candidate, status="Active", marital_status="Married", joining_date=date.today().isoformat(),
                 lecture_assigned="0", app_active=True, diary_approval="required", award_permission="update",
                 attendance_permission="update", contact_absentee="not_allowed", fee_access="not_allowed",
                 salary_access="not_allowed")
@@ -191,6 +191,10 @@ def configure_records(app, db, Student, Employee):
     def validate_form(kind, obj):
         sections = STUDENT_SECTIONS if kind == "student" else EMPLOYEE_SECTIONS
         errors, data = {}, {}
+        if kind=='employee':
+            old_data=read_data(kind,obj) if obj else {}
+            data.update(old_data)
+            sections=app.extensions['school_settings_helpers']['employee_sections']()
         choices = setup_choices()
         for _, fields in sections:
             for f in fields:
@@ -230,6 +234,14 @@ def configure_records(app, db, Student, Employee):
                         allowed.add(str(read_data(kind, obj).get(key, "")))
                     if value not in allowed:
                         errors[key] = "Select a configured value."
+        if kind=='employee':
+            # Never accept hidden-field overrides submitted by a crafted form.
+            visible={f['key'] for _,fs in sections for f in fs}
+            for _,fs in EMPLOYEE_SECTIONS:
+                for f in fs:
+                    if f['key'] not in visible:data[f['key']]=old_data.get(f['key'],'')
+            try:app.extensions['school_settings_helpers']['employee_validate'](data,old_data)
+            except ValueError as exc:errors['role']=str(exc)
         if kind == "student":
             # The reference makes Admission No optional. The starter schema does not.
             if not data["admission_no"]:
@@ -249,7 +261,7 @@ def configure_records(app, db, Student, Employee):
             for key, _ in STUDENT_COMMUNICATION:
                 data[key] = key in request.form
             valid_subjects = {x[0] for x in choices.get("subject", []) if not x[2] or x[2] == data.get("class_name")}
-            if any(s not in valid_subjects for s in data["subjects"]):
+            if any(s not in valid_subjects or not app.extensions['school_settings_helpers']['subject_allowed'](data.get('campus',''),data.get('class_name',''),s) for s in data["subjects"]):
                 errors["subjects"] = "Choose subjects assigned to the selected class."
             if data.get("leaving_date") and data.get("admission_date") and data["leaving_date"] < data["admission_date"]:
                 errors["leaving_date"] = "Leaving date cannot be before admission date."
@@ -263,7 +275,7 @@ def configure_records(app, db, Student, Employee):
         else:
             if Employee.query.filter(Employee.employee_no == data["employee_no"], Employee.id != (obj.id if obj else 0)).first():
                 errors["employee_no"] = "This employee code is already in use."
-            username = data.get("username", "").casefold()
+            username = (data.get("username") or "").casefold()
             data["username"] = username
             if username and not re.fullmatch(r"[a-z0-9_.@+-]{3,120}", username):
                 errors["username"] = "Use 3–120 letters, numbers or _.@+- characters."
@@ -276,7 +288,7 @@ def configure_records(app, db, Student, Employee):
                 errors["password"] = "Set a password for this new username."
             if data.get("password") and not username:
                 errors["username"] = "Enter a username for these credentials."
-        pairs = [("qualification_from", "qualification_to"), ("probation_from", "probation_to")]
+        pairs = [("qualification_from", "qualification_to"), ("probation_from", "probation_to"), ("experience_from", "experience_to")]
         for start, end in pairs:
             if data.get(start) and data.get(end) and data[start] > data[end]:
                 errors[end] = "End date cannot be before start date."
@@ -337,15 +349,28 @@ def configure_records(app, db, Student, Employee):
         photo = next((f for f in files if f.photo), None)
         families = RecordFamily.query.order_by(RecordFamily.number).all()
         return render_template("record_form.html", kind=kind, obj=obj, data=data, errors=errors or {},
-            sections=STUDENT_SECTIONS if kind == "student" else EMPLOYEE_SECTIONS,
+            sections=STUDENT_SECTIONS if kind == "student" else app.extensions['school_settings_helpers']['employee_sections'](),
+            upload_settings=app.extensions['school_settings_helpers']['config']('hrm:employee-fields') if kind=='employee' else {},
             choices=setup_choices(), families=families, photo=photo, files=[f for f in files if not f.photo],
             communication=STUDENT_COMMUNICATION, title=("Update " if obj else "Add ")+kind.title()), response_status
 
     def save_record(kind, obj=None):
+        if kind=='employee':app.extensions['admission_capacity']['lock']()
         data, errors = validate_form(kind, obj)
         files, file_errors = incoming_files()
+        if kind=='employee':
+            spec=app.extensions['school_settings_helpers']['config']('hrm:employee-fields')
+            old_files=RecordFile.query.filter_by(owner_kind=kind,owner_id=obj.id).all() if obj else []
+            for key,is_photo in [('photo',True),('documents',False)]:
+                rule=spec.get(key,{})
+                if not rule.get('visible',True):
+                    files=[f for f in files if f['photo']!=is_photo]
+                if rule.get('required'):
+                    retained=[f for f in old_files if f.photo==is_photo and (str(f.id) not in request.form.getlist('remove_document') if not is_photo else not request.form.get('remove_photo'))]
+                    if not retained and not any(f['photo']==is_photo for f in files):file_errors[key]='This upload is required by HRM Settings.'
         errors.update(file_errors)
         if errors:
+            db.session.rollback()
             data.pop("password", None)
             return render_form(kind, obj, data, errors, 422)
         created = obj is None
@@ -382,8 +407,8 @@ def configure_records(app, db, Student, Employee):
                 obj = obj or Employee()
                 for key in ("name", "employee_no", "role", "phone"):
                     setattr(obj, key, data[key])
-                if created:
-                    obj.salary, obj.status = 0, "Active"
+                if created:obj.salary = 0
+                obj.status=data.get('status') or (obj.status if not created else 'Active')
                 db.session.add(obj)
                 db.session.flush()
                 detail = EmployeeDetails.query.filter_by(employee_id=obj.id).first() or EmployeeDetails(employee_id=obj.id)
@@ -396,14 +421,15 @@ def configure_records(app, db, Student, Employee):
                 detail.data = data
             detail.updated_at = datetime.now(timezone.utc)
             db.session.add(detail)
-            remove_ids = request.form.getlist("remove_document")
+            upload_config=app.extensions['school_settings_helpers']['config']('hrm:employee-fields') if kind=='employee' else {}
+            remove_ids = request.form.getlist("remove_document") if upload_config.get('documents',{}).get('visible',True) else []
             for fid in remove_ids:
                 if not fid.isdigit():
                     continue
                 f = RecordFile.query.filter_by(id=int(fid), owner_kind=kind, owner_id=obj.id, photo=False).first()
                 if f:
                     db.session.delete(f)
-            if request.form.get("remove_photo") or any(f["photo"] for f in files):
+            if (request.form.get("remove_photo") and upload_config.get("photo",{}).get("visible",True)) or any(f["photo"] for f in files):
                 RecordFile.query.filter_by(owner_kind=kind, owner_id=obj.id, photo=True).delete()
             for f in files:
                 db.session.add(RecordFile(owner_kind=kind, owner_id=obj.id, **f))
