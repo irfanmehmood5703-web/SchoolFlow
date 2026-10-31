@@ -15,12 +15,13 @@ TAGS=('copyType todayDate instName instContact instEmail instLogo instAddress st
 HTML_TAGS=['p','div','span','b','strong','i','em','u','s','strike','br','hr','h1','h2','h3','h4','h5','h6','table','thead','tbody','tfoot','tr','td','th','ul','ol','li','blockquote','a','img','sup','sub']
 CSS=CSSSanitizer(allowed_css_properties=['color','background-color','font-family','font-size','font-weight','font-style','text-decoration','text-align','text-transform','line-height','letter-spacing','width','height','min-height','max-width','margin','margin-top','margin-bottom','margin-left','margin-right','padding','padding-top','padding-bottom','padding-left','padding-right','border','border-top','border-bottom','border-left','border-right','border-color','border-width','border-style','border-radius','border-collapse','vertical-align','display','float','object-fit'])
 
-def clean_html(value):
+def clean_html(value,report_assets=False):
     def attribute(tag,name,value):
         if name=='style':return True
         if name in ('colspan','rowspan') and tag in ('td','th'):return bool(re.fullmatch(r'\d{1,2}',value))
         if name in ('alt','title'):return True
         if tag=='a' and name=='href':return value.startswith(('https://','http://','mailto:','#'))
+        if tag=='img' and name=='src' and report_assets and re.fullmatch(r'/workspace/core/(?:logo|hrm/employee-qr/\d+\.svg)',value):return True
         if tag=='img' and name=='src':return bool(re.fullmatch(r'/(?:records/files/\d+|workspace/certificates/(?:logo/\d+|qr/\d+\.svg))',value))
         return False
     return bleach.clean(str(value),tags=HTML_TAGS,attributes=attribute,protocols=['http','https','mailto'],strip=True,strip_comments=True,css_sanitizer=CSS)

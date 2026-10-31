@@ -147,7 +147,7 @@ class IdentityTests(unittest.TestCase):
         self.client.post('/workspace/core/hrm/departments',data={'_csrf':token,'version':'0','name':'Only School A Department','action':'save'})
         self.assertNotIn(b'Only School A Department',other.get('/workspace/core/hrm/departments').data)
         public=app.test_client()
-        for path in ['/workspace/core/hrm/attendance-lock','/workspace/core/exam/subject-options','/workspace/core/hrm/designation-options']:
+        for path in ['/workspace/core/hrm/attendance-lock','/workspace/core/exam/subject-options','/workspace/core/hrm/designation-options','/workspace/core/hrm/employee-qr/1.svg']:
             self.assertEqual(public.get(path).status_code,302)
 
     def test_workspace_writes_stay_in_selected_database(self):

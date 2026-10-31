@@ -10,8 +10,13 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, s
 from markupsafe import Markup, escape
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
-from certificates import clean_html
+from certificates import clean_html as clean_base_html
+from branding_values import make_branding_values, expand_tags, missing_tags
 from record_schema import EMPLOYEE_SECTIONS
+
+def clean_html(value):
+    return clean_base_html(value,report_assets=True)
+
 
 DAYS=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
 EXAM_PAGES=[('display','Mark Display Names'),('subject-groups','Subject Groups'),('subjects','Subjects'),('class-subjects','Subjects in Classes'),('test-types','Test Types'),('weightage','Test Type Weightage'),('grading','Grading Policies'),('class-grading','Class Grading Policy'),('student-shifts','Student Shifts'),('sms','Student SMS Templates'),('branding','Exam Brandings')]
@@ -166,9 +171,14 @@ def configure_school_settings(app,db,Student,Employee):
     def formatted_marks(value):
         if value is None:return '—'
         return f"{value:.{int(config('exam:display').get('decimals',2))}f}"
-    def grade_for(campus,cls,percentage):
+    def assigned_policy(campus,cls):
         link=next((r for r in items('class-grading',campus) if cls in r.data.get('classes',[])),None)
-        policy=db.session.get(SchoolSettingItem,link.data['policy']) if link else None
+        return next((r for r in items('grading') if r.id==link.data['policy']),None) if link else None
+    def final_remarks(campus,cls):
+        policy=assigned_policy(campus,cls)
+        return policy.data.get('final_remarks','') if policy else ''
+    def grade_for(campus,cls,percentage):
+        policy=assigned_policy(campus,cls)
         if not policy:return ('','')
         n=Decimal(str(percentage))
         band=next((b for b in policy.data['bands'] if Decimal(b['min'])<=n<=Decimal(b['max'])),None)
@@ -179,29 +189,25 @@ def configure_school_settings(app,db,Student,Employee):
         return not link or subject in link.data.get('subjects',[])
     def exam_types(campus):return [r.name for r in items('test-type',campus)]
     def tags(module):return list(dict.fromkeys(CAMPUS_TAGS+(EMP_TAGS if module=='hrm' else STUDENT_TAGS)))
-    def expand(text,values,html=False):
-        def sub(match):
-            key=match.group(1)
-            if key not in values:return match.group(0)
-            return str(escape(str(values[key]))) if html else str(values[key])
-        return re.sub(r'\[([A-Za-z0-9_]+)\]',sub,text)
-    def campus_values(campus):
-        p=db.session.get(app.extensions['institute_setup_models']['profile'],1)
-        data=p.data if p else {}
-        return dict(institute_name=data.get('name','SchoolFlow'),campus_name=campus,campus_address=data.get('address',''),campus_contact=data.get('contact',''),slogan=data.get('slogan',''),todayDate=date.today().isoformat(),color_primary='#176b4a',color_secondary='#e7f3ec',color_3='#ffffff',color_4='#454b48')
-    def branding(module,layout,part,campus='',values=None):
+    tag_values=make_branding_values(app,db,Student,Employee)
+    expand=expand_tags
+    campus_values=tag_values['school']
+    app.extensions['branding_values']=tag_values
+    def branding(module,layout,part,campus='',values=None,person=None):
         rows=items(module+'-branding',campus)
         row=next((r for r in rows if r.name==layout),None)
         if not row and campus:row=next((r for r in items(module+'-branding','') if r.name==layout),None)
         if not row:return Markup('')
-        html=expand(row.data.get(part,''),{**campus_values(campus),**(values or {})},True)
-        # Only this server-created image may use the private school logo path.
-        p=db.session.get(app.extensions['institute_setup_models']['profile'],1)
-        logo=Markup('<img src="'+url_for('institute_setup.logo')+'" alt="School logo" style="max-width:90px;max-height:90px">') if p and p.logo_mime else ''
-        return Markup(html.replace('[institute_logo]',str(logo)))
+        school=campus_values(campus);data={**school,**(values or {})}
+        if campus:
+            for key in ('institute_name','campus_name','campus_address','campus_contact','campus_email','campus_city','campus_open_date','slogan'):data[key]=school[key]
+        assets=tag_values['assets']('student' if module=='exam' else 'employee',person)
+        text=row.data.get(part,'')
+        unresolved=getattr(request,'unresolved_branding_tags',set());unresolved.update(missing_tags(text,data,assets));request.unresolved_branding_tags=unresolved
+        return Markup(clean_html(expand(text,data,True,assets)))
 
     @app.context_processor
-    def settings_context():return dict(settings_branding=branding,mark_display=display_name,format_marks=formatted_marks)
+    def settings_context():return dict(settings_branding=branding,mark_display=display_name,format_marks=formatted_marks,grade_final_remarks=final_remarks,student_branding_values=tag_values['student'],employee_branding_values=tag_values['employee'],salary_branding_values=tag_values['salary'],settings_unresolved=lambda:sorted(getattr(request,'unresolved_branding_tags',set())))
 
     def catalog_mutation(page):
         category=CATALOG_PAGES[page];sid=value('id')
@@ -390,7 +396,7 @@ def configure_school_settings(app,db,Student,Employee):
                         if action=='preview':
                             from types import SimpleNamespace
                             row=SimpleNamespace(id=row.id if row else '',version=row.version if row else 0,name=name,scope=scope,data=payload)
-                            preview={k:Markup(expand(v,{**campus_values(scope),'emp_name':'Fictional Employee','studentName':'Fictional Student'},True)) for k,v in payload.items()}
+                            preview={k:Markup(clean_html(expand(v,{**campus_values(scope),'emp_name':'Fictional Employee','studentName':'Fictional Student'},True))) for k,v in payload.items()}
                         elif action!='save':raise ValueError('Choose save or preview.')
                     if preview is None:save_item(kind,name,payload,scope,row)
             if preview is None:
@@ -465,13 +471,27 @@ def configure_school_settings(app,db,Student,Employee):
     def results(award_id):
         award=db.get_or_404(W,award_id)
         if award.kind!='awards':abort(404)
-        scores=ops['score'].query.filter_by(award_id=award.id).all();pupils=Student.query.filter(Student.id.in_({s.student_id for s in scores})).order_by(Student.id).all()
-        details=app.extensions['record_helpers']['raw_many']('student',pupils);rows=[]
+        scores=ops['score'].query.filter_by(award_id=award.id).all()
+        detail_model=rm['student'];roster=Student.query.outerjoin(detail_model,detail_model.student_id==Student.id).filter(Student.status=='Active')
+        for key in ('class_name','campus','section','gender','group_name','academic_session'):
+            if award.data.get(key):roster=roster.filter((Student.class_name if key=='class_name' else detail_model.data[key].as_string())==award.data[key])
+        current=roster.all();ids={p.id for p in current}|{s.student_id for s in scores}
+        pupils=Student.query.filter(Student.id.in_(ids)).order_by(Student.id).all()
+        details=app.extensions['record_helpers']['raw_many']('student',pupils);tag_values['prefetch_photos']('student',pupils);rows=[]
         for pupil in pupils:
-            saved={s.paper:s for s in scores if s.student_id==pupil.id};papers=award.data['papers'];complete=all(i in saved and (saved[i].obtained is not None or saved[i].state) for i in range(len(papers)))
-            obtained=sum(Decimal(str(s.obtained or 0)) for s in saved.values());total=sum(Decimal(str(p['total'])) for p in papers);percent=obtained/total*100 if total and complete else None
+            saved={s.paper:s for s in scores if s.student_id==pupil.id};papers=award.data['papers'];complete=True;obtained=Decimal(0);total=Decimal(0);paper_rows=[]
+            for i,paper in enumerate(papers):
+                score=saved.get(i);state=score.state if score else '';numeric=score.obtained if score and not state else None
+                marked=state in ('A','L') or (not state and numeric is not None)
+                if not marked:complete=False
+                maximum=Decimal(str(paper['total']));total+=maximum
+                if numeric is not None:obtained+=Decimal(str(numeric))
+                percent=(Decimal(str(numeric or 0))/maximum*100) if marked and maximum else None
+                grade,remarks=grade_for(award.data.get('campus',''),award.data.get('class_name',''),percent) if percent is not None else ('','')
+                paper_rows.append(dict(paper=paper,state=state,obtained=numeric,total=maximum,percentage=percent,grade=grade,remarks=remarks,marked=marked))
+            percent=obtained/total*100 if total and complete else None
             grade,remarks=grade_for(award.data.get('campus',''),award.data.get('class_name',''),percent) if percent is not None else ('','')
-            rows.append(dict(student=pupil,details=details.get(pupil.id,{}),obtained=obtained,total=total,percentage=percent,grade=grade,remarks=remarks,complete=complete))
+            rows.append(dict(student=pupil,details=details.get(pupil.id,{}),obtained=obtained,total=total,percentage=percent,grade=grade,remarks=remarks,complete=complete,papers=paper_rows))
         return render_template('exam_results.html',title='Results · '+award.data['name'],award=award,rows=rows)
 
     @bp.get('/hrm/increment-sheet')
@@ -506,7 +526,7 @@ def configure_school_settings(app,db,Student,Employee):
                     for a,i,p in papers:
                         score=lookup.get((a.id,pupil.id,i));maximum+=Decimal(str(p['total']))
                         if not score or (score.obtained is None and not score.state):marked=False
-                        elif score.obtained is not None:obtained+=Decimal(str(score.obtained))
+                        elif not score.state and score.obtained is not None:obtained+=Decimal(str(score.obtained))
                     pct=obtained/maximum*100 if marked and maximum else None
                     if pct is None:complete=False
                     else:weighted+=pct*weight/100
@@ -527,25 +547,42 @@ def configure_school_settings(app,db,Student,Employee):
         for r in items('class-subjects'):maps.setdefault(r.scope,{})[r.name]=r.data.get('subjects',[])
         return jsonify(maps)
 
-    def message_snapshots(subject,ids,audience):
-        staff=audience in ('staff','teacher');module='hrm' if staff else 'exam';cls=Employee if staff else Student
-        people=cls.query.filter(cls.id.in_(ids)).all();data=app.extensions['record_helpers']['raw_many']('employee' if staff else 'student',people);result=[]
-        for p in people:
-            d=data.get(p.id,{});campus=d.get('campus','');values=campus_values(campus)
-            values.update(emp_name=p.name,emp_fname=d.get('father_name',''),emp_contact=p.phone or '',emp_cnic=d.get('cnic',''),studentName=p.name,fatherName=d.get('father',''),className=getattr(p,'class_name','') or '',sectionName=d.get('section',''),sid=p.id,rollNo=d.get('roll_no',''),SessionName=d.get('academic_session',''))
-            name='Pay Salary' if subject=='Salary paid' else ''
-            if subject=='Attendance':
-                current=ops['daily'].query.filter_by(kind='staff' if staff else 'student',person_id=p.id,day=date.fromisoformat(request.form['day'])).first()
+    def message_snapshots(subject,ids,audience,event=None,context=None):
+        context=context or {};staff=audience in ('staff','teacher');module='hrm' if staff else 'exam';cls=Employee if staff else Student
+        people=cls.query.filter(cls.id.in_(ids)).all()
+        if staff:tag_values['prefetch_employees'](people)
+        data=app.extensions['record_helpers']['raw_many']('employee' if staff else 'student',people);result=[]
+        def append(person,values,name,source=None):
+            campus=data.get(person.id,{}).get('campus','');body=config(module+':sms:'+campus).get(name) or subject
+            result.append(dict(person_id=person.id,source_salary_id=source,template=name,text=expand(body,values),unresolved=missing_tags(body,values)))
+        if staff and event in ('salary-generated','salary-paid'):
+            query=ops['salary'].query.filter(ops['salary'].employee_id.in_(ids))
+            if event=='salary-generated':query=query.filter_by(month=context.get('month'))
+            else:query=query.filter(ops['salary'].id.in_(context.get('salary_ids',[])))
+            lookup={p.id:p for p in people}
+            for salary in query.order_by(ops['salary'].id).all():
+                person=lookup.get(salary.employee_id)
+                if not person:continue
+                values=tag_values['salary'](salary,person,data.get(person.id,{}));values.update(date=salary.paid_date.isoformat() if salary.paid_date else values['todayDate'],time='')
+                append(person,values,'Generate Salary' if event=='salary-generated' else 'Pay Salary',salary.id)
+            return result
+        for person in people:
+            values=tag_values['employee' if staff else 'student'](person,data.get(person.id,{}));name=''
+            if event=='attendance':
+                day=context.get('day');current=ops['daily'].query.filter_by(kind='staff' if staff else 'student',person_id=person.id,day=date.fromisoformat(day)).first()
                 name=current.status if current else ''
                 if staff and name=='Leave':name='Full Day Leave'
-                values.update(date=request.form['day'],todayDate=request.form['day'],time=current.time_in if current else '',qr_status=current.status if current else '',qr_att_status=current.status if current else '',qr_in_status=current.time_in if current else '')
-            if name=='Pay Salary':
-                salaries=ops['salary'].query.filter_by(employee_id=p.id).order_by(ops['salary'].month.desc()).all()
-                selected={int(s) for s in request.form.getlist('ids') if s.isdigit()};salary=next((s for s in salaries if s.id in selected),None)
-                if salary:values.update(salary_month=salary.month,earnings=f'{salary.earnings/100:.2f}',deductions=f'{salary.deductions/100:.2f}',net_salary=f'{salary.net/100:.2f}',salary_status='Paid',date=str(salary.paid_date),time='')
-            body=config(module+':sms:'+campus).get(name) or subject
-            result.append(dict(person_id=p.id,template=name,text=expand(body,values)))
+                values.update(date=day,todayDate=day,time=current.time_in if current else '',qr_status=current.status if current else '',qr_att_status=current.status if current else '',qr_in_status=current.time_in if current else '')
+            append(person,values,name)
         return result
+
+    @bp.get('/hrm/employee-qr/<int:employee_id>.svg')
+    def employee_qr(employee_id):
+        import qrcode
+        from qrcode.image.svg import SvgPathImage
+        employee=db.get_or_404(Employee,employee_id)
+        svg=qrcode.make(tag_values['qr_token'](employee),image_factory=SvgPathImage,box_size=5,border=4)
+        return app.response_class(svg.to_string(),mimetype='image/svg+xml',headers={'Cache-Control':'private, no-store'})
 
     @bp.get('/hrm/print-template/<int:template_id>')
     def employee_print(template_id):
@@ -556,19 +593,12 @@ def configure_school_settings(app,db,Student,Employee):
         eid=request.args.get('employee_id','');person=next((e for e in employees if str(e.id)==eid),None)
         if eid and not person:abort(404)
         sections=None
+        unresolved=[]
         if person:
-            d=details.get(person.id,{});values=campus_values(d.get('campus',''))
-            aliases={'emp_id':person.employee_no,'emp_name':person.name,'emp_fname':d.get('father_name',''),'emp_father_name':d.get('father_name',''),'emp_cnic':d.get('cnic',''),'emp_email':d.get('email',''),'emp_dob':d.get('birth_date',''),'emp_contact':person.phone or '','emp_city':d.get('city',''),'emp_address':d.get('address',''),'department_name':d.get('department',''),'designation_name':person.role or '','emp_status':person.status,'emp_notes':d.get('notes',''),'emp_reference':d.get('reference',''),'emp_degrees':d.get('qualification_degree',''),'emp_documents':'','emp_qr':''}
-            aliases.update({k:d.get(k,'') for k in ('home_phone','emergency_contact_name','emergency_contact_no','contact_relation','gender','marital_status','designation_group','employment_type','joining_date','bank_info','lecture_assigned','leaving_date','probation_from','probation_to')})
-            female=d.get('gender')=='Female';aliases.update(son_daughter_of='Daughter of' if female else 'Son of',mr_ms='Ms.' if female else 'Mr.',he_she='she' if female else 'he',he_she_capital='She' if female else 'He',his_her='her' if female else 'his',his_her_capital='Her' if female else 'His',him_her='her' if female else 'him')
-            values.update(aliases)
-            sections={k:Markup(expand(template.data.get(k,''),values,True)) for k in ('header','body','footer')}
-            photo=rm['file'].query.filter_by(owner_kind='employee',owner_id=person.id,photo=True).first()
-            profile=db.session.get(app.extensions['institute_setup_models']['profile'],1)
-            logo='<img src="'+url_for('institute_setup.logo')+'" style="max-width:90px" alt="School logo">' if profile and profile.logo_mime else ''
-            picture='<img src="'+url_for('records.record_file',id=photo.id)+'" style="max-width:100px" alt="Employee photo">' if photo else ''
-            sections={k:Markup(str(v).replace('[institute_logo]',logo).replace('[emp_photo]',picture)) for k,v in sections.items()}
-        return render_template('employee_template_print.html',title=template.name,template=template,employees=employees,person=person,sections=sections)
+            d=details.get(person.id,{});values=tag_values['employee'](person,d);values.update(tag_values['approved_plan'](person));assets=tag_values['assets']('employee',person)
+            sections={k:Markup(clean_html(expand(template.data.get(k,''),values,True,assets))) for k in ('header','body','footer')}
+            unresolved=sorted({tag for k in ('header','body','footer') for tag in missing_tags(template.data.get(k,''),values,assets)})
+        return render_template('employee_template_print.html',title=template.name,template=template,employees=employees,person=person,sections=sections,unresolved=unresolved)
 
     @bp.route('/hrm/monthly-attendance',methods=['GET','POST'])
     def monthly_attendance():

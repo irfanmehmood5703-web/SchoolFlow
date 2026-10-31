@@ -161,9 +161,9 @@ def configure_operations(app, db, Student, Employee):
     def selected(name='ids'):
         try: return list(dict.fromkeys(int(x) for x in request.form.getlist(name)))
         except ValueError: raise ValueError('Invalid selection.')
-    def queue(subject, ids, audience='parent'):
+    def queue(subject, ids, audience='parent', event=None, context=None):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
-        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience))))
+        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context))))
     def render(name, **kw):
         return render_template(name, choices=choices, today=date.today().isoformat(), statuses=STATUSES, **kw)
 
@@ -429,7 +429,7 @@ def configure_operations(app, db, Student, Employee):
                     if val and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',val): raise ValueError('Enter valid times.')
                     setattr(row,k,val)
                 count+=1
-            if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience=kind)
+            if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience=kind,event='attendance',context={'day':d.isoformat()})
             audit('Save attendance',kind=kind,day=str(d),count=count);commit();flash(f'{count} attendance records saved.','success')
             return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat(),**{k:request.form[k] for k in ('campus','class_name','section','academic_session') if request.form.get(k)}))
         existing={r.person_id:r for r in Daily.query.filter_by(kind=kind,day=d).all()}
@@ -598,7 +598,7 @@ def configure_operations(app, db, Student, Employee):
             action=request.form.get('action')
             if action=='generate':
                 if m>=today.strftime('%Y-%m'): raise ValueError('Pre-test payroll generates completed previous months only.')
-                plans_list=Workflow.query.filter_by(kind='salary-plans',status='Approved').order_by(Workflow.id.desc()).all();seen=set();count=0
+                plans_list=Workflow.query.filter_by(kind='salary-plans',status='Approved').order_by(Workflow.id.desc()).all();seen=set();count=0;generated=[]
                 chosen=selected('employee_ids')
                 if not chosen: raise ValueError('Select employees.')
                 approved={int(p.data['employee_id']) for p in plans_list}
@@ -665,8 +665,9 @@ def configure_operations(app, db, Student, Employee):
                     snapshot=dict(joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
                                   base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,
                                   working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates)) if working_calendar else None)
-                    db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1
+                    db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1;generated.append(eid)
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')
+                if request.form.get('generate_sms') and generated:queue('Salary generated',generated,audience='teacher',event='salary-generated',context={'month':m})
                 audit('Generate salary',month=m,count=count);commit();flash(f'{count} salaries generated. Existing employee/month salaries skipped.','success')
             elif action in ('pay','send','unpay','delete'):
                 ids=selected();rows=Salary.query.filter(Salary.id.in_(ids)).with_for_update().all()
@@ -684,7 +685,7 @@ def configure_operations(app, db, Student, Employee):
                     for id in s.detail.get('lectures',[]):
                         r=db.session.get(Workflow,id)
                         if r: r.status=lecture_status
-                if action=='send': queue('Salary paid',[s.employee_id for s in rows],audience='teacher')
+                if action=='send': queue('Salary paid',[s.employee_id for s in rows],audience='teacher',event='salary-paid',context={'salary_ids':[s.id for s in rows]})
                 audit('Salary '+action,ids=ids);commit()
             elif action in ('slip','signature','report','bank'):
                 rows=Salary.query.filter(Salary.id.in_(selected())).all()
@@ -692,6 +693,7 @@ def configure_operations(app, db, Student, Employee):
                 print_groups={}
                 staff={e.id:e for e in Employee.query.filter(Employee.id.in_({s.employee_id for s in rows})).all()}
                 staff_details=app.extensions['record_helpers']['raw_many']('employee',list(staff.values()))
+                app.extensions['branding_values']['prefetch_employees'](list(staff.values()))
                 for salary in rows:print_groups.setdefault(staff_details.get(salary.employee_id,{}).get('campus',''),[]).append(salary)
                 return render('salary_print.html',print_groups=print_groups,details=lambda p,kind='employee':staff_details.get(p.id,{}),title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
             else: raise ValueError('Invalid salary action.')
@@ -843,7 +845,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v14')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v15')
 
     @app.route('/api/v1/summary')
     def summary_api():

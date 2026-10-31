@@ -123,6 +123,7 @@ EMPLOYEE_SECTIONS = [
         field("pay_mode", "Pay Mode", "select", category="pay_mode"),
         field("lecture_assigned", "Lecture Assigned", "integer"),
         field("bank_info", "Bank Info", "textarea"), field("bio_id", "Bio ID", "digits"),
+        field("agreement_no", "Agreement No"),
         field("leaving_date", "Leaving Date", "date"),
         field("status", "Status", "select", options=[("Active","Active"),("Inactive","Inactive")]),
     ]),
