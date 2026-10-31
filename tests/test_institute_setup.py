@@ -1,5 +1,5 @@
 """Real setup/admission integration with fictional school data only."""
-import io,os,unittest
+import io,os,re,unittest
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from PIL import Image
 from app import app,db,Student
@@ -21,7 +21,8 @@ class InstituteSetupTests(unittest.TestCase):
     def student(self,**changes):
         data=dict(_csrf=self.csrf,name='Fictional Pupil',father='Fictional Guardian',father_cnic='TEST-ONLY',phone='00000000000',family_mode='new',gender='Female',guardian_relation='Father',admission_date='2026-10-31',campus='Campus A',class_name='Class A',section='A',group_name='General',academic_session='2026-27',fee_plan='Plan A',status='Active',save_action='view');data.update(changes);return data
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
-        self.assertEqual(self.c.get('/workspace/core/institute').status_code,200)
+        page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
+        ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))
         for model in self.models.values():self.assertEqual(model.query.count(),0)
         self.assertEqual(self.c.get('/workspace/core/admission-options').json,{'campuses':{},'maps':{}})
         self.assertEqual(self.c.post('/records/student/new',data=self.student()).status_code,302)
