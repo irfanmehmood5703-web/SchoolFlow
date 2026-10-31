@@ -75,7 +75,7 @@ STUDENT_SECTIONS = [
         field("status", "Current Status", "select", True,
               options=[("Active", "Currently Enrolled"), ("Admission Query", "Admission Query"),
                        ("Waiting", "Waiting Approval"), ("Inactive", "Inactive"),
-                       ("Withdrawn", "Withdrawn"), ("Passed Out", "Passed Out")]),
+                       ("Withdrawn", "Withdrawn"), ("Passed Out", "Passed Out"), ("Refused", "Admission Refused")]),
         field("class_of_admission", "Class of Admission", "select", category="class_name"),
         field("leaving_date", "Leaving Date", "date", help="Used on school leaving certificates; saving it does not change student status."),
         field("admission_no", "Admission No."),

@@ -191,7 +191,7 @@ def configure_operations(app, db, Student, Employee):
         if key in ('sms-blaster','fee-intimation'): return redirect(url_for('ops.messages'))
         if key in ('sms-report','family-sms','notifications','staff-sms'): return redirect(url_for('ops.message_log',view=key))
         if key=='admission-approvals':
-            return render('approvals.html',title=TITLES[key],key=key,rows=Student.query.filter_by(status='Waiting').all())
+            return redirect(url_for('admission_limits.approvals'))
         if key=='salary-approvals': return redirect(url_for('ops.plans'))
         if key=='teacher-performance': return redirect(url_for('reports.teacher_performance'))
         if key=='student-360': return redirect(url_for('student_overview.index'))
@@ -254,11 +254,7 @@ def configure_operations(app, db, Student, Employee):
 
     @bp.route('/approve-students',methods=['POST'])
     def approve_students():
-        ids=selected()
-        rows=Student.query.filter(Student.id.in_(ids),Student.status=='Waiting').all()
-        if not rows: raise ValueError('Select a waiting student.')
-        for x in rows: x.status='Active' if request.form.get('action')=='approve' else 'Inactive'
-        audit('Admission approval',ids=ids);commit();return redirect(url_for('ops.entry',key='admission-approvals'))
+        return app.extensions['admission_capacity']['review']()
 
     def filtered_bills(mode='payments'):
         rows=Bill.query.order_by(Bill.id.desc()).all()
@@ -784,7 +780,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v9')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v10')
 
     @app.route('/api/v1/summary')
     def summary_api():

@@ -9,6 +9,7 @@ WIDGETS = [
     ('queries','Admissions','Admission Queries','queries','Saved admission enquiries.','/workspace/register/queries'),
     ('active','Admissions','Active Students','active','Students whose current status is Active.','/records/student'),
     ('classes','Admissions','Student Strength by Class',None,'Current active enrolment grouped by class.','/records/student'),
+    ('capacity','Admissions','Admission Capacity',None,'Configured seat limits per campus, class and session, across sections. Only Active students occupy seats.','/workspace/admission-capacity'),
     ('collected','Finance','Total Collected','collected','All non-voided receipts, across all receipt dates.','/workspace/history'),
     ('due','Finance','Unpaid Amount','due','Current challan total less payments and discounts; not a historical balance.','/workspace/history?view=defaulters'),
     ('unpaid','Finance','Unpaid Challans','unpaid','Challans with a positive current remaining balance.','/workspace/fees/payments'),
@@ -85,7 +86,9 @@ def configure_dashboard(app, db):
         ordered = selected+[catalog[k] for k in KEYS if k not in layout['widgets']]
         scope = (getattr(g,'school_identity',None) or {}).get('scope','demo')
         scope += ':'+str(session.get('owner_id','demo'))
-        return render_template('dashboard.html',title='Dashboard',stats=app.extensions['operation_helpers']['dashboard'](),
+        stats=app.extensions['operation_helpers']['dashboard']()
+        if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
+        return render_template('dashboard.html',title='Dashboard',stats=stats,
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
                                personal=owner_key() is not None,groups=list(dict.fromkeys(w[1] for w in WIDGETS)))
 

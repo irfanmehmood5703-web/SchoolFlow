@@ -311,8 +311,10 @@ def configure_records(app, db, Student, Employee):
             data.pop("password", None)
             return render_form(kind, obj, data, errors, 422)
         created = obj is None
+        capacity_waiting = False
         try:
             if kind == "student":
+                capacity_waiting = app.extensions['admission_capacity']['guard'](data,obj)
                 obj = obj or Student()
                 for key in ("name", "admission_no", "father", "class_name", "phone", "status"):
                     setattr(obj, key, data[key])
@@ -369,12 +371,19 @@ def configure_records(app, db, Student, Employee):
                 db.session.add(RecordFile(owner_kind=kind, owner_id=obj.id, **f))
             db.session.add(RecordEvent(owner_kind=kind, owner_id=obj.id, action="Created" if created else "Updated"))
             db.session.commit()
+        except ValueError as error:
+            db.session.rollback()
+            errors["form"] = str(error)
+            data.pop("password", None)
+            return render_form(kind, obj if not created else None, data, errors, 422)
         except IntegrityError:
             db.session.rollback()
             errors["form"] = "A record with that number or username was just added. Review the values and retry."
             data.pop("password", None)
             return render_form(kind, obj if not created else None, data, errors, 409)
         flash(kind.title()+" record saved successfully.", "success")
+        if capacity_waiting:
+            flash('This class has no available seats. The student was saved as Waiting Approval.', 'info')
         if kind == "student" and (data.get("send_sms") or data.get("parent_notification")):
             flash("Communication preferences saved. No message was sent: delivery integration is not configured.", "info")
         action = request.form.get("save_action", "back")

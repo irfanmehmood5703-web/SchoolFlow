@@ -36,3 +36,7 @@ Admissions → Student Card and Certificates → choose campus → Set up certif
 SchoolFlow is the product; each client uses its own school name/code. Operator-generated logins/passwords are supported; see [private client provisioning](docs/IDENTITY.md#vendor-generated-client-credentials). Email-style login generation does not create an email mailbox.
 
 HRM salary plans and payroll link to the Payroll Working Calendar. Set actual working dates/holidays before joining-month salary or daily percentage deductions. Manual increments use the existing Increment form: choose an employee, amount and effective month, approve, then enable Apply approved manual salary increments on their salary plan. The plan’s Basic Salary excludes those approved amounts; no fixed increment or automatic annual repetition is assumed. Saved salary detail/slips retain the working-day calculation and increment sources.
+
+### Class seats and approvals
+
+Admissions → Admission Approvals → Change the seats for a class. Limits apply to a campus/class/session across all sections. Unconfigured classes have no automatic limit. A full class queues a new student as Waiting; selected Allow actions check all class capacities atomically. Refuse gives the distinct Refused status. Existing enrolled profiles can be edited, while transfers to full classes are rejected without moving the pupil. The Admission Capacity dashboard widget uses the same counts; add it to an existing custom layout via Add Widgets.

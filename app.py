@@ -73,6 +73,8 @@ from dashboard import configure_dashboard
 configure_dashboard(app,db)
 from payroll_calendar import configure_payroll_calendar
 configure_payroll_calendar(app,db)
+from admission_capacity import configure_admission_capacity
+configure_admission_capacity(app,db,Student)
 
 @app.route('/')
 def home():
