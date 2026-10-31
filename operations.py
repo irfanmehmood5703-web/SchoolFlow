@@ -685,7 +685,11 @@ def configure_operations(app, db, Student, Employee):
             elif action in ('slip','signature','report','bank'):
                 rows=Salary.query.filter(Salary.id.in_(selected())).all()
                 if not rows: raise ValueError('Select salaries to print.')
-                return render('salary_print.html',details=details,title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
+                print_groups={}
+                staff={e.id:e for e in Employee.query.filter(Employee.id.in_({s.employee_id for s in rows})).all()}
+                staff_details=app.extensions['record_helpers']['raw_many']('employee',list(staff.values()))
+                for salary in rows:print_groups.setdefault(staff_details.get(salary.employee_id,{}).get('campus',''),[]).append(salary)
+                return render('salary_print.html',print_groups=print_groups,details=lambda p,kind='employee':staff_details.get(p.id,{}),title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
             else: raise ValueError('Invalid salary action.')
             return redirect(url_for('ops.payroll',view=view,month=m))
         rows=Salary.query.filter_by(month=m).order_by(Salary.id.desc()).all()

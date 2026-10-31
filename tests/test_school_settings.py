@@ -210,3 +210,15 @@ class SchoolSettingsTests(unittest.TestCase):
         response=self.c.post('/workspace/core/hrm',data={'_csrf':self.csrf,'version':'0','action':'reset'})
         self.assertEqual(response.status_code,302)
         self.assertEqual(self.config('hrm:employee-fields').data,{})
+
+    def test_salary_and_increment_prints_apply_the_selected_campus_branding(self):
+        salary=self.ops['salary'](employee_id=1,month='2026-09',earnings=10000,deductions=0,net=10000,paid=0,detail={'basic':10000,'lecture_pay':0,'attendance':[]})
+        increment=self.ops['workflow'](kind='increments',status='Approved',data={'employee_id':'1','amount':'100','effective':'2026-09','reason':'Test only'})
+        db.session.add_all([salary,increment]);db.session.commit()
+        self.post('hrm','branding',name='Bank Salary Sheet',campus='Campus A',footer='Campus A bank footer')
+        page=self.c.post('/workspace/payroll',data={'_csrf':self.csrf,'month':'2026-09','action':'bank','ids':str(salary.id)})
+        self.assertEqual(page.status_code,200);self.assertIn(b'Campus A bank footer',page.data)
+        self.post('hrm','branding',name='Salary Increment Sheet',campus='Campus A',footer='Campus A increment footer')
+        page=self.c.get('/workspace/core/hrm/increment-sheet?campus=Campus+A&from=2026-09&to=2026-09')
+        self.assertEqual(page.status_code,200);self.assertIn(b'Campus A increment footer',page.data);self.assertIn(b'Test only',page.data)
+        self.assertNotIn(b'Campus A increment footer',self.c.get('/workspace/core/hrm/increment-sheet?campus=Campus+B').data)

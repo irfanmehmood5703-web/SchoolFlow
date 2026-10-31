@@ -460,6 +460,17 @@ def configure_school_settings(app,db,Student,Employee):
             rows.append(dict(student=pupil,details=details.get(pupil.id,{}),obtained=obtained,total=total,percentage=percent,grade=grade,remarks=remarks,complete=complete))
         return render_template('exam_results.html',title='Results · '+award.data['name'],award=award,rows=rows)
 
+    @bp.get('/hrm/increment-sheet')
+    def increment_sheet():
+        campus=request.args.get('campus','');start=request.args.get('from','');end=request.args.get('to','')
+        for value in (start,end):
+            if value and (not re.fullmatch(r'\d{4}-\d{2}',value)):raise ValueError('Choose valid months.')
+            if value:date.fromisoformat(value+'-01')
+        if start and end and start>end:raise ValueError('From month must be before To month.')
+        employees={e.id:e for e in Employee.query.all()};details=app.extensions['record_helpers']['raw_many']('employee',list(employees.values()))
+        rows=[r for r in W.query.filter_by(kind='increments',status='Approved').order_by(W.id).all() if int(r.data['employee_id']) in employees and (not campus or details.get(int(r.data['employee_id']),{}).get('campus')==campus) and (not start or r.data['effective']>=start) and (not end or r.data['effective']<=end)]
+        return render_template('increment_sheet.html',title='Salary Increment Sheet',rows=rows,employees=employees,options=options,campus=campus,start=start,end=end)
+
     @bp.get('/exam/weighted-results')
     def weighted_results():
         campus=request.args.get('campus','');cls=request.args.get('class_name','');session_name=request.args.get('academic_session','')
