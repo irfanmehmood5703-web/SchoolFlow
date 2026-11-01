@@ -90,6 +90,8 @@ from fee_increments import configure_fee_increments
 configure_fee_increments(app,db,Student)
 from late_fees import configure_late_fees
 configure_late_fees(app,db,Student)
+from student_import import configure_student_import
+configure_student_import(app,db,Student)
 
 @app.route('/')
 def home():

@@ -265,3 +265,56 @@ class SchoolSettingsTests(unittest.TestCase):
         form=dict(_csrf=self.csrf,name='Required checkbox',father_name='Guardian',gender='Female',marital_status='Married',phone='00000000000',campus='Campus A',department='Academics',designation_group='Teaching',role='Class Teacher',employment_type='Permanent',employee_no='E-3',joining_date='2000-01-01')
         response=self.c.post('/records/employee/new',data=form);self.assertEqual(response.status_code,422);self.assertIn(b'This field must be checked.',response.data)
         form['app_active']='1';self.assertEqual(self.c.post('/records/employee/new',data=form).status_code,302)
+
+    def qualitative_award(self):
+        self.post('exam','subject-groups',name='Learning')
+        for name,mode in [('Math','Marks'),('Reading','Checkbox'),('Conduct','Direct Grading')]:
+            self.assertEqual(self.post('exam','subjects',name=name,group='Learning',grading=mode).status_code,302)
+        self.assertEqual(self.post('exam','grading',name='Direct policy',minimum=['0','80'],maximum=['79.999','100'],grade=['Developing','Excellent'],remarks=['Practice','Well done'],direct_band=['0','1']).status_code,302)
+        self.post('exam','class-grading',name='Class policy',campus='Campus A',classes=['Class A'],policy=str(self.item('grading').id))
+        response=self.c.post('/workspace/examination/awards',data=dict(_csrf=self.csrf,name='Mixed assessment',campus='Campus A',class_name='Class A',subject=['Math','Reading','Conduct'],exam_date=['2026-09-01']*3,test_type=['Written']*3,total=['30','','']))
+        self.assertEqual(response.status_code,302,response.data)
+        return self.ops['workflow'].query.filter_by(kind='awards').one()
+
+    def test_qualitative_grading_is_saved_without_numeric_totals(self):
+        award=self.qualitative_award();sid=self.s.id
+        self.assertEqual([p['total'] for p in award.data['papers']],[30,0,0])
+        data={'_csrf':self.csrf,f'mark_{sid}_0':'24',f'qual_{sid}_1':'0',f'qual_{sid}_2':'Excellent',f'qual_version_{sid}_1':'0',f'qual_version_{sid}_2':'0'}
+        self.assertEqual(self.c.post('/workspace/marks/'+str(award.id),data=data).status_code,302)
+        self.assertEqual(self.ops['score'].query.count(),1);self.assertEqual(self.ops['qualitative'].query.count(),2)
+        page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertEqual(page.status_code,200)
+        for value in [b'Not done',b'Excellent',b'Well done',b'80.00',b'30.00']:self.assertIn(value,page.data)
+        page=self.c.get('/workspace/marks/'+str(award.id));self.assertEqual(page.status_code,200);self.assertIn(b'qual_version_',page.data)
+        # A stale qualitative save rolls back the numeric edit too.
+        data[f'mark_{sid}_0']='1';self.assertEqual(self.c.post('/workspace/marks/'+str(award.id),data=data).status_code,422)
+        self.assertEqual(self.ops['score'].query.one().obtained,24)
+
+    def test_direct_grade_policy_invalid_grade_and_absence_atomic(self):
+        award=self.qualitative_award();sid=self.s.id
+        data={'_csrf':self.csrf,f'mark_{sid}_0':'20',f'qual_{sid}_1':'1',f'qual_{sid}_2':'Invented',f'qual_version_{sid}_1':'0',f'qual_version_{sid}_2':'0'}
+        self.assertEqual(self.c.post('/workspace/marks/'+str(award.id),data=data).status_code,422)
+        self.assertEqual(self.ops['score'].query.count(),0);self.assertEqual(self.ops['qualitative'].query.count(),0)
+        data[f'qual_{sid}_2']='Excellent';data[f'state_{sid}_2']='A'
+        self.assertEqual(self.c.post('/workspace/marks/'+str(award.id),data=data).status_code,302)
+        row=self.ops['qualitative'].query.filter_by(paper=2).one();self.assertEqual(row.state,'A');self.assertIsNone(row.value)
+        page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertIn(b'66.67',page.data);self.assertIn(b'Absent',page.data)
+        # Later subject setting changes do not reinterpret the saved paper.
+        subject=self.m['item'].query.filter_by(kind='subject',name='Conduct').one()
+        self.assertEqual(self.post('exam','subjects',id=subject.id,version=str(subject.version),name='Conduct',group='Learning',grading='Marks').status_code,302)
+        self.assertIn(b'qual_',self.c.get('/workspace/marks/'+str(award.id)).data)
+
+    def test_subject_group_report_omits_ungrouped_and_keeps_qualitative(self):
+        award=self.qualitative_award();papers=list(award.data['papers']);papers.append(dict(subject='Ungrouped history',total=100,type='Written',date='2026-09-01'))
+        award.data={**award.data,'papers':papers};db.session.add(self.ops['score'](award_id=award.id,student_id=self.s.id,paper=0,obtained=24));db.session.add(self.ops['qualitative'](award_id=award.id,student_id=self.s.id,paper=1,value='1'));db.session.commit()
+        page=self.c.get('/workspace/core/exam/results/'+str(award.id)+'?view=groups');self.assertEqual(page.status_code,200)
+        self.assertIn(b'Learning',page.data);self.assertIn(b'Done',page.data);self.assertIn(b'80.00',page.data);self.assertNotIn(b'Ungrouped history',page.data)
+        page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertIn(b'Incomplete',page.data)
+
+    def test_weighted_results_exclude_qualitative_unmarked_papers(self):
+        award=self.qualitative_award();self.post('exam','test-types',name='Term',campus='Campus A');typ=self.item('test-type')
+        self.post('exam','weightage',campus='Campus A',**{'weight_'+str(typ.id):'100'})
+        award.data={**award.data,'exam_test_type':'Term','academic_session':'2026'}
+        detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.data={**detail.data,'academic_session':'2026'}
+        db.session.add(self.ops['score'](award_id=award.id,student_id=self.s.id,paper=0,obtained=24));db.session.commit()
+        page=self.c.get('/workspace/core/exam/weighted-results?campus=Campus+A&class_name=Class+A&academic_session=2026')
+        self.assertEqual(page.status_code,200);self.assertIn(b'80.00',page.data);self.assertNotIn(b'Incomplete',page.data)

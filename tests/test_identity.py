@@ -254,6 +254,31 @@ class IdentityTests(unittest.TestCase):
         self.login('TEST-B');page=self.client.get('/workspace/core/institute');self.assertNotIn(b'contact@example.invalid',page.data)
         token=self.csrf();self.assertEqual(self.client.post('/workspace/core/institute',data=dict(_csrf=token,action='profile',version='1',name='Fictional School B',owner_email='invalid')).status_code,422)
 
+    def test_student_import_staging_is_private_between_real_institutes(self):
+        import io,re,html
+        rm=app.extensions['record_models'];Schedule=app.extensions['fee_setup_models']['schedule']
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.a);db.session.remove()
+            for category,value in [('class_name','Import Class'),('section','A'),('group_name','General'),('academic_session','2026-27'),('fee_plan','Import Plan')]:db.session.add(rm['settings'](category=category,value=value,class_name=''))
+            db.session.add(Schedule(name='Import Plan',campus='Campus Only School A',class_name='Import Class',description='',due_day=10,lines=[dict(key='Tuition Fee',amount=350000,minimum=None,maximum=None)]));db.session.commit();db.session.remove();g.pop('institute_engine',None)
+        other=app.test_client();self.login();self.login('TEST-B',client=other)
+        path='/workspace/core/institute/student-import'
+        with self.client.session_transaction() as sess:csrf=sess['record_csrf']
+        source='name,gender,father,father_cnic,phone\nPrivate A Pupil,F,Private A Father,TEST,000\n'
+        response=self.client.post(path+'/upload',data={'_csrf':csrf,'file':(io.BytesIO(source.encode()),'students.csv')})
+        self.assertEqual(response.status_code,302);url=response.location
+        self.assertIn(b'Private A Pupil',self.client.get(url).data)
+        self.assertEqual(other.get(url).status_code,404);self.assertNotIn(url.split('/')[-1].encode(),other.get(path).data)
+        data=dict(_csrf=csrf,action='review',version='1');data.update({'map_'+str(i):key for i,key in enumerate(['name','gender','father','father_cnic','phone'])})
+        self.assertEqual(self.client.post(url,data=data).status_code,302)
+        page=self.client.get(url);match=re.search(rb'name="confirmation" value="([^"]+)"',page.data);self.assertIsNotNone(match,page.data[-1800:])
+        confirmation=html.unescape(match[1].decode())
+        self.assertEqual(self.client.post(url+'/apply',data=dict(_csrf=csrf,confirmation=confirmation)).status_code,302)
+        self.assertIn(b'Private A Pupil',self.client.get('/records/student').data);self.assertNotIn(b'Private A Pupil',other.get('/records/student').data)
+        public=app.test_client();self.assertEqual(public.get(path).status_code,302)
+        self.assertEqual(public.get(path+'/template.xlsx').status_code,302)
+        self.assertEqual(public.post(path+'/upload',data={}).status_code,302)
+
     def test_workspace_writes_stay_in_selected_database(self):
         self.login()
         with self.client.session_transaction() as sess: token = sess['record_csrf']

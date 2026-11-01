@@ -110,6 +110,7 @@ def configure_records(app, db, Student, Employee):
                 abort(400, "Your form session expired. Reload the page and try again.")
 
     def setup_choices():
+        if hasattr(request,'record_choice_cache'):return request.record_choice_cache
         result = {k: [(v, v, "") for v in STANDARD_CHOICES.get(k, [])] for k in CATEGORIES}
         for row in RecordSettings.query.order_by(RecordSettings.value).all():
             item = (row.value, row.value, row.class_name)
@@ -118,6 +119,7 @@ def configure_records(app, db, Student, Employee):
         if app.extensions.get('school_settings_helpers'):
             order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
             result['subject']=sorted(result.get('subject',[]),key=lambda item:(order.get(item[0],1000000),item[0],item[2]))
+        request.record_choice_cache=result
         return result
 
     def defaults(kind, for_create=True):
@@ -191,7 +193,8 @@ def configure_records(app, db, Student, Employee):
             result[obj.id]=data
         return result
 
-    def validate_form(kind, obj):
+    def validate_form(kind, obj, form=None, known=None):
+        form=request.form if form is None else form
         sections = STUDENT_SECTIONS if kind == "student" else EMPLOYEE_SECTIONS
         errors, data = {}, {}
         if kind=='employee':
@@ -202,13 +205,13 @@ def configure_records(app, db, Student, Employee):
         for _, fields in sections:
             for f in fields:
                 key = f["key"]
-                value = request.form.get(key, "").strip()
+                value = form.get(key, "").strip()
                 if f["kind"] == "checkbox":
-                    data[key] = key in request.form
+                    data[key] = key in form
                     if f["required"] and not data[key]:errors[key]="This field must be checked."
                     continue
                 if f["kind"] == "subjects":
-                    data[key] = request.form.getlist(key)
+                    data[key] = form.getlist(key)
                     continue
                 data[key] = value
                 if f["required"] and not value:
@@ -250,20 +253,20 @@ def configure_records(app, db, Student, Employee):
             # The reference makes Admission No optional. The starter schema does not.
             if not data["admission_no"]:
                 data["admission_no"] = obj.admission_no if obj else "SF-" + secrets.token_hex(6).upper()
-            if Student.query.filter(Student.admission_no == data["admission_no"], Student.id != (obj.id if obj else 0)).first():
+            if (data['admission_no'] in known['admissions'] if known is not None else Student.query.filter(Student.admission_no == data['admission_no'], Student.id != (obj.id if obj else 0)).first()):
                 errors["admission_no"] = "This admission number is already in use."
             if data["family_mode"] == "existing":
-                family = db.session.get(RecordFamily, int(data["family_id"])) if data.get("family_id", "").isdigit() else None
+                family = (known['families'].get(int(data['family_id'])) if known is not None else db.session.get(RecordFamily,int(data['family_id']))) if data.get('family_id','').isdigit() else None
                 if not family:
                     errors["family_id"] = "Select an existing family."
                 elif data.get("family_no") and data["family_no"] != family.number:
                     errors["family_no"] = "Family number must match the selected existing family."
-            elif data["family_mode"] == "new" and data.get("family_no") and RecordFamily.query.filter_by(number=data["family_no"]).first():
+            elif data["family_mode"] == "new" and data.get("family_no") and (data['family_no'] in known['family_numbers'] if known is not None else RecordFamily.query.filter_by(number=data['family_no']).first()):
                 errors["family_no"] = "This family exists. Select Existing Family to link siblings."
-            data["visitors"] = [{k: request.form.get(f"visitor_{i}_{k}", "").strip()[:500]
+            data["visitors"] = [{k: form.get(f"visitor_{i}_{k}", "").strip()[:500]
                 for k in ["name", "phone", "relation", "address", "notes"]} for i in range(3)]
             for key, _ in STUDENT_COMMUNICATION:
-                data[key] = key in request.form
+                data[key] = key in form
             valid_subjects = {x[0] for x in choices.get("subject", []) if not x[2] or x[2] == data.get("class_name")}
             if any(s not in valid_subjects or not app.extensions['school_settings_helpers']['subject_allowed'](data.get('campus',''),data.get('class_name',''),s) for s in data["subjects"]):
                 errors["subjects"] = "Choose subjects assigned to the selected class."
@@ -611,7 +614,7 @@ def configure_records(app, db, Student, Employee):
         return render_template("record_settings.html", title="Record Settings", categories=CATEGORIES,
             choices=setup_choices(), errors=errors), 422 if errors else 200
 
-    app.extensions['record_helpers']=dict(raw_many=raw_many,read_many=read_many)
+    app.extensions['record_helpers']=dict(raw_many=raw_many,read_many=read_many,validate=validate_form,choices=setup_choices)
     app.register_blueprint(bp)
 
     @app.cli.command("seed-record-demo-options")

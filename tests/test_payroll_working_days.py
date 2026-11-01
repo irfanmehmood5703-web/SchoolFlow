@@ -136,4 +136,40 @@ class WorkingPayrollTests(unittest.TestCase):
             app.config['INSTITUTE_DATABASE_DIR']=None
 
 
-if __name__=='__main__':unittest.main()
+    def bonus_attendance(self,status=None,missing=False):
+        self.calendar();self.details.data={'joining_date':'2026-01-01'}
+        self.plan.data={**self.plan.data,'all_present_bonus':True,'allowances':[dict(name='Travel',amount=220000,type='Earning',bonusable=True),dict(name='Lunch',amount=100000,type='Earning',bonusable=False)]}
+        for i,value in enumerate(self.dates):
+            if missing and i==0:continue
+            db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date.fromisoformat(value),status=status if i==0 and status else 'Present'))
+        db.session.commit()
+
+    def test_all_present_bonus_requires_calendar_and_complete_attendance(self):
+        self.details.data={'joining_date':'2026-01-01'};self.plan.data={**self.plan.data,'all_present_bonus':True};db.session.commit()
+        self.assertEqual(self.generate().status_code,422);self.assertEqual(self.m['salary'].query.count(),0)
+        self.bonus_attendance(missing=True);self.assertEqual(self.generate().status_code,302)
+        salary=self.m['salary'].query.one();self.assertEqual(salary.detail['all_present_bonus']['amount'],0)
+        self.assertEqual(salary.detail['all_present_bonus']['missing_dates'],[self.dates[0]])
+
+    def test_all_present_bonus_uses_only_bonusable_earnings_and_is_frozen(self):
+        self.bonus_attendance();self.assertEqual(self.generate().status_code,302)
+        salary=self.m['salary'].query.one();bonus=salary.detail['all_present_bonus']
+        self.assertTrue(bonus['qualified']);self.assertEqual(bonus['amount'],110000);self.assertEqual(salary.earnings,2630000)
+        row=self.m['daily'].query.first();row.status='Short Leave';db.session.commit()
+        self.assertEqual(self.generate().status_code,302);self.assertEqual(salary.detail['all_present_bonus']['amount'],110000)
+
+    def test_short_leave_cancels_bonus_even_without_deductions(self):
+        self.bonus_attendance('Short Leave');self.assertEqual(self.generate().status_code,302)
+        bonus=self.m['salary'].query.one().detail['all_present_bonus'];self.assertFalse(bonus['qualified']);self.assertEqual(bonus['amount'],0)
+
+    def test_off_day_does_not_cancel_bonus(self):
+        self.bonus_attendance('Off Day');self.assertEqual(self.generate().status_code,302)
+        self.assertEqual(self.m['salary'].query.one().detail['all_present_bonus']['amount'],110000)
+
+    def test_lecture_wise_pay_does_not_also_pay_lecture_incentive_or_monthly_bonus(self):
+        self.details.data={'joining_date':'2026-01-01'}
+        self.plan.data={**self.plan.data,'lecture_wise':True,'lecture_incentive':True,'incentive_per_lecture':10000,'all_present_bonus':True}
+        db.session.add(self.m['workflow'](kind='lecture-register',status='Approved',data=dict(employee_id=str(self.e.id),date='2026-09-10',lectures='2',rate_override='100')))
+        db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,10),status='Present',lectures=2));db.session.commit()
+        self.assertEqual(self.generate().status_code,302);salary=self.m['salary'].query.one()
+        self.assertEqual(salary.earnings,20000);self.assertIsNone(salary.detail['all_present_bonus'])

@@ -69,3 +69,16 @@ def configure_payroll_calendar(app,db):
                                weekdays=list(calendar.day_name))
 
     app.register_blueprint(bp)
+
+
+def all_present_bonus(month,joined,monthly_basic,allowances,working_dates,attendance):
+    """One working day's eligible pay; missing attendance never earns a bonus."""
+    calendar=joining_pay(month,joined,monthly_basic,working_dates)
+    eligible=set(calendar['eligible_dates'])
+    records={row.day.isoformat():row.status for row in attendance}
+    missing=sorted(eligible-set(records))
+    disqualified=sorted(day for day,status in records.items() if status not in ('Present','Off Day'))
+    qualifies=bool(eligible) and not missing and not disqualified and any(records.get(day)=='Present' for day in eligible)
+    basis=monthly_basic+sum(line['amount'] for line in allowances if line.get('type')=='Earning' and line.get('bonusable'))
+    amount=int((Decimal(basis)/calendar['total_working_days']).quantize(Decimal('1'),rounding=ROUND_HALF_UP)) if qualifies else 0
+    return dict(method='one-working-day',amount=amount,basis=basis,working_days=calendar['total_working_days'],eligible_dates=sorted(eligible),missing_dates=missing,disqualified_dates=disqualified,qualified=qualifies)

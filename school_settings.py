@@ -187,6 +187,11 @@ def configure_school_settings(app,db,Student,Employee):
         links=items('class-subjects',campus)
         link=next((r for r in links if r.name==cls),None)
         return not link or subject in link.data.get('subjects',[])
+    def subject_config(name):
+        return next((r.data for r in items('subject') if r.name==name),{})
+    def direct_choices(campus,cls):
+        policy=assigned_policy(campus,cls)
+        return {b['grade']:b.get('remarks','') for b in policy.data.get('bands',[]) if b.get('direct')} if policy else {}
     def exam_types(campus):return [r.name for r in items('test-type',campus)]
     def tags(module):return list(dict.fromkeys(CAMPUS_TAGS+(EMP_TAGS if module=='hrm' else STUDENT_TAGS)))
     tag_values=make_branding_values(app,db,Student,Employee)
@@ -338,7 +343,9 @@ def configure_school_settings(app,db,Student,Employee):
                     if kind=='subject':
                         group=value('group',True)
                         if group not in [r.name for r in items('subject-group')]:raise ValueError('Choose a subject group.')
-                        payload=dict(group=group,grading='Marks',diary=bool(request.form.get('diary')))
+                        grading=value('grading') or 'Marks'
+                        if grading not in ('Marks','Checkbox','Direct Grading'):raise ValueError('Choose a supported grading type.')
+                        payload=dict(group=group,grading=grading,diary=bool(request.form.get('diary')))
                         # Canonical subject catalog is used by admissions, marks and reports.
                         if row and row.name!=name:raise ValueError('Keep a subject name stable; add another subject instead.')
                         if not rm['settings'].query.filter_by(category='subject',value=name,class_name='').first():db.session.add(rm['settings'](category='subject',value=name,class_name=''))
@@ -354,11 +361,13 @@ def configure_school_settings(app,db,Student,Employee):
                         payload={'classes':cls,'policy':p.id}
                     elif kind=='grading':
                         bands=[]
-                        for a,b,g,r in zip(request.form.getlist('minimum'),request.form.getlist('maximum'),request.form.getlist('grade'),request.form.getlist('remarks')):
+                        for band_index,(a,b,g,r) in enumerate(zip(request.form.getlist('minimum'),request.form.getlist('maximum'),request.form.getlist('grade'),request.form.getlist('remarks'))):
                             if not any((a,b,g,r)):continue
                             low=number(a);high=number(b)
                             if Decimal(low)>Decimal(high) or not g.strip() or len(g)>60 or len(r)>1000:raise ValueError('Check grade bands and remarks.')
-                            bands.append(dict(min=low,max=high,grade=g.strip(),remarks=r.strip()))
+                            bands.append(dict(min=low,max=high,grade=g.strip(),remarks=r.strip(),direct=str(band_index) in request.form.getlist('direct_band')))
+                        direct_grades=[b['grade'] for b in bands if b['direct']]
+                        if len(direct_grades)!=len(set(direct_grades)):raise ValueError('Direct grade labels must be unique.')
                         bands.sort(key=lambda b:Decimal(b['min']))
                         if not bands or any(Decimal(a['max'])>=Decimal(b['min']) for a,b in zip(bands,bands[1:])):raise ValueError('Add non-overlapping grade bands.')
                         payload={'bands':bands,'final_remarks':value('final_remarks',limit=1000)}
@@ -471,16 +480,25 @@ def configure_school_settings(app,db,Student,Employee):
     def results(award_id):
         award=db.get_or_404(W,award_id)
         if award.kind!='awards':abort(404)
+        group_view=request.args.get('view')=='groups'
         scores=ops['score'].query.filter_by(award_id=award.id).all()
+        qualitative=ops['qualitative'].query.filter_by(award_id=award.id).all()
         detail_model=rm['student'];roster=Student.query.outerjoin(detail_model,detail_model.student_id==Student.id).filter(Student.status=='Active')
         for key in ('class_name','campus','section','gender','group_name','academic_session'):
             if award.data.get(key):roster=roster.filter((Student.class_name if key=='class_name' else detail_model.data[key].as_string())==award.data[key])
-        current=roster.all();ids={p.id for p in current}|{s.student_id for s in scores}
+        current=roster.all();ids={p.id for p in current}|{s.student_id for s in scores+qualitative}
         pupils=Student.query.filter(Student.id.in_(ids)).order_by(Student.id).all()
         details=app.extensions['record_helpers']['raw_many']('student',pupils);tag_values['prefetch_photos']('student',pupils);rows=[]
         for pupil in pupils:
             saved={s.paper:s for s in scores if s.student_id==pupil.id};papers=award.data['papers'];complete=True;obtained=Decimal(0);total=Decimal(0);paper_rows=[]
             for i,paper in enumerate(papers):
+                if paper.get('grading','Marks')!='Marks':
+                    score=next((q for q in qualitative if q.student_id==pupil.id and q.paper==i),None)
+                    state=score.state if score else '';value=score.value if score and not state else None
+                    marked=bool(state) or value is not None
+                    label=('Done' if value=='1' else 'Not done') if paper.get('grading')=='Checkbox' and value is not None else (value or '')
+                    paper_rows.append(dict(paper=paper,state=state,obtained=None,total=Decimal(0),percentage=None,grade=label,remarks=score.remarks if score else '',marked=marked))
+                    continue
                 score=saved.get(i);state=score.state if score else '';numeric=score.obtained if score and not state else None
                 marked=state in ('A','L') or (not state and numeric is not None)
                 if not marked:complete=False
@@ -489,10 +507,23 @@ def configure_school_settings(app,db,Student,Employee):
                 percent=(Decimal(str(numeric or 0))/maximum*100) if marked and maximum else None
                 grade,remarks=grade_for(award.data.get('campus',''),award.data.get('class_name',''),percent) if percent is not None else ('','')
                 paper_rows.append(dict(paper=paper,state=state,obtained=numeric,total=maximum,percentage=percent,grade=grade,remarks=remarks,marked=marked))
+            groups={}
+            for result in paper_rows:
+                group=result['paper'].get('subject_group',subject_config(result['paper']['subject']).get('group',''))
+                if group:groups.setdefault(group,[]).append(result)
+            grouped=[]
+            for name,entries in groups.items():
+                numeric=[e for e in entries if e['paper'].get('grading','Marks')=='Marks']
+                group_total=sum((e['total'] for e in numeric),Decimal(0))
+                group_obtained=sum((Decimal(str(e['obtained'] or 0)) for e in numeric),Decimal(0))
+                group_complete=all(e['marked'] for e in numeric)
+                grouped.append(dict(name=name,papers=entries,total=group_total,obtained=group_obtained,complete=group_complete,percentage=group_obtained/group_total*100 if group_total and group_complete else None))
+            if group_view:
+                total=sum((g['total'] for g in grouped),Decimal(0));obtained=sum((g['obtained'] for g in grouped),Decimal(0));complete=all(g['complete'] for g in grouped)
             percent=obtained/total*100 if total and complete else None
             grade,remarks=grade_for(award.data.get('campus',''),award.data.get('class_name',''),percent) if percent is not None else ('','')
-            rows.append(dict(student=pupil,details=details.get(pupil.id,{}),obtained=obtained,total=total,percentage=percent,grade=grade,remarks=remarks,complete=complete,papers=paper_rows))
-        return render_template('exam_results.html',title='Results · '+award.data['name'],award=award,rows=rows)
+            rows.append(dict(student=pupil,details=details.get(pupil.id,{}),obtained=obtained,total=total,percentage=percent,grade=grade,remarks=remarks,complete=complete,papers=paper_rows,groups=grouped))
+        return render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+award.data['name'],award=award,rows=rows,group_view=group_view)
 
     @bp.get('/hrm/increment-sheet')
     def increment_sheet():
@@ -521,7 +552,7 @@ def configure_school_settings(app,db,Student,Employee):
             for pupil in pupils:
                 parts=[];complete=True;weighted=Decimal(0)
                 for typ,weight in selected:
-                    papers=[(a,i,p) for a in awards if a.data.get('exam_test_type')==typ.name and all(not a.data.get(k) or a.data[k]==pupil_details.get(pupil.id,{}).get(k) for k in ('section','gender','group_name')) for i,p in enumerate(a.data['papers'])]
+                    papers=[(a,i,p) for a in awards if a.data.get('exam_test_type')==typ.name and all(not a.data.get(k) or a.data[k]==pupil_details.get(pupil.id,{}).get(k) for k in ('section','gender','group_name')) for i,p in enumerate(a.data['papers']) if p.get('grading','Marks')=='Marks' and p.get('total',0)>0]
                     obtained=Decimal(0);maximum=Decimal(0);marked=bool(papers)
                     for a,i,p in papers:
                         score=lookup.get((a.id,pupil.id,i));maximum+=Decimal(str(p['total']))
@@ -626,5 +657,5 @@ def configure_school_settings(app,db,Student,Employee):
         existing={r.day.isoformat():r for r in ops['daily'].query.filter_by(kind='staff',person_id=person.id).filter(ops['daily'].day>=dates[0],ops['daily'].day<=dates[-1]).all()} if person else {}
         return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',details=app.extensions['record_helpers']['raw_many']('employee',[person]).get(person.id,{}) if person else {},employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
 
-    app.extensions['school_settings_helpers']=dict(config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
+    app.extensions['school_settings_helpers']=dict(config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
     app.register_blueprint(bp)

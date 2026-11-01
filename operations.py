@@ -8,7 +8,7 @@ from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
-from payroll_calendar import joining_pay
+from payroll_calendar import joining_pay, all_present_bonus
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 
 
@@ -86,6 +86,18 @@ def configure_operations(app, db, Student, Employee):
         state = db.Column(db.String(10), default='')
         __table_args__ = (db.UniqueConstraint('award_id','student_id','paper'),)
 
+    class QualitativeScore(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        award_id = db.Column(db.Integer, db.ForeignKey('workflow.id'), nullable=False)
+        student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
+        paper = db.Column(db.Integer, nullable=False)
+        value = db.Column(db.String(60))
+        state = db.Column(db.String(2), default='')
+        remarks = db.Column(db.String(1000), default='')
+        version = db.Column(db.Integer, nullable=False, default=1)
+        __mapper_args__ = {'version_id_col': version}
+        __table_args__ = (db.UniqueConstraint('award_id','student_id','paper'),)
+
     class Salary(db.Model):
         id = db.Column(db.Integer, primary_key=True)
         employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
@@ -112,7 +124,7 @@ def configure_operations(app, db, Student, Employee):
         token=db.Column(db.String(100),primary_key=True)
         workflow_id=db.Column(db.Integer,db.ForeignKey('workflow.id'),nullable=False,unique=True)
 
-    app.extensions['ops_models'] = dict(workflow=Workflow,bill=Bill,receipt=Receipt,daily=Daily,score=Score,salary=Salary,audit=Audit)
+    app.extensions['ops_models'] = dict(workflow=Workflow,bill=Bill,receipt=Receipt,daily=Daily,score=Score,qualitative=QualitativeScore,salary=Salary,audit=Audit)
     app.extensions['salary_increment_request_model']=SalaryIncrementRequest
     app.jinja_env.filters['cash'] = lambda x: f'{(x or 0)/100:,.2f}'
     app.jinja_env.globals.update(zip=zip)
@@ -476,14 +488,18 @@ def configure_operations(app, db, Student, Employee):
                 if i>=len(dates) or i>=len(types): raise ValueError('Every paper needs an exam date and test type.')
                 d=day(dates[i]);typ=types[i]
                 if typ not in ('Written','Oral','Practical'): raise ValueError('Select a valid test type.')
-                t=totals[i] if i<len(totals) else ''
-                if not t.strip(): raise ValueError('Enter total marks for every paper; no marks are prefilled.')
-                try: total=float(t)
-                except ValueError: raise ValueError('Total marks must be numeric.')
-                if not 0<total<=10000: raise ValueError('Total marks must be positive and at most 10,000.')
+                subject_config=app.extensions['school_settings_helpers']['subject_config'](subject)
+                grading=subject_config.get('grading','Marks')
+                total=0
+                if grading=='Marks':
+                    t=totals[i] if i<len(totals) else ''
+                    if not t.strip(): raise ValueError('Enter total marks for every numeric paper; no marks are prefilled.')
+                    try: total=float(t)
+                    except ValueError: raise ValueError('Total marks must be numeric.')
+                    if not 0<total<=10000: raise ValueError('Total marks must be positive and at most 10,000.')
                 teacher=teachers[i] if i<len(teachers) else ''
                 if teacher and teacher not in dict(choices('teacher')): raise ValueError('Only designations containing Teacher can receive award lists.')
-                papers.append(dict(subject=subject,date=d.isoformat(),type=typ,total=total,teacher=teacher,time=(request.form.getlist('exam_time')+['']*len(subjects))[i] if request.form.get('include_time') else '',syllabus=(request.form.getlist('syllabus')+['']*len(subjects))[i] if request.form.get('include_syllabus') else ''))
+                papers.append(dict(subject=subject,grading=grading,subject_group=subject_config.get('group',''),date=d.isoformat(),type=typ,total=total,teacher=teacher,time=(request.form.getlist('exam_time')+['']*len(subjects))[i] if request.form.get('include_time') else '',syllabus=(request.form.getlist('syllabus')+['']*len(subjects))[i] if request.form.get('include_syllabus') else ''))
             if not papers: raise ValueError('Add at least one subject.')
             data={k:request.form.get(k,'').strip()[:1000] for k in ('name','print_heading','campus','class_name','section','gender','group_name','academic_session','return_date','sort_order','student_filter')}
             category=request.form.get('assessment_category','')
@@ -492,7 +508,7 @@ def configure_operations(app, db, Student, Employee):
             if data.get('return_date'): day(data['return_date'])
             obj=Workflow(kind=kind,data=data,status='Active');db.session.add(obj);audit('Create '+kind);commit()
             return redirect(url_for('ops.marks',award_id=obj.id)) if kind=='awards' else redirect(url_for('ops.examination',kind=kind))
-        return render('examination.html',configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
+        return render('examination.html',subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
 
     def award_students(award):
         Details=rm['student']
@@ -518,11 +534,33 @@ def configure_operations(app, db, Student, Employee):
         award=db.get_or_404(Workflow,award_id)
         if award.kind!='awards': abort(404)
         students=award_students(award);papers=award.data['papers']
+        qlookup={(x.student_id,x.paper):x for x in QualitativeScore.query.filter_by(award_id=award.id).all()}
+        pupil_details=app.extensions['record_helpers']['raw_many']('student',students)
+        direct={s.id:app.extensions['school_settings_helpers']['direct_choices'](award.data.get('campus') or pupil_details.get(s.id,{}).get('campus',''),award.data.get('class_name') or s.class_name) for s in students}
         if request.method=='POST':
             for s in students:
                 for i,p in enumerate(papers):
                     value=request.form.get(f'mark_{s.id}_{i}','').strip();state=request.form.get(f'state_{s.id}_{i}','')
                     if state not in ('','A','L'): raise ValueError('Invalid paper attendance.')
+                    grading=p.get('grading','Marks')
+                    if grading!='Marks':
+                        row=qlookup.get((s.id,i))
+                        revision=request.form.get(f'qual_version_{s.id}_{i}','')
+                        if not revision.isdigit() or int(revision)!=(row.version if row else 0):raise ValueError('A qualitative result changed. Reload before saving.')
+                        values=request.form.getlist(f'qual_{s.id}_{i}');chosen=values[-1] if values else ''
+                        remarks=''
+                        if state:chosen=None
+                        elif grading=='Checkbox':
+                            if chosen not in ('','0','1'):raise ValueError('Choose Done, Not done or Unmarked.')
+                            chosen=chosen or None
+                        elif grading=='Direct Grading':
+                            if chosen and chosen not in direct[s.id] and (not row or chosen!=row.value):raise ValueError('Choose a direct grade enabled in this class grading policy.')
+                            remarks=direct[s.id].get(chosen,row.remarks if row and chosen==row.value else '')
+                            chosen=chosen or None
+                        else:raise ValueError('Unsupported subject grading type.')
+                        if not row:row=QualitativeScore(award_id=award.id,student_id=s.id,paper=i);db.session.add(row)
+                        row.value=chosen;row.state=state;row.remarks=remarks
+                        continue
                     try: n=float(value) if value else None
                     except ValueError: raise ValueError('Marks must be numeric.')
                     if n is not None and (not 0<=n<=p['total']): raise ValueError('Obtained marks must be within total marks.')
@@ -533,7 +571,8 @@ def configure_operations(app, db, Student, Employee):
             audit('Update marks',award=award.id);commit();flash('Marks saved.','success');return redirect(url_for('ops.marks',award_id=award.id))
         scores={(x.student_id,x.paper):x for x in Score.query.filter_by(award_id=award.id).all()}
         counts=Counter(('Absent' if x.state=='A' else 'Leave' if x.state=='L' else 'Present') for x in scores.values() if x.state or x.obtained is not None)
-        return render('marks.html',title='Update Marks',award=award,students=students,papers=papers,scores=scores,counts=counts)
+        counts.update(('Absent' if x.state=='A' else 'Leave' if x.state=='L' else 'Present') for x in qlookup.values() if x.state or x.value is not None)
+        return render('marks.html',qualitative=qlookup,direct=direct,title='Update Marks',award=award,students=students,papers=papers,scores=scores,counts=counts)
 
     @bp.route('/rolls',methods=['GET','POST'])
     def rolls():
@@ -657,8 +696,13 @@ def configure_operations(app, db, Student, Employee):
                     if pays_basic:
                         earnings+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Earning')
                         deductions+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Deduction')
-                    if data.get('lecture_incentive'): earnings+=data['incentive_per_lecture']*sum(r.lectures for r in attendance)
-                    if data.get('all_present_bonus') and data.get('bonus_amount'): raise ValueError('All-present bonus eligibility requires an attendance-calendar rule. No payroll was saved.')
+                    if data.get('lecture_incentive') and not data.get('lecture_wise'): earnings+=data['incentive_per_lecture']*sum(r.lectures for r in attendance)
+                    bonus=None
+                    if data.get('all_present_bonus') and pays_basic:
+                        if data.get('bonus_amount'):raise ValueError('This legacy plan has a fixed all-present amount. Update it to the one-working-day bonus before generating salary.')
+                        if not working_calendar:raise ValueError('Set the working calendar before calculating the all-present bonus.')
+                        bonus=all_present_bonus(m,joined,monthly_basic,data.get('allowances',[]),working_calendar.working_dates,attendance)
+                        earnings+=bonus['amount']
                     advance_deduction=0
                     for a in Workflow.query.filter_by(kind='advances',status='Approved').all():
                         if int(a.data['employee_id'])!=eid or a.data['date'][:7]>m: continue
@@ -672,7 +716,7 @@ def configure_operations(app, db, Student, Employee):
                             advance_map[str(a.id)]=min(money(a.data['return_amount']),max(0,money(a.data['amount'])-reserved))
                     deductions+=data['security_payment']+advance_deduction
                     if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
-                    snapshot=dict(joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
+                    snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
                                   base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,
                                   working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates)) if working_calendar else None)
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1;generated.append(eid)
@@ -844,6 +888,7 @@ def configure_operations(app, db, Student, Employee):
         award_ids=list({row.award_id for row in scores});papers={}
         for offset in range(0,len(award_ids),900):
             papers.update({row.id:row.data['papers'] for row in db.session.query(Workflow.id,Workflow.data).filter(Workflow.id.in_(award_ids[offset:offset+900])).all()})
+        scores=[row for row in scores if row.award_id in papers and 0<=row.paper<len(papers[row.award_id]) and papers[row.award_id][row.paper].get('grading','Marks')=='Marks' and papers[row.award_id][row.paper]['total']>0]
         average=round(sum(row.obtained/papers[row.award_id][row.paper]['total']*100 for row in scores)/len(scores),1) if scores else 0
         months=[(f'{today.year}-{number:02d}',billed[f'{today.year}-{number:02d}'],by_bill_month[f'{today.year}-{number:02d}']) for number in range(1,today.month+1)]
         return dict(students=student_count,active=active or 0,employees=employee_count,active_employees=active_employees or 0,
@@ -856,7 +901,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v20')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v21')
 
     @app.route('/api/v1/summary')
     def summary_api():

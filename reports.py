@@ -165,6 +165,7 @@ def configure_reports(app,db,Student,Employee):
             for score in Score.query.filter_by(award_id=award.id).all():
                 if score.paper>=len(award.data['papers']):continue
                 paper=award.data['papers'][score.paper];teacher=paper.get('teacher','')
+                if paper.get('grading','Marks')!='Marks' or paper.get('total',0)<=0:continue
                 if not str(teacher).isdigit() or int(teacher) not in teachers:continue
                 if not start<=parsedate(paper['date'])<=end:continue
                 if request.args.get('subject') and paper['subject']!=request.args['subject']:continue

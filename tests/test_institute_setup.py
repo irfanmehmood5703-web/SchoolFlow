@@ -103,3 +103,32 @@ class InstituteSetupTests(unittest.TestCase):
         response=self.c.post('/workspace/attendance/student',data={'_csrf':self.csrf,'day':'2026-10-31','campus':'Campus A','class_name':'Class A','section':'A','academic_session':'2026-27',f'status_{sid}':'Present'})
         self.assertEqual(response.status_code,302);self.assertIn('section=A',response.location);self.assertIn('academic_session=2026-27',response.location)
         rows=app.extensions['ops_models']['daily'].query.all();self.assertEqual(len(rows),1);self.assertEqual(rows[0].person_id,sid)
+
+    def test_light_full_mode_is_saved_with_optimistic_version_and_preserves_school_name(self):
+        self.assertEqual(self.post(action='profile',version='0',name='Fictional Mode School').status_code,302)
+        Profile=self.models['profile'];profile=db.session.get(Profile,1)
+        self.assertEqual(self.post(action='ui_mode',version=str(profile.version),mode='light').status_code,302)
+        self.assertEqual(profile.data['name'],'Fictional Mode School');self.assertEqual(profile.data['ui_mode'],'light')
+        page=self.c.get('/workspace/fees/payments');self.assertIn(b'data-advanced-default="light"',page.data);self.assertIn(b'data-advanced',page.data)
+        revision=profile.data['ui_mode_revision'];old=profile.version
+        self.assertEqual(self.post(action='ui_mode',version=str(old),mode='full').status_code,302)
+        self.assertGreater(profile.data['ui_mode_revision'],revision)
+        self.assertEqual(self.post(action='ui_mode',version=str(old),mode='light').status_code,422)
+        self.assertEqual(self.post(action='ui_mode',version=str(profile.version),mode='invalid').status_code,422)
+
+    def test_class_map_copy_history_undo_and_stale_source_guard(self):
+        self.mapping();Map=self.models['mapping'];source=db.session.get(Map,('Campus A','Class A'))
+        data=dict(action='copy_maps',source_campus='Campus A',target_campus='Campus B',copy_classes=['Class A'],**{'source_version_Class A':str(source.version)})
+        self.assertEqual(self.post(**data).status_code,302);target=db.session.get(Map,('Campus B','Class A'));self.assertEqual(target.data,source.data)
+        self.assertEqual(self.post(**data).status_code,422)
+        Audit=app.extensions['ops_models']['audit'];event=Audit.query.filter_by(action='Update class map').order_by(Audit.id.desc()).first()
+        self.assertEqual(self.post(action='undo_map',event_id=str(event.id)).status_code,302);self.assertIsNone(db.session.get(Map,('Campus B','Class A')))
+        self.assertEqual(self.post(action='undo_map',event_id=str(event.id)).status_code,422)
+        self.mapping(version=str(source.version),groups=['Science']);self.assertEqual(self.post(**data).status_code,422)
+
+    def test_map_undo_cannot_overwrite_later_changes(self):
+        self.mapping();Audit=app.extensions['ops_models']['audit'];first=Audit.query.filter_by(action='Update class map').one()
+        Map=self.models['mapping'];row=db.session.get(Map,('Campus A','Class A'));self.mapping(version=str(row.version),sections=['B'])
+        self.assertEqual(self.post(action='undo_map',event_id=str(first.id)).status_code,422)
+        last=Audit.query.filter_by(action='Update class map').order_by(Audit.id.desc()).first()
+        self.assertEqual(self.post(action='undo_map',event_id=str(last.id)).status_code,302);self.assertEqual(row.data['sections'],['A'])

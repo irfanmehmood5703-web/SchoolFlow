@@ -113,7 +113,7 @@ def configure_fee_setup(app,db,Student):
         data=app.extensions['record_helpers']['raw_many']('student',[student]).get(student.id,{})
         return FeeSchedule.query.filter_by(name=name,campus=data.get('campus',''),class_name=student.class_name).first()
     def for_student(student,data):return FeeSchedule.query.filter_by(campus=data.get('campus',''),class_name=student.class_name).order_by(FeeSchedule.name).all()
-    def rules(line):return dict(first_only=line.get('first_only',False),month_override=line.get('month_override',False),months=list(line.get('months',[])),minimum=line.get('minimum'),maximum=line.get('maximum'))
+    def rules(line):return dict(first_only=line.get('first_only',False),include_first=line.get('include_first',False),month_override=line.get('month_override',False),months=list(line.get('months',[])),minimum=line.get('minimum'),maximum=line.get('maximum'))
     def assigned_rows(schedule):
         bykey={x['key']:x for x in schedule.lines};keys=list(PARTICULARS)+[k for k in bykey if k not in PARTICULARS]
         return [dict(particular=k,actual=bykey[k]['amount'] if k in bykey else 0,discount=0,arrears=0,fee_rules=rules(bykey[k]) if k in bykey else {}) for k in keys]
@@ -121,16 +121,16 @@ def configure_fee_setup(app,db,Student):
     def effective_rule(key,line=None):
         row=head_map().get(key);mode=row.timing if row else 'manual';override=(line or {}).get('fee_rules',line or {})
         chosen=override.get('months',[]) if override.get('month_override') else (row.months if row and mode=='months' else list(range(1,13)))
-        return dict(timing=mode,months=list(chosen),first_only=mode=='first' or bool(override.get('first_only')),head_version=row.version if row else 0,label=row.label if row else key)
+        return dict(timing=mode,months=list(chosen),first_only=mode=='first' or bool(override.get('first_only')),include_first=bool(override.get('include_first')),head_version=row.version if row else 0,label=row.label if row else key)
     def eligible(rule,at,first,selected):
         if rule['timing']=='fine':
             if selected:raise ValueError('Fine-policy heads are assessed from selected overdue challans. Use Late-fee policy → Preview selected challans; no schedule amount was charged.')
             return False
-        return ((rule['timing']!='manual' or selected) and (not rule['first_only'] or first) and int(at[5:7]) in rule['months'])
+        return ((rule['timing']!='manual' or selected) and (not rule['first_only'] or first) and (int(at[5:7]) in rule['months'] or (first and rule.get('include_first',False))))
     def annual(line):
         rule=effective_rule(line['key'],line)
         if rule['timing'] in ('manual','fine'):return None
-        return line['amount']*(1 if rule['first_only'] and rule['months'] else len(rule['months']))
+        return line['amount']*(1 if (rule['first_only'] and (rule['months'] or rule.get('include_first'))) or (not rule['months'] and rule.get('include_first')) else len(rule['months']))
     def due(at,day):
         parsed=date.fromisoformat(at+'-01')
         return parsed.replace(day=min(int(day),calendar.monthrange(parsed.year,parsed.month)[1]))
@@ -161,7 +161,7 @@ def configure_fee_setup(app,db,Student):
                     if request.form.get('head_version_'+str(i))!=str(head_map()[key].version if key in head_map() else 0):raise ValueError('A fee head changed. Reload this schedule form.')
                     amount=money(text('amount_'+str(i),True));low=text('minimum_'+str(i));high=text('maximum_'+str(i));lo=money(low) if low else None;hi=money(high) if high else None
                     if (lo is not None and amount<lo) or (hi is not None and amount>hi) or (lo is not None and hi is not None and lo>hi):raise ValueError('The configured actual amount must lie within its minimum/maximum: '+label(key))
-                    lines.append(dict(key=key,amount=amount,minimum=lo,maximum=hi,first_only=request.form.get('first_'+str(i))=='1',month_override=request.form.get('override_'+str(i))=='1',months=months('months_'+str(i))))
+                    lines.append(dict(key=key,amount=amount,minimum=lo,maximum=hi,first_only=request.form.get('first_'+str(i))=='1',include_first=request.form.get('include_first_'+str(i))=='1',month_override=request.form.get('override_'+str(i))=='1',months=months('months_'+str(i))))
                 for campus in dict.fromkeys(campuses):
                     for cls in dict.fromkeys(classes):
                         target=row if row and action=='save' else None

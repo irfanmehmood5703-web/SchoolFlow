@@ -190,3 +190,17 @@ class FeeSetupTests(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertRegex(page.data,rb'name="discount_1"[^>]*value="1500.00"');self.assertRegex(page.data,rb'name="arrears_1"[^>]*value="100.00"')
         self.assertEqual(self.assign(row,refresh_schedule='1').status_code,422);self.assertEqual(self.P.query.one().data['lines'][1]['net'],220000)
+
+    def test_first_challan_can_include_a_head_outside_its_recurring_months(self):
+        self.head('Tuition Fee','months',months=['9'])
+        self.assertEqual(self.schedule(include_first_0='1',amount_1='0',amount_2='0',amount_3='0').status_code,302)
+        self.assertEqual(self.assign(effective='2026-08',percentage='0',discount_1='0').status_code,302)
+        self.assertEqual(self.generate('2026-08').status_code,302);self.assertEqual(self.B.query.one().total,350000)
+        self.assertEqual(self.generate('2026-09').status_code,302);self.assertEqual(self.B.query.count(),2)
+        self.assertEqual(self.generate('2026-10').status_code,302);self.assertEqual(self.B.query.count(),2)
+
+    def test_first_challan_only_with_no_recurring_months(self):
+        self.head('Tuition Fee','monthly')
+        self.assertEqual(self.schedule(include_first_0='1',override_0='1',months_0=[],amount_1='0',amount_2='0',amount_3='0').status_code,302)
+        self.assign(percentage='0',discount_1='0');self.generate('2026-09');self.generate('2026-10')
+        self.assertEqual(self.B.query.count(),1);self.assertEqual(self.B.query.one().total,350000)

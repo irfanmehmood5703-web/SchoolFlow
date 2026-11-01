@@ -3,19 +3,35 @@ import copy,hashlib,hmac,json,re
 import click
 from datetime import date,datetime
 from zoneinfo import ZoneInfo
+from decimal import Decimal,ROUND_HALF_UP
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,session,url_for
 from itsdangerous import BadData,URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from operations import money
 
-MODES={'none':'No late fee','fixed':'Fixed amount once','daily':'Amount per chargeable day'}
+MODES={'none':'No late fee','fixed':'Fixed amount once','fixed_double':'Fixed, double after expiry','daily':'Amount per chargeable day','daily_double':'Per day, double after expiry','percent_actual':'Percentage of actual tuition','percent_decided':'Percentage of decided tuition','percent_owing':'Percentage of remaining original challan','revoke_discount':'Reverse tuition concession'}
+PERCENT_MODES=('percent_actual','percent_decided','percent_owing')
+TUITION_MODES=('percent_actual','percent_decided','revoke_discount')
 DEFAULT=dict(mode='none',rate=0,grace=0,maximum=None,head='',head_label='')
 
 
-def late_calculation(config,due,asof):
+def late_calculation(config,due,asof,basis=None):
     overdue=max(0,(asof-due).days);days=overdue if overdue>config['grace'] else 0
-    total=0 if not days or config['mode']=='none' else config['rate']*(days if config['mode']=='daily' else 1)
+    mode=config['mode'];total=0;basis=basis or {}
+    if days and mode!='none':
+        if mode=='fixed':total=config['rate']
+        elif mode=='daily':total=config['rate']*days
+        elif mode=='fixed_double':total=config['rate']*(2 if overdue>config['expiry'] else 1)
+        elif mode=='daily_double':total=config['rate']*(min(days,config['expiry'])+2*max(0,days-config['expiry']))
+        elif mode in PERCENT_MODES:
+            key={'percent_actual':'actual','percent_decided':'decided','percent_owing':'owing'}[mode]
+            if key not in basis:raise ValueError('This formula requires a saved '+key+' fee basis.')
+            total=int((Decimal(basis[key])*config['rate']/10000).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+        elif mode=='revoke_discount':
+            if not all(k in basis for k in ('actual','decided')):raise ValueError('Discount reversal requires saved actual and decided tuition.')
+            total=max(0,basis['actual']-basis['decided'])
+        else:raise ValueError('Unsupported late-fee formula.')
     if config['maximum'] is not None:total=min(total,config['maximum'])
     if total>99999999900:raise ValueError('Calculated fine exceeds the supported amount. Set a maximum or review the rate/date.')
     return dict(overdue=overdue,days=days,total=total)
@@ -36,14 +52,20 @@ def configure_late_fees(app,db,Student):
         return row,copy.deepcopy(row.data if row else DEFAULT)
     def parse():
         mode=request.form.get('mode','')
-        if mode not in MODES:raise ValueError('Choose No late fee, Fixed amount or Per day. Other formulas need verification.')
+        if mode not in MODES:raise ValueError('Choose a supported late-fee method.')
         grace=request.form.get('grace','0')
         if not grace.isdigit() or not 0<=int(grace)<=3660:raise ValueError('Enter 0–3,660 grace days.')
         maximum=request.form.get('maximum','').strip();cap=money(maximum) if maximum else None
         config=dict(mode=mode,rate=0,grace=int(grace),maximum=cap,head='',head_label='')
+        if mode in ('fixed_double','daily_double'):
+            expiry=request.form.get('expiry','')
+            if not expiry.isdigit() or not 1<=int(expiry)<=3660:raise ValueError('Enter an expiry of 1–3,660 days after the due date.')
+            config['expiry']=int(expiry)
         if mode!='none':
             rate=request.form.get('rate','').strip()
-            if not rate or not money(rate):raise ValueError('Enter a positive fixed/per-day amount.')
+            if mode=='revoke_discount':rate='0'
+            elif not rate or not money(rate):raise ValueError('Enter a positive amount or percentage.')
+            if mode in PERCENT_MODES and money(rate)>10000:raise ValueError('The percentage must be at most 100.')
             head=head_map().get(request.form.get('head',''))
             if not head or head['timing']!='fine':raise ValueError('Choose a fee head configured as By fine policy.')
             config.update(rate=money(rate),head=head['key'],head_label=head['label'])
@@ -79,7 +101,9 @@ def configure_late_fees(app,db,Student):
             if request.form.get('version')!=str(row.version if row else 0):raise ValueError('These settings changed. Reload before saving.')
             config=parse() if action!='reset' else None
             if action=='simulate':
-                due=day(request.form.get('due'));asof=day(request.form.get('asof'));result=late_calculation(config,due,asof)
+                due=day(request.form.get('due'));asof=day(request.form.get('asof'));basis={k:money(request.form.get('basis_'+k,'0')) for k in ('actual','decided','owing')}
+                if basis['decided']>basis['actual']:raise ValueError('Decided tuition cannot exceed actual tuition in the simulator.')
+                result=late_calculation(config,due,asof,basis)
                 response=render_template('late_fee_simulator.html',title='Unsaved late-fee simulation',config=config,due=due,asof=asof,result=result,modes=MODES)
                 db.session.rollback();return response
             if action=='save' and config['mode']!='none' and request.form.get('accept_formula')!='1':raise ValueError('Review and accept the displayed grace/counting formula before saving an enabled policy.')
@@ -111,7 +135,15 @@ def configure_late_fees(app,db,Student):
             head=heads.get(config['head']);stamp=existing[0].get('policy_source',['saved-on-challan']) if existing else [row.id if row else None,row.version if row else 0,head['version'] if head else 0]
             if not existing and head:config['head_label']=head['label']
             basis_due=day(existing[0].get('basis_due',b.due.isoformat())) if existing else b.due
-            calculation=late_calculation(config,basis_due,asof);previous=sum(x['amount'] for x in existing);delta=max(0,calculation['total']-previous)
+            basis=copy.deepcopy(existing[0].get('basis_values',{})) if existing else {}
+            if not existing:
+                basis['owing']=max(0,sum(x['amount'] for x in b.lines if x.get('kind')!='late_fee')-b.paid-b.discount)
+                if config['mode'] in TUITION_MODES:
+                    tuition=[x for x in b.lines if x.get('particular')=='Tuition Fee' and not x.get('arrears_key') and x.get('kind')!='late_fee']
+                    if len(tuition)!=1 or not all(k in tuition[0] for k in ('actual','plan_discount')):raise ValueError('This challan has no unambiguous saved actual/decided tuition. Review it manually; no fine was saved.')
+                    basis.update(actual=tuition[0]['actual'],decided=tuition[0]['amount'])
+                    if basis['actual']-tuition[0]['plan_discount']!=basis['decided']:raise ValueError('The saved tuition basis is inconsistent. Review the challan manually.')
+            calculation=late_calculation(config,basis_due,asof,basis);previous=sum(x['amount'] for x in existing);delta=max(0,calculation['total']-previous)
             reason='Ready for explicit application' if delta else 'No additional late fee due'
             if existing and any(x.get('origin_bill_id')!=b.id for x in existing):reason='Transferred fine needs manual review';delta=0
             elif s.status!='Active':reason='Inactive student: no assessment';delta=0
@@ -124,7 +156,7 @@ def configure_late_fees(app,db,Student):
             digest=hashlib.sha256(json.dumps(b.lines,sort_keys=True,separators=(',',':')).encode()).hexdigest()
             sources.append([b.id,b.version,b.due.isoformat(),b.paid,b.discount,b.frozen,digest,s.id,s.status,s.name,campus,cls,stamp,config])
             policy_scope=copy.deepcopy(existing[0].get('assessment_scope',{})) if existing else dict(campus=campus,class_name=cls,policy_campus=row.scope if row else '',policy_class=row.name if row else '')
-            rows.append(dict(bill=b,student=s,campus=campus,class_name=cls,policy_scope=policy_scope,config=config,basis_due=basis_due,stamp=stamp,calculation=calculation,existing=previous,delta=delta,reason=reason,saved_policy=bool(existing)))
+            rows.append(dict(bill=b,student=s,campus=campus,class_name=cls,policy_scope=policy_scope,config=config,basis_due=basis_due,stamp=stamp,basis_values=basis,calculation=calculation,existing=previous,delta=delta,reason=reason,saved_policy=bool(existing)))
         return rows,sources
     @bp.route('/assess',methods=['GET','POST'])
     def assess():
@@ -150,7 +182,7 @@ def configure_late_fees(app,db,Student):
         changed=[]
         for row in rows:
             if not row['delta']:continue
-            b=row['bill'];line=dict(particular=row['config']['head'],display_name=row['config']['head_label'],amount=row['delta'],kind='late_fee',origin_bill_id=b.id,basis_due=row['basis_due'].isoformat(),policy_source=row['stamp'],assessment_scope=row['policy_scope'],assessed_through=asof.isoformat(),policy=copy.deepcopy(row['config']),cumulative_target=row['calculation']['total'])
+            b=row['bill'];line=dict(particular=row['config']['head'],display_name=row['config']['head_label'],amount=row['delta'],kind='late_fee',origin_bill_id=b.id,basis_due=row['basis_due'].isoformat(),basis_values=row['basis_values'],policy_source=row['stamp'],assessment_scope=row['policy_scope'],assessed_through=asof.isoformat(),policy=copy.deepcopy(row['config']),cumulative_target=row['calculation']['total'])
             before=copy.deepcopy(b.lines);b.lines=[*b.lines,line]
             changed.append(dict(bill_id=b.id,before=before,added=line))
         if changed:db.session.add(Audit(action='Apply reviewed late fees',data=dict(asof=asof.isoformat(),owner_id=session.get('owner_id'),changes=changed)))
@@ -164,16 +196,17 @@ def configure_late_fees(app,db,Student):
     @click.option('--mode',type=click.Choice(list(MODES)))
     @click.option('--rate',default='')
     @click.option('--grace',default='0')
+    @click.option('--expiry',default='')
     @click.option('--maximum',default='')
     @click.option('--head',default='')
     @click.option('--accept-formula',is_flag=True)
-    def operator_policy(code,campus,show,reset,expected_version,mode,rate,grace,maximum,head,accept_formula):
+    def operator_policy(code,campus,show,reset,expected_version,mode,rate,grace,expiry,maximum,head,accept_formula):
         """Private provider operation; --show first, then use its version for updates."""
         School=app.extensions['identity_models']['institute']
         school=School.query.filter_by(code=code.strip().upper(),active=True).first()
         if not school:raise click.ClickException('Active institute not found.')
         engine=app.extensions['identity_helpers']['engine'](school.id)
-        data=dict(mode=mode or '',rate=rate,grace=grace,maximum=maximum,head=head)
+        data=dict(mode=mode or '',rate=rate,grace=grace,expiry=expiry,maximum=maximum,head=head)
         with app.test_request_context('/operator/late-policy',method='POST',data=data):
             g.institute_engine=engine;db.session.remove()
             try:

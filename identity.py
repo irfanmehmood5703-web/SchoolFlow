@@ -110,7 +110,7 @@ def configure_identity(app, db):
         Profile=app.extensions.get('institute_setup_models',{}).get('profile')
         if Profile is not None:
             with engine.begin() as connection:
-                connection.execute(Profile.__table__.insert().values(id=1,data=dict(name=name.strip(),owner_email=email)))
+                connection.execute(Profile.__table__.insert().values(id=1,data=dict(name=name.strip(),owner_email=email,ui_mode='light',ui_mode_revision=0)))
         db.session.add(Owner(institute_id=institute.id, email=email, password_hash=generate_password_hash(password)))
         db.session.commit()
         return institute

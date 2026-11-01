@@ -201,3 +201,44 @@ class LateFeeTests(unittest.TestCase):
         self.assertNotIn(b'aria-disabled="true"',menu);self.assertNotIn(b'Late Fee Automation',menu);self.assertNotIn(b'Subscription',menu)
         setup=self.c.get('/workspace/core/institute').data
         for path in (b'/workspace/core/fees/heads',b'/workspace/core/fees/schedules',b'/workspace/core/fees/challan-branding'):self.assertIn(path,setup)
+
+    def test_double_expiry_boundaries_split_days_and_caps(self):
+        config=dict(mode='fixed_double',rate=20000,grace=0,maximum=None,expiry=10)
+        for days,total in [(0,0),(1,20000),(10,20000),(11,40000)]:
+            from datetime import timedelta
+            self.assertEqual(late_calculation(config,date(2026,10,1),date(2026,10,1)+timedelta(days=days))['total'],total)
+        config.update(mode='daily_double',rate=1000)
+        self.assertEqual(late_calculation(config,date(2026,10,1),date(2026,10,31))['total'],50000)
+        config['maximum']=42000;self.assertEqual(late_calculation(config,date(2026,10,1),date(2026,10,31))['total'],42000)
+        config['maximum']=0;self.assertEqual(late_calculation(config,date(2026,10,1),date(2026,10,31))['total'],0)
+
+    def test_percentage_and_concession_formulas_use_named_bases(self):
+        basis=dict(actual=500000,decided=350000,owing=400000)
+        config=dict(mode='percent_actual',rate=500,grace=0,maximum=None)
+        for mode,total in [('percent_actual',25000),('percent_decided',17500),('percent_owing',20000),('revoke_discount',150000)]:
+            config['mode']=mode;self.assertEqual(late_calculation(config,date(2026,10,10),date(2026,10,11),basis)['total'],total)
+        config.update(mode='percent_actual',rate=333);self.assertEqual(late_calculation(config,date(2026,10,10),date(2026,10,11),dict(actual=10001))['total'],333)
+        with self.assertRaises(ValueError):late_calculation(config,date(2026,10,10),date(2026,10,11))
+
+    def test_new_policy_validation_and_unsaved_percentage_simulator(self):
+        for changes in [dict(mode='fixed_double'),dict(mode='daily_double',expiry='0'),dict(mode='daily_double',expiry='3661'),dict(mode='percent_actual',rate='100.01')]:
+            self.assertEqual(self.policy(**changes).status_code,422)
+        result=self.policy(action='simulate',mode='percent_actual',rate='5',grace='0',due='2026-10-10',asof='2026-10-11',basis_actual='5000',basis_decided='3500',basis_owing='3500')
+        self.assertEqual(result.status_code,200);self.assertIn(b'250.00',result.data);self.assertIsNone(self.policy_row())
+        self.assertEqual(self.policy(mode='revoke_discount',rate='').status_code,302)
+
+    def test_saved_tuition_basis_and_no_fine_on_fine(self):
+        self.b.lines=[dict(particular='Tuition Fee',amount=350000,actual=500000,plan_discount=150000)];db.session.commit()
+        self.assertEqual(self.policy(mode='revoke_discount',rate='').status_code,302)
+        self.assertEqual(self.apply(self.token(self.preview())).status_code,302)
+        fee=self.fees()[0];self.assertEqual(fee['amount'],150000);self.assertEqual(fee['basis_values']['actual'],500000)
+        self.apply(self.token(self.preview(asof='2026-10-25')));self.assertEqual(len(self.fees()),1)
+        # A saved percentage basis never includes an earlier late fee.
+        self.b.lines=[dict(particular='Tuition Fee',amount=350000,actual=500000,plan_discount=150000)];db.session.commit()
+        self.policy(mode='percent_owing',rate='5');self.apply(self.token(self.preview()))
+        self.assertEqual(self.fees()[0]['amount'],17500)
+        self.apply(self.token(self.preview(asof='2026-10-25')));self.assertEqual(len(self.fees()),1)
+
+    def test_legacy_tuition_without_actual_discount_evidence_is_not_guessed(self):
+        self.policy(mode='percent_actual',rate='5')
+        self.assertEqual(self.preview().status_code,422);self.assertEqual(self.fees(),[])

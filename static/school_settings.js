@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded',()=>{
+ document.querySelectorAll('[data-setting-editor]').forEach(form=>form.addEventListener('submit',()=>form.querySelectorAll('input[name=direct_band]').forEach((input,index)=>input.value=index)));
  document.querySelectorAll('[data-fields]').forEach(b=>b.addEventListener('click',()=>b.closest('section').querySelectorAll('input[name^="visible_"]:not(:disabled)').forEach(c=>{c.checked=b.dataset.fields==='show';if(!c.checked)c.closest('tr').querySelector('input[name^="required_"]').checked=false})));
  document.querySelectorAll('input[name^="required_"]').forEach(c=>c.addEventListener('change',()=>{if(c.checked)c.closest('tr').querySelector('input[name^="visible_"]').checked=true}));
  const weights=()=>{const node=document.querySelector('[data-weight-total]');if(node)node.textContent=Array.from(document.querySelectorAll('[data-weight]')).reduce((s,i)=>s+(Number(i.value)||0),0).toFixed(2)+'%'};document.addEventListener('input',weights);weights();

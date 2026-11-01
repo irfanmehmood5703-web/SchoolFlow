@@ -22,6 +22,8 @@ def increment_lines(lines,pct,same_period):
     for source in lines:
         line=dict(source)
         base_actual=line.get('base_actual',line['actual']) if same_period else line['actual']
+        bounds=line.get('fee_rules',{})
+        if (bounds.get('minimum') is not None and base_actual<bounds['minimum']) or (bounds.get('maximum') is not None and base_actual>bounds['maximum']):raise ValueError('Actual fee is outside the saved minimum/maximum: '+line['particular'])
         if line['discount']>base_actual:raise ValueError('Discount cannot exceed the fee before increment: '+line['particular'])
         base_net=base_actual-line['discount']
         increment=int((Decimal(base_net)*pct/100).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
