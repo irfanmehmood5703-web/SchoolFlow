@@ -363,7 +363,7 @@ def configure_operations(app, db, Student, Employee):
         if action=='freeze' or action=='unfreeze':
             for b in rows: b.frozen=action=='freeze'
             audit(action,ids=ids);commit();return redirect(url_for('ops.fees',mode='payments'))
-        if action=='fine': return render('reference_pending.html',title='Late fee preview',key='fine-rule',reason='No late-fee rule has been configured. No fine has been added. The exact fine formula needs verification.')
+        if action=='fine':return app.extensions['late_fee_helpers']['selection'](rows)
         if action=='delete':
             if any(b.paid or b.discount or b.frozen for b in rows): raise ValueError('Paid, discounted or frozen challans cannot be deleted. Reverse receipts first.')
             if request.form.get('confirm')!='yes': raise ValueError('Tick the confirmation box before deleting selected unpaid challans.')
@@ -750,6 +750,7 @@ def configure_operations(app, db, Student, Employee):
         b=db.get_or_404(Bill,bill_id)
         if request.method=='POST':
             if b.frozen or b.paid or b.discount: raise ValueError('Only unpaid, undiscounted, unfrozen challans can be split in this pre-test build.')
+            if any(line.get('kind')=='late_fee' for line in b.lines):raise ValueError('Challans with assessed late fees need manual review before splitting; no fine history was discarded.')
             m=month(request.form.get('month'));due=day(request.form.get('due'))
             lines=[];left=[]
             for i,line in enumerate(b.lines):
@@ -855,7 +856,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v18')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v19')
 
     @app.route('/api/v1/summary')
     def summary_api():

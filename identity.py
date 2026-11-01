@@ -107,6 +107,10 @@ def configure_identity(app, db):
         # create_all runs only at explicit provisioning / schema upgrade time,
         # never while a visitor chooses an arbitrary institute code.
         db.metadata.create_all(engine, tables=workspace_tables())
+        Profile=app.extensions.get('institute_setup_models',{}).get('profile')
+        if Profile is not None:
+            with engine.begin() as connection:
+                connection.execute(Profile.__table__.insert().values(id=1,data=dict(name=name.strip(),owner_email=email)))
         db.session.add(Owner(institute_id=institute.id, email=email, password_hash=generate_password_hash(password)))
         db.session.commit()
         return institute

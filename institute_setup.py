@@ -3,7 +3,7 @@
 Catalog choices remain in RecordSettings; mappings constrain new admissions.
 Unmapped legacy campuses keep their existing behavior until explicitly configured.
 """
-import hmac, io
+import hmac, io, re
 from datetime import date
 from PIL import Image, UnidentifiedImageError
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -128,8 +128,10 @@ def configure_institute_setup(app, db):
             if action=='profile':
                 row=db.session.get(SchoolSetup,1);version(row)
                 data=dict(row.data or {}) if row else {}
-                for key in ('name','slogan','website','contact','address','owner_name','owner_designation'):
-                    data[key]=text(key,required=key=='name',limit=500 if key=='address' else 160)
+                for key in ('name','slogan','website','contact','address','owner_name','owner_designation','owner_email','owner_contact'):
+                    if key not in ('owner_email','owner_contact') or key in request.form or key not in data:
+                        data[key]=text(key,required=key=='name',limit=500 if key=='address' else 254 if key=='owner_email' else 160)
+                if data.get('owner_email') and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',data['owner_email']):raise ValueError('Enter a valid owner contact email.')
                 if data['website'] and not data['website'].startswith(('https://','http://')):raise ValueError('Website must start with https:// or http://.')
                 row=row or SchoolSetup(id=1,data={});row.data=data
                 upload=request.files.get('logo')

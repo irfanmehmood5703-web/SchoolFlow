@@ -79,7 +79,7 @@ def configure_fee_setup(app,db,Student):
         db.session.rollback();return render_template('operation_error.html',title='Check fee settings',error=str(error)),422
 
     def used_head(key):
-        return (any(any(x['key']==key for x in r.lines) for r in FeeSchedule.query.all()) or
+        return (app.extensions.get('late_fee_helpers',{}).get('head_used',lambda k:False)(key) or any(any(x['key']==key for x in r.lines) for r in FeeSchedule.query.all()) or
                 any(any(x['particular']==key for x in r.data['lines']) for r in P.query.all()) or
                 any(any(x.get('particular')==key for x in r.lines) for r in Bill.query.all()) or
                 any(r.data.get('particular')==key for r in W.query.filter_by(kind='fee-plans').all()))
@@ -90,7 +90,7 @@ def configure_fee_setup(app,db,Student):
             before=dict(label=row.label,timing=row.timing,months=list(row.months),version=row.version) if row else None
             if action=='delete':
                 if not row or not row.custom:raise ValueError('Standard heads are retained. Only unused custom heads can be deleted.')
-                if used_head(key):raise ValueError('This head is in use by a schedule, student plan or challan.')
+                if used_head(key):raise ValueError('This head is in use by a policy, schedule, student plan or challan.')
                 db.session.delete(row);audit('Delete unused fee head',key=key,before=before)
             elif action=='save':
                 display=text('label',True)
@@ -124,7 +124,7 @@ def configure_fee_setup(app,db,Student):
         return dict(timing=mode,months=list(chosen),first_only=mode=='first' or bool(override.get('first_only')),head_version=row.version if row else 0,label=row.label if row else key)
     def eligible(rule,at,first,selected):
         if rule['timing']=='fine':
-            if selected:raise ValueError('Fine-policy heads need a verified fine policy. No fixed fine was charged.')
+            if selected:raise ValueError('Fine-policy heads are assessed from selected overdue challans. Use Late-fee policy → Preview selected challans; no schedule amount was charged.')
             return False
         return ((rule['timing']!='manual' or selected) and (not rule['first_only'] or first) and int(at[5:7]) in rule['months'])
     def annual(line):

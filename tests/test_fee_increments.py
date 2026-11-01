@@ -124,7 +124,7 @@ class FeeIncrementTests(unittest.TestCase):
         utility=page.split(b'<div class="workspace-utility"',1)[1].split(b'<div class="brand-row"',1)[0]
         self.assertLess(utility.index(b'Management'),utility.index(b'Configuration'))
         self.assertIn(b'class="nav-menu configuration-menu"',utility)
-        for label in (b'Institute Setup',b'Fee Settings',b'Exam Settings',b'HRM Settings'):
+        for label in (b'Institute Setup',b'Exam Settings',b'HRM Settings'):
             self.assertIn(label,utility)
         main=page.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertNotIn(b'Configuration',main);self.assertNotIn(b'Core Settings',main)

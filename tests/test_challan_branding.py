@@ -37,7 +37,7 @@ class ChallanBrandingTests(unittest.TestCase):
             r=self.c.get('/workspace/core/fees/challan-branding',query_string={'campus':scope});self.assertEqual(r.status_code,200)
             ids=re.findall(rb'\bid="([^"]+)"',r.data);self.assertEqual(len(ids),len(set(ids)))
         self.assertEqual(self.Item.query.count(),0)
-        self.assertIn(b'Challan Branding',self.c.get('/workspace/core/fees/heads').data)
+        self.assertIn(b'/workspace/core/fees/challan-branding',self.c.get('/workspace/core/fees/heads').data)
     def test_csrf_scope_action_and_stale_version_guards(self):
         self.assertEqual(self.post(_csrf='').status_code,400)
         self.assertEqual(self.post(campus='Other').status_code,422)

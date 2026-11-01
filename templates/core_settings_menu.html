@@ -1,0 +1,25 @@
+<p>Core Settings</p>
+{% set entries=[
+('institute','Institute Setup','institute_setup.index','', ''),
+('exam','Exam Settings','school_settings.index','exam',''),
+('hrm','HRM Settings','school_settings.index','hrm',''),
+('roll-series','Roll Number Series','','','Pending'),
+('late-fees','Late Fee Automation','late_fees.index','','Policy / reviewed assessments; scheduling pending'),
+('yearly-fees','Student Yearly Fee Increment','fee_increments.index','',''),
+('users','Users & Privileges','','','Pending'),
+('certificates','Manage Certificates','certificates.index','',''),
+('logging','User Logging','','','Pending'),
+('qr-attendance','QR Biometric Attendance','','','Pending'),
+('face-gates','Face Attendance Gates','','','Pending'),
+('readers','Biometric Readers','','','Inactive'),
+('attendance-alerts','Attendance Alerts','','','Pending'),
+('geo-attendance','Geo Location Attendance','','','Pending'),
+('attendance-acronyms','Attendance Acronym Active/Inactive','','','Pending'),
+('whatsapp-service','WhatsApp Service','','','Not connected'),
+('manage-whatsapp','Manage WhatsApp','','','Not connected'),
+('subscription','SchoolFlow Subscription','','','Pending')
+] %}
+{% for key,label,endpoint,module,status in entries %}
+{% if loop.index in [4,7] %}<hr>{% endif %}
+{% if endpoint %}<a data-core-key="{{key}}" class="{{'core-main' if loop.index<=3 else ''}}" href="{{url_for(endpoint,module=module) if module else url_for(endpoint)}}">{{label}}{% if status %}<small>{{status}}</small>{% endif %}</a>{% else %}<div data-core-key="{{key}}" class="configuration-pending" aria-disabled="true">{{label}}<small>{{status}}</small></div>{% endif %}
+{% endfor %}

@@ -87,7 +87,7 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/workspace/core/institute').status_code,302)
         self.assertEqual(self.client.get('/workspace/core/admission-options').status_code,302)
         self.login();token=self.csrf()
-        response=self.client.post('/workspace/core/institute',data={'_csrf':token,'action':'profile','version':'0','name':'Private School A Setup'})
+        response=self.client.post('/workspace/core/institute',data={'_csrf':token,'action':'profile','version':'1','name':'Private School A Setup'})
         self.assertEqual(response.status_code,302)
         self.assertIn(b'Private School A Setup',self.client.get('/workspace/core/institute').data)
         self.client.post('/workspace/core/institute',data={'_csrf':token,'action':'campus','version':'0','campus':'Private Campus A','active':'1'})
@@ -207,6 +207,52 @@ class IdentityTests(unittest.TestCase):
         self.assertIn(b'1,100.00',self.client.get(path).data);self.assertIn(b'2,000.00',other.get(path).data);self.assertNotIn(b'1,100.00',other.get(path).data)
         public=app.test_client();self.assertEqual(public.get(path).status_code,302)
         self.assertEqual(public.post(path,data=dict(action='apply',preview_token=token)).status_code,302)
+
+    def test_late_fee_policies_previews_and_apply_are_institute_private(self):
+        import re,html
+        other=app.test_client();self.login();self.login('TEST-B',client=other)
+        path='/workspace/core/fees/late-policy'
+        tokens={}
+        for client,name in ((self.client,'Only School A'),(other,'Only School B')):
+            with client.session_transaction() as sess:csrf=sess['record_csrf']
+            tokens[name]=csrf
+            response=client.post('/workspace/core/fees/heads',data=dict(_csrf=csrf,action='save',version='0',key='Late Fee',label=name+' Fine',timing='fine'))
+            self.assertEqual(response.status_code,302)
+            response=client.post(path,data=dict(_csrf=csrf,action='save',version='0',mode='fixed',rate='100',grace='0',head='Late Fee',accept_formula='1'))
+            self.assertEqual(response.status_code,403)
+            result=app.test_cli_runner().invoke(args=['institute-late-policy','--code','TEST-A' if name=='Only School A' else 'TEST-B','--expected-version','0','--mode','fixed','--rate','100','--head','Late Fee','--accept-formula'])
+            self.assertEqual(result.exit_code,0,result.output)
+        preview=self.client.post(path+'/assess',data=dict(_csrf=tokens['Only School A'],action='preview',ids='1',asof='2026-10-13'))
+        self.assertEqual(preview.status_code,200);self.assertIn(b'Only School A Fine',preview.data);self.assertNotIn(b'Only School B Fine',preview.data)
+        token=html.unescape(re.search(rb'name="preview_token" value="([^"]+)"',preview.data)[1].decode())
+        self.assertEqual(other.post(path+'/assess',data=dict(_csrf=tokens['Only School B'],action='apply',preview_token=token)).status_code,422)
+        self.assertEqual(self.client.post(path+'/assess',data=dict(_csrf=tokens['Only School A'],action='apply',preview_token=token)).status_code,302)
+        for client,own,excluded in ((self.client,b'Only School A Fine',b'Only School B Fine'),(other,b'Only School B Fine',b'Only School A Fine')):
+            page=client.get(path);self.assertEqual(page.status_code,200);self.assertIn(own,page.data);self.assertNotIn(excluded,page.data);self.assertIn('no-store',page.headers['Cache-Control'])
+        public=app.test_client();self.assertEqual(public.get(path).status_code,302)
+        self.assertEqual(public.post(path+'/assess',data=dict(action='apply',preview_token=token)).status_code,302)
+
+    def test_provider_client_name_seeds_private_profile_and_policy_edits_are_locked(self):
+        self.login();page=self.client.get('/workspace/core/institute')
+        self.assertIn(b'value="Fictional School A"',page.data)
+        self.login('TEST-B');page=self.client.get('/workspace/core/institute');self.assertIn(b'value="Fictional School B"',page.data);self.assertNotIn(b'value="Fictional School A"',page.data)
+        path='/workspace/core/fees/late-policy';page=self.client.get(path)
+        self.assertIn(b'Provider-managed policy',page.data);self.assertNotIn(b'value="save"',page.data)
+        with self.client.session_transaction() as sess:csrf=sess['record_csrf']
+        self.assertEqual(self.client.post(path,data=dict(_csrf=csrf,action='reset',version='0')).status_code,403)
+        runner=app.test_cli_runner()
+        self.assertEqual(runner.invoke(args=['institute-late-policy','--code','TEST-B','--show']).exit_code,0)
+        self.assertNotEqual(runner.invoke(args=['institute-late-policy','--code','MISSING','--show']).exit_code,0)
+        self.assertNotEqual(runner.invoke(args=['institute-late-policy','--code','TEST-B','--mode','fixed','--rate','100']).exit_code,0)
+
+    def test_owner_contact_changes_do_not_change_login_or_other_school(self):
+        self.login();token=self.csrf()
+        response=self.client.post('/workspace/core/institute',data=dict(_csrf=token,action='profile',version='1',name='Fictional School A',owner_contact='TEST-CONTACT',owner_email='contact@example.invalid'))
+        self.assertEqual(response.status_code,302);page=self.client.get('/workspace/core/institute')
+        self.assertIn(b'contact@example.invalid',page.data);self.assertIn(b'owner@example.invalid',page.data)
+        self.assertEqual(self.login().status_code,302)
+        self.login('TEST-B');page=self.client.get('/workspace/core/institute');self.assertNotIn(b'contact@example.invalid',page.data)
+        token=self.csrf();self.assertEqual(self.client.post('/workspace/core/institute',data=dict(_csrf=token,action='profile',version='1',name='Fictional School B',owner_email='invalid')).status_code,422)
 
     def test_workspace_writes_stay_in_selected_database(self):
         self.login()

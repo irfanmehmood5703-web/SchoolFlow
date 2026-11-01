@@ -88,6 +88,8 @@ from challan_branding import configure_challan_branding
 configure_challan_branding(app,db,Student)
 from fee_increments import configure_fee_increments
 configure_fee_increments(app,db,Student)
+from late_fees import configure_late_fees
+configure_late_fees(app,db,Student)
 
 @app.route('/')
 def home():
