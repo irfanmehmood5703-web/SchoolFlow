@@ -161,3 +161,68 @@ class InstituteSetupTests(unittest.TestCase):
         self.make_ready();Schedule=app.extensions['fee_setup_models']['schedule'];db.session.delete(Schedule.query.one());db.session.commit()
         page=self.c.get('/workspace/core/institute');self.assertIn(b'<td>Needs attention</td>',page.data)
         self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=self.setup_token(page)).status_code,422)
+
+    def concurrent_saves(self,path,forms,check):
+        import tempfile,threading
+        from concurrent.futures import ThreadPoolExecutor
+        from flask import g,request
+        from sqlalchemy import create_engine,select
+        db.session.remove()
+        with tempfile.TemporaryDirectory() as directory:
+            engine=create_engine('sqlite:///'+directory+'/settings.db',connect_args={'timeout':20})
+            tables=app.extensions['identity_helpers']['workspace_tables']();db.metadata.create_all(engine,tables=tables)
+            with db.engine.connect() as source,engine.begin() as target:
+                for table in tables:
+                    rows=[dict(r) for r in source.execute(select(table)).mappings().all()]
+                    if rows:target.execute(table.insert(),rows)
+            barrier=threading.Barrier(2)
+            def bind():
+                if request.path==path:
+                    g.institute_engine=engine
+                    if request.method=='POST':barrier.wait(timeout=10)
+            app.before_request_funcs.setdefault(None,[]).append(bind)
+            try:
+                def save(form):
+                    client=app.test_client()
+                    with client.session_transaction() as session:session['record_csrf']='concurrent-setup'
+                    return client.post(path,data={'_csrf':'concurrent-setup',**form}).status_code
+                with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(save,forms))
+                with engine.connect() as connection:check(statuses,connection)
+            finally:
+                app.before_request_funcs[None].remove(bind);db.session.remove();g.pop('institute_engine',None);engine.dispose()
+
+    def test_concurrent_catalog_forms_create_one_option_and_report_the_duplicate(self):
+        from sqlalchemy import select
+        table=self.rm['settings'].__table__
+        def check(statuses,connection):
+            self.assertEqual(sorted(statuses),[302,422])
+            rows=connection.execute(select(table.c.value).where(table.c.value=='Concurrent class')).scalars().all()
+            self.assertEqual(rows,['Concurrent class'])
+        form=dict(category='class_name',value='Concurrent class')
+        self.concurrent_saves('/records/settings',[form,form],check)
+
+    def test_concurrent_inline_options_return_one_shared_choice_without_server_error(self):
+        from sqlalchemy import select
+        table=self.rm['settings'].__table__
+        def check(statuses,connection):
+            self.assertEqual(statuses,[200,200])
+            rows=connection.execute(select(table.c.value).where(table.c.value=='Concurrent class')).scalars().all()
+            self.assertEqual(rows,['Concurrent class'])
+        form=dict(category='class_name',value='Concurrent class')
+        self.concurrent_saves('/records/options',[form,form],check)
+
+    def test_concurrent_profile_and_academic_edits_do_not_erase_each_other(self):
+        from sqlalchemy import select
+        self.post(action='profile',version='0',name='Original fictional school')
+        table=self.models['profile'].__table__
+        def check(statuses,connection):
+            self.assertEqual(sorted(statuses),[302,422])
+            saved=connection.execute(select(table.c.data,table.c.version)).one()
+            self.assertEqual(saved.version,2)
+            if statuses[0]==302:
+                self.assertEqual(saved.data['name'],'Updated fictional school');self.assertNotIn('current_session',saved.data)
+            else:
+                self.assertEqual(saved.data['name'],'Original fictional school');self.assertEqual(saved.data['current_session'],'2027-28')
+        self.concurrent_saves('/workspace/core/institute',[
+            dict(action='profile',version='1',name='Updated fictional school'),
+            dict(action='academic',version='1',current_session='2027-28',year_start='2027-04-01',year_end='2028-03-31')],check)

@@ -113,6 +113,8 @@ def configure_records(app, db, Student, Employee):
             token = request.form.get("_csrf", "")
             if not hmac.compare_digest(session.get("record_csrf", "").encode(), token.encode()) or not token:
                 abort(400, "Your form session expired. Reload the page and try again.")
+            if request.endpoint in ('records.settings','records.add_option'):
+                app.extensions['admission_capacity']['lock']()
 
     def setup_choices():
         if hasattr(request,'record_choice_cache'):return request.record_choice_cache

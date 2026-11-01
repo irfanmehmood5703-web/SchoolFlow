@@ -48,7 +48,9 @@ def configure_institute_setup(app, db):
         if request.method=='POST':
             token=request.form.get('_csrf','')
             if not token or not hmac.compare_digest(token,session.get('record_csrf','')):abort(400,'Reload this form before saving.')
-            if request.form.get('action') in ('map','campus','copy_maps','undo_map','complete_setup'):app.extensions['admission_capacity']['lock']()
+            # Profile, year and display-mode saves share this row as well.
+            # Serialize them with map edits and reviewed setup completion.
+            app.extensions['admission_capacity']['lock']()
 
     @bp.errorhandler(ValueError)
     def invalid(exc):
