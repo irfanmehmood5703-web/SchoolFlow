@@ -13,6 +13,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from certificates import clean_html as clean_base_html
 from branding_values import make_branding_values, expand_tags, missing_tags
 from record_schema import EMPLOYEE_SECTIONS
+from exam_enrollment import included,recorded
 
 def clean_html(value):
     return clean_base_html(value,report_assets=True)
@@ -486,12 +487,17 @@ def configure_school_settings(app,db,Student,Employee):
         detail_model=rm['student'];roster=Student.query.outerjoin(detail_model,detail_model.student_id==Student.id).filter(Student.status=='Active')
         for key in ('class_name','campus','section','gender','group_name','academic_session'):
             if award.data.get(key):roster=roster.filter((Student.class_name if key=='class_name' else detail_model.data[key].as_string())==award.data[key])
-        current=roster.all();ids={p.id for p in current}|{s.student_id for s in scores+qualitative}
+        current=roster.all();current_data=app.extensions['record_helpers']['raw_many']('student',current)
+        if award.data.get('student_filter')=='subject':current=[p for p in current if any(included(award,paper,current_data.get(p.id,{}),None) for paper in award.data['papers'])]
+        ids={p.id for p in current}|{s.student_id for s in scores+qualitative if award.data.get('student_filter')!='subject' or recorded(s)}
         pupils=Student.query.filter(Student.id.in_(ids)).order_by(Student.id).all()
         details=app.extensions['record_helpers']['raw_many']('student',pupils);tag_values['prefetch_photos']('student',pupils);rows=[]
         for pupil in pupils:
             saved={s.paper:s for s in scores if s.student_id==pupil.id};papers=award.data['papers'];complete=True;obtained=Decimal(0);total=Decimal(0);paper_rows=[]
             for i,paper in enumerate(papers):
+                evidence=next((q for q in qualitative if q.student_id==pupil.id and q.paper==i),None) if paper.get('grading','Marks')!='Marks' else saved.get(i)
+                if not included(award,paper,details.get(pupil.id,{}),evidence):
+                    paper_rows.append(dict(paper=paper,state='',obtained=None,total=Decimal(0),percentage=None,grade='',remarks='',marked=False,excluded=True));continue
                 if paper.get('grading','Marks')!='Marks':
                     score=next((q for q in qualitative if q.student_id==pupil.id and q.paper==i),None)
                     state=score.state if score else '';value=score.value if score and not state else None
@@ -513,7 +519,7 @@ def configure_school_settings(app,db,Student,Employee):
                 if group:groups.setdefault(group,[]).append(result)
             grouped=[]
             for name,entries in groups.items():
-                numeric=[e for e in entries if e['paper'].get('grading','Marks')=='Marks']
+                numeric=[e for e in entries if e['paper'].get('grading','Marks')=='Marks' and not e.get('excluded')]
                 group_total=sum((e['total'] for e in numeric),Decimal(0))
                 group_obtained=sum((Decimal(str(e['obtained'] or 0)) for e in numeric),Decimal(0))
                 group_complete=all(e['marked'] for e in numeric)
@@ -552,7 +558,7 @@ def configure_school_settings(app,db,Student,Employee):
             for pupil in pupils:
                 parts=[];complete=True;weighted=Decimal(0)
                 for typ,weight in selected:
-                    papers=[(a,i,p) for a in awards if a.data.get('exam_test_type')==typ.name and all(not a.data.get(k) or a.data[k]==pupil_details.get(pupil.id,{}).get(k) for k in ('section','gender','group_name')) for i,p in enumerate(a.data['papers']) if p.get('grading','Marks')=='Marks' and p.get('total',0)>0]
+                    papers=[(a,i,p) for a in awards if a.data.get('exam_test_type')==typ.name and all(not a.data.get(k) or a.data[k]==pupil_details.get(pupil.id,{}).get(k) for k in ('section','gender','group_name')) for i,p in enumerate(a.data['papers']) if p.get('grading','Marks')=='Marks' and p.get('total',0)>0 and included(a,p,pupil_details.get(pupil.id,{}),lookup.get((a.id,pupil.id,i)))]
                     obtained=Decimal(0);maximum=Decimal(0);marked=bool(papers)
                     for a,i,p in papers:
                         score=lookup.get((a.id,pupil.id,i));maximum+=Decimal(str(p['total']))

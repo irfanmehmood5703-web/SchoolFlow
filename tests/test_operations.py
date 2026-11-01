@@ -17,7 +17,11 @@ class OperationTests(unittest.TestCase):
         self.client=app.test_client();self.client.get('/workspace/dashboard')
         with self.client.session_transaction() as sess:self.csrf=sess['record_csrf']
     def tearDown(self):db.session.remove();db.drop_all();self.ctx.pop()
-    def post(self,path,**data):return self.client.post(path,data=dict(_csrf=self.csrf,**data))
+    def post(self,path,**data):
+        if path.startswith('/workspace/marks/') and 'marks_review_token' not in data:
+            import html
+            page=self.client.get(path);data['marks_review_token']=html.unescape(re.search(rb'name="marks_review_token" value="([^"]+)"',page.data)[1].decode())
+        return self.client.post(path,data=dict(_csrf=self.csrf,**data))
     def bill(self,amount=100000,month='2026-09'):
         b=self.m['bill'](student_id=self.s.id,month=month,due=date(2026,9,10),lines=[dict(particular='Tuition Fee',amount=amount)])
         db.session.add(b);db.session.commit();return b

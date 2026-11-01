@@ -279,7 +279,7 @@ class SchoolSettingsTests(unittest.TestCase):
     def test_qualitative_grading_is_saved_without_numeric_totals(self):
         award=self.qualitative_award();sid=self.s.id
         self.assertEqual([p['total'] for p in award.data['papers']],[30,0,0])
-        data={'_csrf':self.csrf,f'mark_{sid}_0':'24',f'qual_{sid}_1':'0',f'qual_{sid}_2':'Excellent',f'qual_version_{sid}_1':'0',f'qual_version_{sid}_2':'0'}
+        data={'_csrf':self.csrf,'marks_review_token':self.marks_token(award.id),f'mark_{sid}_0':'24',f'qual_{sid}_1':'0',f'qual_{sid}_2':'Excellent',f'qual_version_{sid}_1':'0',f'qual_version_{sid}_2':'0'}
         self.assertEqual(self.c.post('/workspace/marks/'+str(award.id),data=data).status_code,302)
         self.assertEqual(self.ops['score'].query.count(),1);self.assertEqual(self.ops['qualitative'].query.count(),2)
         page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertEqual(page.status_code,200)
@@ -291,7 +291,7 @@ class SchoolSettingsTests(unittest.TestCase):
 
     def test_direct_grade_policy_invalid_grade_and_absence_atomic(self):
         award=self.qualitative_award();sid=self.s.id
-        data={'_csrf':self.csrf,f'mark_{sid}_0':'20',f'qual_{sid}_1':'1',f'qual_{sid}_2':'Invented',f'qual_version_{sid}_1':'0',f'qual_version_{sid}_2':'0'}
+        data={'_csrf':self.csrf,'marks_review_token':self.marks_token(award.id),f'mark_{sid}_0':'20',f'qual_{sid}_1':'1',f'qual_{sid}_2':'Invented',f'qual_version_{sid}_1':'0',f'qual_version_{sid}_2':'0'}
         self.assertEqual(self.c.post('/workspace/marks/'+str(award.id),data=data).status_code,422)
         self.assertEqual(self.ops['score'].query.count(),0);self.assertEqual(self.ops['qualitative'].query.count(),0)
         data[f'qual_{sid}_2']='Excellent';data[f'state_{sid}_2']='A'
@@ -318,3 +318,105 @@ class SchoolSettingsTests(unittest.TestCase):
         db.session.add(self.ops['score'](award_id=award.id,student_id=self.s.id,paper=0,obtained=24));db.session.commit()
         page=self.c.get('/workspace/core/exam/weighted-results?campus=Campus+A&class_name=Class+A&academic_session=2026')
         self.assertEqual(page.status_code,200);self.assertIn(b'80.00',page.data);self.assertNotIn(b'Incomplete',page.data)
+
+    def marks_token(self,aid):
+        import html
+        page=self.c.get('/workspace/marks/'+str(aid));self.assertEqual(page.status_code,200)
+        return html.unescape(re.search(rb'name="marks_review_token" value="([^"]+)"',page.data)[1].decode())
+
+    def subject_award(self,mode='subject',sort='sid'):
+        detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.data={**detail.data,'subjects':['Math'],'roll_no':'10','academic_session':'2026-27'}
+        other=Student(admission_no='ENGLISH-ONLY',name='English pupil',class_name='Class A',status='Active');empty=Student(admission_no='NO-SUBJECT',name='No assigned subjects pupil',class_name='Class A',status='Active');db.session.add_all([other,empty]);db.session.flush()
+        db.session.add(self.rm['student'](student_id=other.id,data=dict(campus='Campus A',section='B',subjects=['English'],roll_no='2',academic_session='2026-27')));db.session.add(self.rm['student'](student_id=empty.id,data=dict(campus='Campus A',section='A',subjects=[],roll_no='1',academic_session='2026-27')))
+        award=self.ops['workflow'](kind='awards',status='Active',data=dict(name='Subject eligibility exam',campus='Campus A',class_name='Class A',academic_session='2026-27',student_filter=mode,sort_order=sort,papers=[dict(subject='Math',total=50,date='2026-09-01',type='Written'),dict(subject='English',total=30,date='2026-09-01',type='Written')]))
+        db.session.add(award);db.session.commit();return award,other,empty
+    def save_subject_marks(self,award,**changes):
+        data={'_csrf':self.csrf,'marks_review_token':self.marks_token(award.id),f'mark_{self.s.id}_0':'40'};data.update(changes);return self.c.post('/workspace/marks/'+str(award.id),data=data)
+    def test_subject_wise_marks_hide_unassigned_students_and_lock_unassigned_papers(self):
+        award,other,empty=self.subject_award();page=self.c.get('/workspace/marks/'+str(award.id));self.assertEqual(page.status_code,200)
+        self.assertIn(b'English pupil',page.data);self.assertNotIn(b'No assigned subjects pupil',page.data);self.assertIn(b'Not enrolled',page.data)
+        self.assertNotIn(('name="mark_'+str(self.s.id)+'_1"').encode(),page.data)
+        self.assertEqual(self.save_subject_marks(award).status_code,302)
+        self.assertEqual({(s.student_id,s.paper) for s in self.ops['score'].query.all()},{(self.s.id,0),(other.id,1)})
+        results=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertEqual(results.status_code,200);self.assertIn(b'80.00',results.data);self.assertIn(b'Not enrolled',results.data);self.assertNotIn(b'No assigned subjects pupil',results.data)
+    def test_unassigned_paper_tampering_rolls_back_all_marks_and_form_claim(self):
+        award,other,empty=self.subject_award();response=self.save_subject_marks(award,**{f'mark_{self.s.id}_1':'20'})
+        self.assertEqual(response.status_code,422);self.assertEqual(self.ops['score'].query.count(),0);self.assertEqual(app.extensions['exam_marks_save_model'].query.count(),0)
+    def test_class_wise_mode_still_allows_all_cohort_students_papers(self):
+        award,other,empty=self.subject_award(mode='class');page=self.c.get('/workspace/marks/'+str(award.id));self.assertIn(b'No assigned subjects pupil',page.data)
+        self.assertEqual(self.save_subject_marks(award,**{f'mark_{self.s.id}_1':'25'}).status_code,302);self.assertEqual(self.ops['score'].query.count(),6)
+    def test_roll_and_section_sort_orders_actually_change_award_roster(self):
+        award,other,empty=self.subject_award(sort='roll');page=self.c.get('/workspace/marks/'+str(award.id));self.assertLess(page.data.index(b'English pupil'),page.data.index(b'Fictional Pupil'))
+        award.data={**award.data,'sort_order':'section'};db.session.commit();page=self.c.get('/workspace/marks/'+str(award.id));self.assertLess(page.data.index(b'Fictional Pupil'),page.data.index(b'English pupil'))
+    def test_saved_subject_result_survives_later_subject_changes_as_readonly(self):
+        award,other,empty=self.subject_award();self.assertEqual(self.save_subject_marks(award).status_code,302)
+        detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.data={**detail.data,'subjects':['English']};db.session.commit()
+        page=self.c.get('/workspace/marks/'+str(award.id));self.assertIn(b'saved result retained: 40.00',page.data);self.assertNotIn(('name="mark_'+str(self.s.id)+'_0"').encode(),page.data)
+        self.assertEqual(self.save_subject_marks(award,**{f'mark_{self.s.id}_0':'',f'mark_{self.s.id}_1':'20'}).status_code,302)
+        self.assertEqual(self.ops['score'].query.filter_by(student_id=self.s.id,paper=0).one().obtained,40)
+        page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertIn(b'75.00',page.data)
+    def test_marks_form_detects_concurrent_updates_subject_change_and_replay(self):
+        award,other,empty=self.subject_award();path='/workspace/marks/'+str(award.id);token=self.marks_token(award.id);data={'_csrf':self.csrf,'marks_review_token':token,f'mark_{self.s.id}_0':'40'}
+        self.assertEqual(self.c.post(path,data=data).status_code,302);self.assertEqual(self.c.post(path,data=data).status_code,422)
+        token=self.marks_token(award.id);row=self.ops['score'].query.filter_by(student_id=self.s.id,paper=0).one();row.obtained=30;db.session.commit()
+        self.assertEqual(self.c.post(path,data={**data,'marks_review_token':token}).status_code,422);self.assertEqual(row.obtained,30)
+        token=self.marks_token(award.id);detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.data={**detail.data,'subjects':['English']};db.session.commit()
+        self.assertEqual(self.c.post(path,data={**data,'marks_review_token':token}).status_code,422)
+    def test_marks_review_token_is_required_and_bound_to_session(self):
+        award,other,empty=self.subject_award();path='/workspace/marks/'+str(award.id);token=self.marks_token(award.id)
+        self.assertEqual(self.c.post(path,data={'_csrf':self.csrf,f'mark_{self.s.id}_0':'40'}).status_code,422)
+        another=app.test_client();another.get('/workspace/core/exam')
+        with another.session_transaction() as sess:csrf=sess['record_csrf']
+        self.assertEqual(another.post(path,data={'_csrf':csrf,'marks_review_token':token,f'mark_{self.s.id}_0':'40'}).status_code,422);self.assertEqual(self.ops['score'].query.count(),0)
+    def test_weighted_subject_result_excludes_unenrolled_paper_maximum(self):
+        award,other,empty=self.subject_award();self.post('exam','test-types',name='Term',campus='Campus A');typ=self.item('test-type');self.post('exam','weightage',campus='Campus A',**{'weight_'+str(typ.id):'100'})
+        award.data={**award.data,'exam_test_type':'Term'};db.session.add(self.ops['score'](award_id=award.id,student_id=self.s.id,paper=0,obtained=40));db.session.commit()
+        page=self.c.get('/workspace/core/exam/weighted-results?campus=Campus+A&class_name=Class+A&academic_session=2026-27');self.assertEqual(page.status_code,200);self.assertIn(b'80.00',page.data)
+
+    def test_first_marks_page_binds_review_to_csrf_before_render(self):
+        import html
+        award,other,empty=self.subject_award();fresh=app.test_client();path='/workspace/marks/'+str(award.id)
+        page=fresh.get(path);self.assertEqual(page.status_code,200)
+        token=html.unescape(re.search(rb'name="marks_review_token" value="([^"]+)"',page.data)[1].decode())
+        with fresh.session_transaction() as sess:csrf=sess['record_csrf']
+        response=fresh.post(path,data={'_csrf':csrf,'marks_review_token':token,f'mark_{self.s.id}_0':'40'})
+        self.assertEqual(response.status_code,302);self.assertEqual(self.ops['score'].query.filter_by(student_id=self.s.id,paper=0).one().obtained,40)
+
+    def test_unchanged_marks_form_is_still_single_use(self):
+        award,other,empty=self.subject_award();self.assertEqual(self.save_subject_marks(award).status_code,302)
+        token=self.marks_token(award.id);data={'_csrf':self.csrf,'marks_review_token':token,f'mark_{self.s.id}_0':'40'};path='/workspace/marks/'+str(award.id)
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        self.assertEqual(self.c.post(path,data=data).status_code,422);self.assertEqual(app.extensions['exam_marks_save_model'].query.count(),2)
+
+    def test_two_concurrent_marks_saves_accept_one_current_form(self):
+        import tempfile,threading,html
+        from concurrent.futures import ThreadPoolExecutor
+        from flask import g,request
+        from sqlalchemy import create_engine,select
+        award,other,empty=self.subject_award();aid=award.id;sid=self.s.id;db.session.remove()
+        with tempfile.TemporaryDirectory() as directory:
+            engine=create_engine('sqlite:///'+directory+'/marks.db',connect_args={'timeout':20});tables=app.extensions['identity_helpers']['workspace_tables']();db.metadata.create_all(engine,tables=tables)
+            with db.engine.connect() as source,engine.begin() as target:
+                for table in tables:
+                    rows=[dict(r) for r in source.execute(select(table)).mappings().all()]
+                    if rows:target.execute(table.insert(),rows)
+            barrier=threading.Barrier(2)
+            def bind():
+                if request.endpoint=='ops.marks':
+                    g.institute_engine=engine
+                    if request.method=='POST':barrier.wait(timeout=10)
+            app.before_request_funcs.setdefault(None,[]).append(bind)
+            def client():
+                c=app.test_client()
+                with c.session_transaction() as session:session['record_csrf']='concurrent-marks'
+                return c
+            path='/workspace/marks/'+str(aid)
+            try:
+                page=client().get(path);self.assertEqual(page.status_code,200);token=html.unescape(re.search(rb'name="marks_review_token" value="([^"]+)"',page.data)[1].decode())
+                def save(_):return client().post(path,data={'_csrf':'concurrent-marks','marks_review_token':token,f'mark_{sid}_0':'40'}).status_code
+                with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(save,range(2)))
+                self.assertEqual(sorted(statuses),[302,422])
+                with engine.connect() as connection:
+                    values=connection.execute(select(self.ops['score'].__table__.c.obtained).where(self.ops['score'].__table__.c.student_id==sid)).scalars().all();saves=connection.execute(select(app.extensions['exam_marks_save_model'].__table__.c.nonce)).scalars().all()
+                self.assertEqual(values,[40]);self.assertEqual(len(saves),1)
+            finally:app.before_request_funcs[None].remove(bind);db.session.remove();g.pop('institute_engine',None);engine.dispose()

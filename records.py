@@ -102,6 +102,11 @@ def configure_records(app, db, Student, Employee):
             session["record_csrf"] = secrets.token_urlsafe(32)
         return {"record_csrf": session["record_csrf"]}
 
+    @app.before_request
+    def initialize_workspace_csrf():
+        if request.method=='GET' and request.path.startswith(('/workspace','/records','/auth')):
+            record_context()
+
     @bp.before_request
     def validate_csrf():
         if request.method == "POST":
