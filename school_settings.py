@@ -655,7 +655,9 @@ def configure_school_settings(app,db,Student,Employee):
             audit('Save monthly staff attendance',employee=person.id,month=month);commit()
             return redirect(url_for('school_settings.monthly_attendance',month=month,employee_id=person.id))
         existing={r.day.isoformat():r for r in ops['daily'].query.filter_by(kind='staff',person_id=person.id).filter(ops['daily'].day>=dates[0],ops['daily'].day<=dates[-1]).all()} if person else {}
-        return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',details=app.extensions['record_helpers']['raw_many']('employee',[person]).get(person.id,{}) if person else {},employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
+        details=app.extensions['record_helpers']['raw_many']('employee',[person]).get(person.id,{}) if person else {}
+        values=tag_values['employee'](person,details) if person else {};values.update(salary_month=month,date=month)
+        return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',branding_values=values,details=details,employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
 
     app.extensions['school_settings_helpers']=dict(config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
     app.register_blueprint(bp)

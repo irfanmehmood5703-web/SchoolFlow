@@ -100,6 +100,8 @@ configure_late_fees(app,db,Student)
 from fine_automation import configure_fine_automation
 configure_fine_automation(app,db,Student)
 app.config['FINE_WORKER_ENABLED']=os.getenv('SCHOOLFLOW_FINE_WORKER','0')=='1'
+from setup_readiness import configure_setup_readiness
+configure_setup_readiness(app,db,Student)
 from student_import import configure_student_import
 configure_student_import(app,db,Student)
 

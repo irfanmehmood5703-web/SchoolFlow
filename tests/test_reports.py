@@ -49,3 +49,31 @@ class ReportTests(unittest.TestCase):
     def test_invalid_dates_and_passmarks_rejected(self):
         for path in ['fees/fee-report?from=bad','fees/fee-report?from=2026-11&to=2026-09','teacher-performance?pass_mark=NaN','attendance/absentees?absence_count=-1']:
             self.assertEqual(self.get(path).status_code,422,path)
+
+    def test_excel_export_uses_identical_filtered_rows_numeric_money_and_safe_strings(self):
+        import io
+        from openpyxl import load_workbook
+        self.s.name='=HYPERLINK("https://example.invalid","unsafe")';db.session.commit()
+        response=self.get('fees/student-fees?from=2026-09&to=2026-09&person_id='+str(self.s.id)+'&export=xlsx')
+        self.assertEqual(response.status_code,200);self.assertIn('spreadsheetml',response.mimetype);self.assertEqual(response.headers['Cache-Control'],'no-store')
+        book=load_workbook(io.BytesIO(response.data),data_only=False);sheet=book['Report'];headers=[c.value for c in sheet[1]];row=[c.value for c in sheet[2]]
+        self.assertEqual(sheet.max_row,2);self.assertEqual(row[headers.index('Student')],self.s.name);self.assertEqual(sheet.cell(2,headers.index('Student')+1).data_type,'s')
+        self.assertEqual(row[headers.index('Payable')],1000);self.assertEqual(row[headers.index('Remaining')],700)
+        self.assertIn(('person_id',str(self.s.id)),list(book['Filters'].values));self.assertEqual(sheet.freeze_panes,'A2')
+    def test_excel_attendance_has_saved_marks_and_unmarked_days(self):
+        import io
+        from openpyxl import load_workbook
+        db.session.add(self.m['daily'](kind='student',person_id=self.s.id,day=date(2026,9,1),status='Present'));db.session.commit()
+        response=self.get('attendance/attendance-sheet?from=2026-09-01&to=2026-09-02&export=xlsx');self.assertEqual(response.status_code,200)
+        rows=list(load_workbook(io.BytesIO(response.data))['Report'].values);self.assertIn((self.s.id,None,self.s.name,'P','—'),rows)
+    def test_individual_attendance_branding_receives_person_campus_and_saved_times(self):
+        Item=app.extensions['school_settings_models']['item'];db.session.add(self.rm['employee'](employee_id=self.e.id,data={'campus':'Campus A','bank_info':'Fictional bank'}))
+        db.session.add(Item(kind='hrm-branding',scope='Campus A',name='Individual Attendance Report',data=dict(header='[emp_name]|[emp_id]|[date]|[time]|[qr_status]',body='',footer='')))
+        db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,1),status='Late',time_in='08:15'));db.session.commit()
+        page=self.get('attendance/staff-attendance-report?from=2026-09-01&to=2026-09-01&person_id='+str(self.e.id));self.assertEqual(page.status_code,200)
+        self.assertIn(b'Fictional Teacher|T1|2026-09-01|08:15|Late',page.data);self.assertNotIn(b'[emp_name]',page.data)
+    def test_student_attendance_branding_uses_actual_details_not_other_pupil(self):
+        Item=app.extensions['school_settings_models']['item'];db.session.add(self.rm['student'](student_id=self.s.id,data={'campus':'Campus A','roll_no':'0007','section':'A'}))
+        db.session.add(Item(kind='exam-branding',scope='Campus A',name='Individual Attendance Report',data=dict(header='[studentName]|[fatherName]|[rollNo]|[sectionName]|[attendance]',body='',footer='')))
+        db.session.add(self.m['daily'](kind='student',person_id=self.s.id,day=date(2026,9,1),status='Absent'));db.session.commit()
+        page=self.get('attendance/individual-attendance?from=2026-09&to=2026-09&person_id='+str(self.s.id));self.assertEqual(page.status_code,200);self.assertIn(b'Fictional Pupil|Fictional Father|0007|A|Absent: 1',page.data)

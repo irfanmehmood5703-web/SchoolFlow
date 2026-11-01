@@ -48,7 +48,7 @@ def configure_institute_setup(app, db):
         if request.method=='POST':
             token=request.form.get('_csrf','')
             if not token or not hmac.compare_digest(token,session.get('record_csrf','')):abort(400,'Reload this form before saving.')
-            if request.form.get('action') in ('map','campus','copy_maps','undo_map'):app.extensions['admission_capacity']['lock']()
+            if request.form.get('action') in ('map','campus','copy_maps','undo_map','complete_setup'):app.extensions['admission_capacity']['lock']()
 
     @bp.errorhandler(ValueError)
     def invalid(exc):
@@ -130,7 +130,9 @@ def configure_institute_setup(app, db):
     def index():
         if request.method=='POST':
             action=request.form.get('action')
-            if action=='profile':
+            if action=='complete_setup':
+                app.extensions['setup_readiness_helpers']['complete'](request.form.get('setup_review_token',''),request.form.get('version',''))
+            elif action=='profile':
                 row=db.session.get(SchoolSetup,1);version(row)
                 data=dict(row.data or {}) if row else {}
                 for key in ('name','slogan','website','contact','address','owner_name','owner_designation','owner_email','owner_contact'):
@@ -221,7 +223,8 @@ def configure_institute_setup(app, db):
         profile=db.session.get(SchoolSetup,1);campuses=SchoolCampus.query.order_by(SchoolCampus.name).all();maps=SchoolClassMap.query.order_by(SchoolClassMap.campus,SchoolClassMap.class_name).all()
         edit_campus=db.session.get(SchoolCampus,request.args['campus_edit']) if request.args.get('campus_edit') else None
         edit_map=db.session.get(SchoolClassMap,(request.args.get('campus'),request.args.get('class_name'))) if request.args.get('edit')=='map' else None
-        return render_template('institute_setup.html',setup_history=Audit.query.filter(Audit.action.in_(['Update class map','Undo class map','Update institute profile','Update campus','Update academic year','Update advanced settings default','Copy class maps'])).order_by(Audit.id.desc()).limit(30).all(),copy_maps=SchoolClassMap.query.filter_by(campus=request.args.get('copy_from',''),active=True).all(),copy_from=request.args.get('copy_from',''),title='Institute Setup',profile=profile,config=profile.data if profile else {},campuses=campuses,mappings=maps,options=choices(),edit_campus=edit_campus,edit_map=edit_map)
+        readiness=app.extensions['setup_readiness_helpers']['snapshot']()
+        return render_template('institute_setup.html',readiness=readiness,setup_review_token=app.extensions['setup_readiness_helpers']['token'](readiness),setup_history=Audit.query.filter(Audit.action.in_(['Update class map','Undo class map','Update institute profile','Update campus','Update academic year','Update advanced settings default','Copy class maps','Complete institute setup'])).order_by(Audit.id.desc()).limit(30).all(),copy_maps=SchoolClassMap.query.filter_by(campus=request.args.get('copy_from',''),active=True).all(),copy_from=request.args.get('copy_from',''),title='Institute Setup',profile=profile,config=profile.data if profile else {},campuses=campuses,mappings=maps,options=choices(),edit_campus=edit_campus,edit_map=edit_map)
 
     @bp.get('/admission-options')
     def admission_options():return jsonify(payload())

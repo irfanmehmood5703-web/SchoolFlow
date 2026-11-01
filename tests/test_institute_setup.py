@@ -132,3 +132,32 @@ class InstituteSetupTests(unittest.TestCase):
         self.assertEqual(self.post(action='undo_map',event_id=str(first.id)).status_code,422)
         last=Audit.query.filter_by(action='Update class map').order_by(Audit.id.desc()).first()
         self.assertEqual(self.post(action='undo_map',event_id=str(last.id)).status_code,302);self.assertEqual(row.data['sections'],['A'])
+
+    def setup_token(self,response):
+        import html
+        self.assertEqual(response.status_code,200);return html.unescape(re.search(rb'name="setup_review_token" value="([^"]+)"',response.data)[1].decode())
+    def make_ready(self):
+        Profile=self.models['profile'];Campus=self.models['campus'];Map=self.models['mapping'];Head=app.extensions['fee_setup_models']['head'];Schedule=app.extensions['fee_setup_models']['schedule']
+        db.session.add(Profile(id=1,data=dict(name='Fictional ready school',current_session='2026-27',year_start='2026-04-01',year_end='2027-03-31',ui_mode='light')))
+        db.session.add(Campus(name='Campus A',active=True));db.session.add(Map(campus='Campus A',class_name='Class A',active=True,data=dict(sections=['A'],groups=['General'],fee_plans=['Plan A'],academic_session='2026-27')))
+        db.session.add(Head(key='Tuition Fee',label='Tuition Fee',timing='monthly',months=[],custom=False));db.session.add(Schedule(name='Plan A',campus='Campus A',class_name='Class A',description='',due_day=10,lines=[dict(key='Tuition Fee',amount=100000)]));db.session.commit()
+    def test_setup_readiness_checks_actual_saved_data_without_writes(self):
+        page=self.c.get('/workspace/core/institute');self.assertIn(b'Needs attention',page.data);self.assertEqual(self.models['profile'].query.count(),0)
+        self.assertEqual(self.post(action='complete_setup',version='0',setup_review_token=self.setup_token(page)).status_code,422)
+        self.make_ready();page=self.c.get('/workspace/core/institute');self.assertIn(b'Setup readiness',page.data);self.assertNotIn(b'<td>Needs attention</td>',page.data)
+    def test_complete_setup_requires_fresh_review_and_preserves_operational_records(self):
+        self.make_ready();page=self.c.get('/workspace/core/institute');token=self.setup_token(page)
+        self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=token).status_code,302)
+        profile=self.models['profile'].query.one();self.assertTrue(profile.data['setup_activated_at']);self.assertEqual(profile.data['name'],'Fictional ready school')
+        self.assertEqual(Student.query.count(),0);self.assertEqual(app.extensions['ops_models']['bill'].query.count(),0);self.assertEqual(app.extensions['ops_models']['salary'].query.count(),0)
+        self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=token).status_code,422)
+    def test_stale_or_cross_session_setup_review_cannot_complete(self):
+        self.make_ready();page=self.c.get('/workspace/core/institute');token=self.setup_token(page);head=app.extensions['fee_setup_models']['head'].query.one();head.label='Changed';db.session.commit()
+        self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=token).status_code,422)
+        token=self.setup_token(self.c.get('/workspace/core/institute'));other=app.test_client();other.get('/workspace/core/institute')
+        with other.session_transaction() as sess:csrf=sess['record_csrf']
+        self.assertEqual(other.post('/workspace/core/institute',data=dict(_csrf=csrf,action='complete_setup',version='1',setup_review_token=token)).status_code,422)
+    def test_copied_map_without_matching_fee_schedule_is_not_ready(self):
+        self.make_ready();Schedule=app.extensions['fee_setup_models']['schedule'];db.session.delete(Schedule.query.one());db.session.commit()
+        page=self.c.get('/workspace/core/institute');self.assertIn(b'<td>Needs attention</td>',page.data)
+        self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=self.setup_token(page)).status_code,422)

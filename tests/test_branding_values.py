@@ -163,3 +163,15 @@ class BrandingValueTests(unittest.TestCase):
         for changes in [dict(exam_date='2026-02-30'),dict(exam_from='25:00'),dict(exam_to='08:00')]:
             self.assertEqual(self.c.post('/workspace/rolls',data={**form,**changes}).status_code,422)
         self.assertEqual(self.ops['audit'].query.count(),0)
+
+    def test_salary_table_branding_receives_selected_totals_and_employee_bank_info(self):
+        self.employee_detail.data={**self.employee_detail.data,'bank_info':'Fictional bank account'}
+        self.template('[emp_name]|[salary_month]|[total_salary_amount]|[salary_date]',kind='hrm-branding',name='Bank Salary Sheet')
+        salary=self.ops['salary'](employee_id=self.employee.id,month='2026-09',earnings=100000,deductions=10000,net=90000,paid=90000,paid_date=date(2026,10,1),detail={'plan':{},'attendance':[]});db.session.add(salary);db.session.commit()
+        page=self.c.post('/workspace/payroll',data=dict(_csrf=self.csrf,action='bank',month='2026-09',ids=str(salary.id)));self.assertEqual(page.status_code,200)
+        self.assertIn(b'Fictional Employee|2026-09|900.00|2026-10-01',page.data);self.assertIn(b'Fictional bank account',page.data)
+    def test_monthly_staff_branding_receives_employee_fields_and_private_asset(self):
+        self.template('[emp_name]|[emp_id]|[department_name]|[salary_month]',kind='hrm-branding',name='Monthly Attendance')
+        self.employee_detail.data={**self.employee_detail.data,'department':'Academics'};db.session.commit()
+        page=self.c.get('/workspace/core/hrm/monthly-attendance?month=2026-09&employee_id='+str(self.employee.id));self.assertEqual(page.status_code,200)
+        self.assertIn(b'Fictional Employee|TEST-E-1|Academics|2026-09',page.data)

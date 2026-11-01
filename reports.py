@@ -5,6 +5,7 @@ from datetime import date,timedelta
 from decimal import Decimal,InvalidOperation
 from flask import Blueprint,abort,redirect,render_template,request,url_for
 from module_catalog import TITLES
+from report_exports import report_xlsx
 
 FEE_REPORTS={'fee-report','daily-fees','class-fees','student-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'}
 ATTENDANCE_REPORTS={'combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'}
@@ -44,7 +45,10 @@ def configure_reports(app,db,Student,Employee):
         response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"';return response
     def response(view,headers,rows,totals=None,**kw):
         if request.args.get('export')=='csv':return export(headers,rows,view)
-        return render_template('reports.html',title=TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},options=options,today=date.today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
+        if request.args.get('export')=='xlsx':
+            try:return report_xlsx(headers,rows,view)
+            except ValueError as error:fail(str(error))
+        return render_template('reports.html',title=TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=date.today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
     def cash(value):return f'{value/100:,.2f}'
 
     @bp.route('/fees/<view>')
@@ -115,6 +119,16 @@ def configure_reports(app,db,Student,Employee):
         persons={p.id:p for p in cls.query.all() if match(p,person_kind)}
         records=Daily.query.filter(Daily.kind==kind,Daily.day>=start,Daily.day<=end,Daily.person_id.in_(persons)).order_by(Daily.day,Daily.person_id).all()
         statuses=['Present','Absent','Late','Leave','Short Leave','Off Day','Death Leave','Paper Leave','Sandwich Leave']
+        focus=next(iter(persons.values())) if request.args.get('person_id') and len(persons)==1 else None
+        values={};campus=request.args.get('campus','')
+        if focus:
+            raw=app.extensions['record_helpers']['raw_many'](person_kind,[focus]).get(focus.id,{})
+            campus=raw.get('campus','');values=app.extensions['branding_values'][person_kind](focus,raw)
+            summary=Counter(r.status for r in records)
+            values.update(attendance='; '.join(f'{status}: {summary[status]}' for status in statuses if summary[status]))
+            if len(records)==1:values.update(time=records[0].time_in,qr_att_status=records[0].status,qr_in_status=records[0].time_in,qr_status=records[0].status)
+        values.update(date=start.isoformat() if start==end else f'{start.isoformat()} – {end.isoformat()}',salary_month=start.strftime('%Y-%m') if start.strftime('%Y-%m')==end.strftime('%Y-%m') else f'{start:%Y-%m} – {end:%Y-%m}')
+        request.report_branding_context=dict(values=values,campus=campus,person=focus)
         counts={id:Counter() for id in persons};byday=defaultdict(Counter);lookup={}
         for r in records:counts[r.person_id][r.status]+=1;byday[r.day][r.status]+=1;lookup[(r.person_id,r.day)]=r.status
         if view=='daily-attendance':

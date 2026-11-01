@@ -756,7 +756,13 @@ def configure_operations(app, db, Student, Employee):
                 staff_details=app.extensions['record_helpers']['raw_many']('employee',list(staff.values()))
                 app.extensions['branding_values']['prefetch_employees'](list(staff.values()))
                 for salary in rows:print_groups.setdefault(staff_details.get(salary.employee_id,{}).get('campus',''),[]).append(salary)
-                return render('salary_print.html',print_groups=print_groups,details=lambda p,kind='employee':staff_details.get(p.id,{}),title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
+                group_values={}
+                for campus,selected_rows in print_groups.items():
+                    values=app.extensions['branding_values']['salary'](selected_rows[0],staff[selected_rows[0].employee_id],staff_details.get(selected_rows[0].employee_id,{})) if len(selected_rows)==1 else {}
+                    months=sorted({s.month for s in selected_rows});dates=sorted({s.paid_date.isoformat() for s in selected_rows if s.paid_date})
+                    values.update(salary_month=', '.join(months),salary_date=', '.join(dates),total_salary_amount=f'{sum(s.net for s in selected_rows)/100:,.2f}',earnings=f'{sum(s.earnings for s in selected_rows)/100:,.2f}',deductions=f'{sum(s.deductions for s in selected_rows)/100:,.2f}',net_salary=f'{sum(s.net for s in selected_rows)/100:,.2f}')
+                    group_values[campus]=values
+                return render('salary_print.html',group_values=group_values,print_groups=print_groups,details=lambda p,kind='employee':staff_details.get(p.id,{}),title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
             else: raise ValueError('Invalid salary action.')
             return redirect(url_for('ops.payroll',view=view,month=m))
         rows=Salary.query.filter_by(month=m).order_by(Salary.id.desc()).all()
@@ -908,7 +914,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v23')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v24')
 
     @app.route('/api/v1/summary')
     def summary_api():

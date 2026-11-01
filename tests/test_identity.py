@@ -425,5 +425,15 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual(response.status_code,200);self.assertIn(host,make.call_args[0][0]);self.assertNotIn('school-b' if code=='TEST-A' else 'school-a',make.call_args[0][0])
 
 
+    def test_report_excel_export_keeps_institute_data_separate(self):
+        import io
+        from openpyxl import load_workbook
+        for code,own,other in [('TEST-A','Only School A','Only School B'),('TEST-B','Only School B','Only School A')]:
+            self.login(code);response=self.client.get('/workspace/reports/fees/student-fees?from=2026-10&to=2026-10&export=xlsx')
+            self.assertEqual(response.status_code,200)
+            values=list(load_workbook(io.BytesIO(response.data))['Report'].values);text=str(values)
+            self.assertIn(own,text);self.assertNotIn(other,text)
+
+
 if __name__ == '__main__':
     unittest.main()

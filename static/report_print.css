@@ -1,0 +1,9 @@
+@page sf-report-table{size:A4 landscape;margin:12mm}
+@media print{
+ .report-print-document{page:sf-report-table}
+ .report-table-output{break-inside:auto!important;padding:0!important;border:0!important;overflow:visible!important}
+ .report-table-output table{width:100%;border-collapse:collapse;table-layout:auto;font-size:9px}
+ .report-table-output thead{display:table-header-group}.report-table-output tfoot{display:table-footer-group}
+ .report-table-output tr{break-inside:avoid}.report-table-output td,.report-table-output th{overflow-wrap:anywhere;white-space:normal}
+ .table-search,.report-controls{display:none!important}
+}
