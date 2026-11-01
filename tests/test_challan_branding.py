@@ -113,3 +113,37 @@ class ChallanBrandingTests(unittest.TestCase):
         self.assertEqual(response.status_code,200);self.assertLessEqual(len(queries),16,queries)
         self.assertFalse(any('record_file.content' in q for q in queries));self.assertNotIn(b'BATCH_PRIVATE_BYTES',response.data)
         self.assertEqual(response.data.count(b'alt="Student photo"'),45)
+
+    def test_consumer_reference_is_stable_and_prefix_changes_affect_only_new_accounts(self):
+        helper=app.extensions['challan_consumer_helpers'];original=helper['many']([self.bill])[self.bill.id]
+        self.assertTrue(original.startswith('SF-'));self.post(consumer_prefix='SCHOOL',consumer_mode='bill')
+        another=self.invoice(self.s);db.session.commit();new=helper['many']([another])[another.id]
+        self.assertTrue(new.startswith('SCHOOL-'));self.assertNotEqual(original,new)
+        self.assertEqual(helper['many']([self.bill])[self.bill.id],original)
+    def test_family_references_share_only_explicit_family_and_blank_families_stay_separate(self):
+        self.post(consumer_mode='family');s2=self.student('ConsumerB','Campus A','F-1');s3=self.student('ConsumerC','Campus B','F-1');blank=self.student('ConsumerBlank','Campus A','')
+        b1=self.invoice(self.s);b2=self.invoice(s2);b3=self.invoice(s3);b4=self.invoice(blank);b5=self.invoice(blank);db.session.commit()
+        refs=app.extensions['challan_consumer_helpers']['many']([b1,b2,b3,b4,b5]);self.assertEqual(refs[b1.id],refs[b2.id]);self.assertNotEqual(refs[b1.id],refs[b3.id]);self.assertNotEqual(refs[b4.id],refs[b5.id])
+    def test_payment_qr_uses_supplied_https_link_remaining_amount_and_private_route(self):
+        from unittest.mock import patch
+        from PIL import Image
+        import io,qrcode
+        url='https://payments.example.invalid/pay?reference={consumer}&bill={bill}&amount={amount}'
+        self.assertEqual(self.post(payment_url=url,show_payment_qr='1').status_code,302)
+        page=self.print();self.assertIn(b'alt="School payment link QR"',page.data);ref=app.extensions['challan_consumer_helpers']['many']([self.bill])[self.bill.id]
+        real=qrcode.make
+        with patch('challan_consumers.qrcode.make',wraps=real) as make:response=self.c.get('/workspace/core/fees/challan-payment-qr/'+str(self.bill.id))
+        self.assertEqual(response.status_code,200);self.assertEqual(Image.open(io.BytesIO(response.data)).format,'PNG');self.assertIn(ref,make.call_args[0][0]);self.assertIn('amount=2000.00',make.call_args[0][0]);self.assertEqual(response.headers['Cache-Control'],'no-store')
+        self.bill.paid+=self.bill.remaining;db.session.commit();self.assertEqual(self.c.get('/workspace/core/fees/challan-payment-qr/'+str(self.bill.id)).status_code,404)
+    def test_payment_url_and_reference_rules_reject_malformed_values(self):
+        for changes in [dict(consumer_prefix='bad prefix'),dict(consumer_mode='other'),dict(payment_url='javascript:alert(1)'),dict(payment_url='https://user:pass@example.invalid/'),dict(payment_url='https://example.invalid/{unknown}'),dict(payment_url='https://{consumer}.example.invalid/'),dict(payment_url='https://example.invalid:bad/'),dict(show_payment_qr='1',payment_url='')]:
+            self.assertEqual(self.post(**changes).status_code,422,changes)
+    def test_legacy_reference_assignment_requires_current_review_and_never_changes_money(self):
+        import html
+        Ref=app.extensions['challan_consumer_models']['reference'];Ref.query.filter_by(bill_id=self.bill.id).delete();db.session.commit()
+        before=(self.bill.total,self.bill.paid,self.bill.discount);path='/workspace/core/fees/challan-consumer-backfill'
+        page=self.c.get(path);token=html.unescape(re.search(rb'name="preview_token" value="([^"]+)"',page.data)[1].decode());self.assertEqual(Ref.query.count(),0)
+        self.post(consumer_prefix='NEW');self.assertEqual(self.c.post(path,data={'_csrf':self.csrf,'preview_token':token}).status_code,422)
+        page=self.c.get(path);token=html.unescape(re.search(rb'name="preview_token" value="([^"]+)"',page.data)[1].decode())
+        self.assertEqual(self.c.post(path,data={'_csrf':self.csrf,'preview_token':token}).status_code,302);self.assertEqual(before,(self.bill.total,self.bill.paid,self.bill.discount));self.assertEqual(Ref.query.count(),1)
+        self.assertEqual(self.c.post(path,data={'_csrf':self.csrf,'preview_token':token}).status_code,422)

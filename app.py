@@ -1,6 +1,7 @@
 """SchoolFlow pre-test application. Existing starter tables are retained."""
 import os
 import secrets
+import sys
 from datetime import date
 from flask import Flask, redirect, request, url_for
 from flask_sqlalchemy import SQLAlchemy
@@ -86,6 +87,8 @@ from fee_setup import configure_fee_setup
 configure_fee_setup(app,db,Student)
 from challan_branding import configure_challan_branding
 configure_challan_branding(app,db,Student)
+from challan_consumers import configure_challan_consumers
+configure_challan_consumers(app,db)
 from fee_increments import configure_fee_increments
 configure_fee_increments(app,db,Student)
 from fine_queue import configure_fine_queue
@@ -94,6 +97,9 @@ from attendance_fines import configure_attendance_fines
 configure_attendance_fines(app,db,Student)
 from late_fees import configure_late_fees
 configure_late_fees(app,db,Student)
+from fine_automation import configure_fine_automation
+configure_fine_automation(app,db,Student)
+app.config['FINE_WORKER_ENABLED']=os.getenv('SCHOOLFLOW_FINE_WORKER','0')=='1'
 from student_import import configure_student_import
 configure_student_import(app,db,Student)
 
@@ -133,6 +139,9 @@ def headers(response):
 
 with app.app_context():
     db.create_all()
+
+if 'gunicorn' in os.path.basename(sys.argv[0]):
+    app.extensions['fine_automation_helpers']['start_worker']()
 
 if __name__=='__main__':
     app.run(host='0.0.0.0',port=int(os.getenv('PORT',5000)),debug=False)

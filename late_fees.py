@@ -160,6 +160,24 @@ def configure_late_fees(app,db,Student):
             policy_scope=copy.deepcopy(existing[0].get('assessment_scope',{})) if existing else dict(campus=campus,class_name=cls,policy_campus=row.scope if row else '',policy_class=row.name if row else '')
             rows.append(dict(bill=b,student=s,campus=campus,class_name=cls,policy_scope=policy_scope,config=config,basis_due=basis_due,stamp=stamp,basis_values=basis,calculation=calculation,existing=previous,delta=delta,reason=reason,saved_policy=bool(existing)))
         return rows,sources
+    def apply_rows(rows,asof,automation=None):
+        changed=[]
+        for row in rows:
+            if not row['delta']:continue
+            b=row['bill'];line=dict(particular=row['config']['head'],display_name=row['config']['head_label'],amount=row['delta'],kind='late_fee',origin_bill_id=b.id,basis_due=row['basis_due'].isoformat(),basis_values=row['basis_values'],policy_source=row['stamp'],assessment_scope=row['policy_scope'],assessed_through=asof.isoformat(),policy=copy.deepcopy(row['config']),cumulative_target=row['calculation']['total'])
+            if automation is not None:line['automation']=automation
+            before=copy.deepcopy(b.lines)
+            if row['config'].get('next_challan'):
+                first=date.fromisoformat(b.month+'-01')
+                if first.year==9999 and first.month==12:raise ValueError('The source challan month cannot be forwarded.')
+                target=first.replace(year=first.year+1,month=1) if first.month==12 else first.replace(month=first.month+1)
+                Charge=app.extensions['fine_charge_model']
+                db.session.add(Charge(student_id=b.student_id,kind='late',origin_bill_id=b.id,source=f"late:{b.id}:{row['calculation']['total']}",target_month=target.strftime('%Y-%m'),amount=row['delta'],data=dict(line=copy.deepcopy(line))))
+            else:b.lines=[*b.lines,line]
+            changed.append(dict(bill_id=b.id,before=before,added=line))
+        if changed:db.session.add(Audit(action='Automatic late fees' if automation is not None else 'Apply reviewed late fees',data=dict(asof=asof.isoformat(),owner_id=session.get('owner_id'),automation=automation,changes=changed)))
+        return changed
+
     @bp.route('/assess',methods=['GET','POST'])
     def assess():
         if request.method=='GET':return redirect(url_for('ops.fees',mode='payments'))
@@ -181,20 +199,7 @@ def configure_late_fees(app,db,Student):
         if asof>today():raise ValueError('Future dates are simulation only. Choose today or an earlier assessment date.')
         rows,sources=assessed(payload['ids'],asof)
         if sources!=payload['sources']:raise ValueError('A selected challan, student or policy changed. Preview again; no fines were saved.')
-        changed=[]
-        for row in rows:
-            if not row['delta']:continue
-            b=row['bill'];line=dict(particular=row['config']['head'],display_name=row['config']['head_label'],amount=row['delta'],kind='late_fee',origin_bill_id=b.id,basis_due=row['basis_due'].isoformat(),basis_values=row['basis_values'],policy_source=row['stamp'],assessment_scope=row['policy_scope'],assessed_through=asof.isoformat(),policy=copy.deepcopy(row['config']),cumulative_target=row['calculation']['total'])
-            before=copy.deepcopy(b.lines)
-            if row['config'].get('next_challan'):
-                first=date.fromisoformat(b.month+'-01')
-                if first.year==9999 and first.month==12:raise ValueError('The source challan month cannot be forwarded.')
-                target=first.replace(year=first.year+1,month=1) if first.month==12 else first.replace(month=first.month+1)
-                Charge=app.extensions['fine_charge_model']
-                db.session.add(Charge(student_id=b.student_id,kind='late',origin_bill_id=b.id,source=f"late:{b.id}:{row['calculation']['total']}",target_month=target.strftime('%Y-%m'),amount=row['delta'],data=dict(line=copy.deepcopy(line))))
-            else:b.lines=[*b.lines,line]
-            changed.append(dict(bill_id=b.id,before=before,added=line))
-        if changed:db.session.add(Audit(action='Apply reviewed late fees',data=dict(asof=asof.isoformat(),owner_id=session.get('owner_id'),changes=changed)))
+        changed=apply_rows(rows,asof)
         commit();flash(f'{len(changed)} challans assessed; next-challan policies were queued and no duplicate fine was added.','success');return redirect(url_for('ops.fees',mode='payments'))
     @app.cli.command('institute-late-policy')
     @click.option('--code',required=True)
@@ -242,5 +247,5 @@ def configure_late_fees(app,db,Student):
             finally:
                 db.session.remove();g.pop('institute_engine',None)
 
-    app.extensions['late_fee_helpers']=dict(selection=selection,head_used=lambda key:any(r.data.get('head')==key for r in policies()))
+    app.extensions['late_fee_helpers']=dict(selection=selection,assessed=assessed,apply=apply_rows,head_used=lambda key:any(r.data.get('head')==key for r in policies()))
     app.register_blueprint(bp)

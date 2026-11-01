@@ -150,3 +150,16 @@ class BrandingValueTests(unittest.TestCase):
         db.session.add_all([first,second]);db.session.commit()
         page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertEqual(page.status_code,200);self.assertIn(b'&lt;Study well&gt;',page.data);self.assertNotIn(b'<Study well>',page.data)
         second.obtained=None;db.session.commit();self.assertNotIn(b'&lt;Study well&gt;',self.c.get('/workspace/core/exam/results/'+str(award.id)).data)
+
+    def test_roll_slip_expands_actual_exam_context_and_assigned_hall(self):
+        self.student_detail.data={**self.student_detail.data,'exam_hall':'Hall A','exam_class':'Exam Class','exam_section':'Exam Section'};db.session.commit()
+        self.template('[rollnosliptitle] [Examstartingdate] [examtimeduration] [examHall] [examRollNo]',kind='exam-branding',name='Roll No. Slip')
+        form=dict(_csrf=self.csrf,action='print',student_ids=str(self.student.id),slip_name='First Term Slip',exam_date='2026-11-15',exam_from='09:00',exam_to='11:00')
+        page=self.c.post('/workspace/rolls',data=form);self.assertEqual(page.status_code,200)
+        for value in [b'First Term Slip',b'2026-11-15',b'09:00',b'11:00',b'Hall A',b'900',b'Exam Class',b'Exam Section']:self.assertIn(value,page.data)
+        for tag in [b'[rollnosliptitle]',b'[Examstartingdate]',b'[examtimeduration]']:self.assertNotIn(tag,page.data)
+    def test_roll_slip_rejects_invalid_date_and_time_without_writes(self):
+        form=dict(_csrf=self.csrf,action='print',student_ids=str(self.student.id),exam_date='2026-11-15',exam_from='09:00',exam_to='11:00')
+        for changes in [dict(exam_date='2026-02-30'),dict(exam_from='25:00'),dict(exam_to='08:00')]:
+            self.assertEqual(self.c.post('/workspace/rolls',data={**form,**changes}).status_code,422)
+        self.assertEqual(self.ops['audit'].query.count(),0)

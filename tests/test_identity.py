@@ -385,5 +385,45 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(response.status_code,404)
 
 
+    def test_background_fine_tick_processes_only_enabled_tenant_schedules(self):
+        from datetime import datetime,timedelta
+        from zoneinfo import ZoneInfo
+        from unittest.mock import patch
+        now=datetime(2026,11,1,12,0,tzinfo=ZoneInfo('Asia/Karachi'));Item=app.extensions['school_settings_models']['item'];Head=app.extensions['fee_setup_models']['head'];Bill=app.extensions['ops_models']['bill']
+        for iid in (self.a,self.b):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](iid);db.session.remove()
+                bill=db.session.get(Bill,1);bill.due=now.date()-timedelta(days=1)
+                if iid==self.a:
+                    detail=app.extensions['record_models']['student'](student_id=1,data={'campus':'Campus Only School A'});db.session.add(detail)
+                    db.session.add(Head(key='Late Fine',label='Late Fine',timing='fine',months=[],custom=True))
+                    db.session.add(Item(kind='late-fee-policy',scope='Campus Only School A',name='',data=dict(mode='daily',rate=1000,grace=0,maximum=None,head='Late Fine',head_label='Late Fine')))
+                    db.session.add(Item(kind='late-fee-automation',scope='Campus Only School A',name='',data=dict(enabled=True,activation_day='2026-11-01',delay=1,time='00:05',defer=True,off_days=[],holidays=[])))
+                db.session.commit();db.session.remove()
+        with patch('fine_automation.local_now',return_value=now):
+            app.extensions['fine_automation_helpers']['tick_all']();app.extensions['fine_automation_helpers']['tick_all']()
+        for iid,amount in [(self.a,13345),(self.b,12345)]:
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](iid);db.session.remove();self.assertEqual(db.session.get(Bill,1).total,amount);db.session.remove()
+        g.pop('institute_engine',None)
+
+
+    def test_payment_qr_uses_only_signed_in_institute_link_and_reference(self):
+        from unittest.mock import patch
+        import qrcode
+        Item=app.extensions['school_settings_models']['item']
+        for iid,host in [(self.a,'school-a.example.invalid'),(self.b,'school-b.example.invalid')]:
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](iid);db.session.remove()
+                db.session.add(Item(kind='challan-branding',scope='',name='Fee Challan',data=dict(show_payment_qr=True,payment_url='https://'+host+'/pay?ref={consumer}')));db.session.commit();db.session.remove()
+        g.pop('institute_engine',None);path='/workspace/core/fees/challan-payment-qr/1'
+        self.assertEqual(self.client.get(path).status_code,302)
+        real=qrcode.make
+        for code,host in [('TEST-A','school-a.example.invalid'),('TEST-B','school-b.example.invalid')]:
+            self.login(code)
+            with patch('challan_consumers.qrcode.make',wraps=real) as make:response=self.client.get(path)
+            self.assertEqual(response.status_code,200);self.assertIn(host,make.call_args[0][0]);self.assertNotIn('school-b' if code=='TEST-A' else 'school-a',make.call_args[0][0])
+
+
 if __name__ == '__main__':
     unittest.main()

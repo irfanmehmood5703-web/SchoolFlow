@@ -379,7 +379,7 @@ def configure_operations(app, db, Student, Employee):
         if action=='delete':
             if any(b.paid or b.discount or b.frozen for b in rows): raise ValueError('Paid, discounted or frozen challans cannot be deleted. Reverse receipts first.')
             if request.form.get('confirm')!='yes': raise ValueError('Tick the confirmation box before deleting selected unpaid challans.')
-            if any(app.extensions.get('fine_queue_helpers',{}).get('bill_used',lambda bid:False)(b.id) for b in rows):raise ValueError('A selected challan contains posted fine liabilities. Review those charges before deletion; no debt was discarded.')
+            if any(app.extensions.get('fine_queue_helpers',{}).get('bill_used',lambda bid:False)(b.id) or app.extensions.get('fine_automation_helpers',{}).get('bill_used',lambda bid:False)(b.id) for b in rows):raise ValueError('A selected challan contains posted fine liabilities. Review those charges before deletion; no debt was discarded.')
             for b in rows: db.session.delete(b)
             audit('Delete unpaid challans',ids=ids);commit();return redirect(url_for('ops.fees',mode='payments'))
         raise ValueError('Choose an available action.')
@@ -590,7 +590,13 @@ def configure_operations(app, db, Student, Employee):
                 audit('Assign exam rolls/hall',ids=ids);commit();flash('Exam rolls and hall saved.','success')
             else:
                 students=[db.get_or_404(Student,id) for id in ids]
-                return render('roll_print.html',title=request.form.get('slip_name','Roll Number Slip'),students=students,details=details,exam_date=request.form.get('exam_date'),exam_from=request.form.get('exam_from'),exam_to=request.form.get('exam_to'))
+                exam_date=request.form.get('exam_date','');exam_from=request.form.get('exam_from','');exam_to=request.form.get('exam_to','')
+                if exam_date:day(exam_date)
+                if any(t and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',t) for t in (exam_from,exam_to)):raise ValueError('Choose valid exam times.')
+                if exam_from and exam_to and exam_to<=exam_from:raise ValueError('Exam end time must be after its start time.')
+                title=request.form.get('slip_name','Roll Number Slip').strip()[:160] or 'Roll Number Slip'
+                context=dict(rollnosliptitle=title,Examstartingdate=exam_date,examDate=exam_date,examtimeduration=(exam_from+' – '+exam_to) if exam_from and exam_to else (exam_from or exam_to))
+                return render('roll_print.html',title=title,students=students,details=details,roll_context=context,exam_date=exam_date,exam_from=exam_from,exam_to=exam_to)
         return render('rolls.html',title='Roll Number Slip',students=people(),details=details)
 
     @bp.route('/salary-plans',methods=['GET','POST'])
@@ -902,7 +908,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v22')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v23')
 
     @app.route('/api/v1/summary')
     def summary_api():

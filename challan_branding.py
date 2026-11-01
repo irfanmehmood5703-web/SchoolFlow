@@ -10,8 +10,8 @@ DEFAULTS=dict(layout='landscape',primary='#176b4a',secondary='#e7f3ec',paper='#f
               address='',contact='',bank_name='',account_title='',account_no='',iban='',
               note='',footer='Received by: __________     Stamp & Signature: __________',
               show_logo=True,show_address=True,show_contact=True,show_father=True,show_photo=False,
-              hide_zero=True,hide_status=False)
-FLAGS=('show_logo','show_address','show_contact','show_father','show_photo','hide_zero','hide_status')
+              hide_zero=True,hide_status=False,consumer_mode='bill',consumer_prefix='SF',payment_url='',show_payment_qr=False)
+FLAGS=('show_logo','show_address','show_contact','show_father','show_photo','hide_zero','hide_status','show_payment_qr')
 TEXT_LIMITS=dict(copy_1=60,copy_2=60,copy_3=60,address=500,contact=200,bank_name=160,account_title=160,account_no=100,iban=100,note=1500,footer=500)
 
 
@@ -40,6 +40,12 @@ def configure_challan_branding(app,db,Student):
         data['layout']=request.form.get('layout','')
         if data['layout'] not in ('landscape','portrait'):raise ValueError('Choose A4 landscape or portrait.')
         data.update({key:request.form.get(key)=='1' for key in FLAGS})
+        data['consumer_mode']=request.form.get('consumer_mode','bill')
+        if data['consumer_mode'] not in ('bill','family'):raise ValueError('Choose one consumer reference per challan or family.')
+        data['consumer_prefix']=request.form.get('consumer_prefix','SF').strip().upper()
+        if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{0,19}',data['consumer_prefix']):raise ValueError('Use a consumer prefix of 1–20 letters, digits or hyphens.')
+        data['payment_url']=app.extensions['challan_consumer_helpers']['validate_url'](request.form.get('payment_url','').strip())
+        if data['show_payment_qr'] and not data['payment_url']:raise ValueError('Enter the school’s HTTPS bank/payment link before enabling its QR code.')
         return data
     @bp.before_request
     def protect():
@@ -77,7 +83,7 @@ def configure_challan_branding(app,db,Student):
     def print_context(bills,action,form):
         students={s.id:s for s in Student.query.filter(Student.id.in_({b.student_id for b in bills})).all()}
         details=app.extensions['record_helpers']['raw_many']('student',list(students.values()))
-        brand=app.extensions['branding_values'];all_rows=rows();photos=brand['prefetch_photos']('student',list(students.values())) if any(settings(details.get(s.id,{}).get('campus',''),all_rows)['show_photo'] for s in students.values()) else {}
+        brand=app.extensions['branding_values'];consumers=app.extensions['challan_consumer_helpers']['many'](bills);all_rows=rows();photos=brand['prefetch_photos']('student',list(students.values())) if any(settings(details.get(s.id,{}).get('campus',''),all_rows)['show_photo'] for s in students.values()) else {}
         groups=OrderedDict()
         for bill in sorted(bills,key=lambda b:(b.student_id,b.month,b.id)):
             s=students[bill.student_id];d=details.get(s.id,{});campus=d.get('campus','')
@@ -87,10 +93,10 @@ def configure_challan_branding(app,db,Student):
                 config=settings(campus,all_rows)
                 if action in ('horizontal','vertical'):config['layout']='portrait' if action=='horizontal' else 'landscape'
                 if form.get('print_options_present')=='1':
-                    for flag in ('hide_zero','hide_status'):config[flag]=bool(form.get(flag))
+                    for flag in ('hide_zero','hide_status','show_payment_qr'):config[flag]=bool(form.get(flag))
                 groups[key]=dict(config=config,school=brand['school'](campus),campus=campus,entries=[],family=d.get('family_no','') if action=='family' else '',total=0)
             photo=photos.get(('student',s.id))
-            groups[key]['entries'].append(dict(bill=bill,student=s,details=d,photo=url_for('records.record_file',id=photo) if photo else ''))
+            groups[key]['entries'].append(dict(bill=bill,student=s,details=d,photo=url_for('records.record_file',id=photo) if photo else '',consumer=consumers.get(bill.id,''),payment_qr=url_for('challan_payment_qr',bill_id=bill.id) if app.extensions['challan_consumer_helpers']['payment_url'](bill,consumers.get(bill.id,''),groups[key]['config']) else ''))
             groups[key]['total']+=bill.remaining
         return dict(sheets=list(groups.values()))
     app.extensions['challan_branding_helpers']=dict(settings=settings,print_context=print_context)
