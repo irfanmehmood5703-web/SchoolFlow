@@ -79,7 +79,7 @@ def configure_fee_setup(app,db,Student):
         db.session.rollback();return render_template('operation_error.html',title='Check fee settings',error=str(error)),422
 
     def used_head(key):
-        return (app.extensions.get('late_fee_helpers',{}).get('head_used',lambda k:False)(key) or any(any(x['key']==key for x in r.lines) for r in FeeSchedule.query.all()) or
+        return (app.extensions.get('fine_queue_helpers',{}).get('head_used',lambda k:False)(key) or app.extensions.get('attendance_fine_helpers',{}).get('head_used',lambda k:False)(key) or app.extensions.get('late_fee_helpers',{}).get('head_used',lambda k:False)(key) or any(any(x['key']==key for x in r.lines) for r in FeeSchedule.query.all()) or
                 any(any(x['particular']==key for x in r.data['lines']) for r in P.query.all()) or
                 any(any(x.get('particular')==key for x in r.lines) for r in Bill.query.all()) or
                 any(r.data.get('particular')==key for r in W.query.filter_by(kind='fee-plans').all()))

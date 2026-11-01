@@ -362,5 +362,28 @@ class IdentityTests(unittest.TestCase):
         self.assertIn(b'Email reset delivery is not connected', page.data)
 
 
+    def test_attendance_fines_provider_scope_and_pending_liability_isolation(self):
+        Head=app.extensions['fee_setup_models']['head'];Item=app.extensions['school_settings_models']['item'];Charge=app.extensions['fine_charge_model']
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.a);db.session.remove()
+            db.session.add(Head(key='Attendance Fine',label='Private A attendance fine',timing='fine',months=[],custom=True));db.session.commit();db.session.remove()
+        runner=app.test_cli_runner();args=['institute-attendance-fine-policy','--code','TEST-A','--head','Attendance Fine','--rule','Absent:1:25']
+        self.assertNotEqual(runner.invoke(args=args).exit_code,0)
+        self.assertEqual(runner.invoke(args=args+['--expected-version','0']).exit_code,0)
+        self.assertNotEqual(runner.invoke(args=args+['--expected-version','0']).exit_code,0)
+        self.login();page=self.client.get('/workspace/core/fees/attendance-fines');self.assertIn(b'Private A attendance fine',page.data)
+        with self.client.session_transaction() as sess:csrf=sess['record_csrf']
+        self.assertEqual(self.client.post('/workspace/core/fees/attendance-fines',data=dict(_csrf=csrf,action='save',version='1')).status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.a);db.session.remove()
+            db.session.add(Charge(student_id=1,source='attendance:1:2026-09',kind='attendance',target_month='2026-10',amount=1000,data={'line':{'particular':'Attendance Fine','display_name':'Private A fine liability'}}));db.session.commit();db.session.remove()
+        self.assertIn(b'Private A fine liability',self.client.get('/workspace/core/fees/pending-fines').data)
+        self.login('TEST-B');self.assertNotIn(b'Private A attendance fine',self.client.get('/workspace/core/fees/attendance-fines').data)
+        self.assertNotIn(b'Private A fine liability',self.client.get('/workspace/core/fees/pending-fines').data)
+        with self.client.session_transaction() as sess:csrf=sess['record_csrf']
+        response=self.client.post('/workspace/core/fees/pending-fines',data={'_csrf':csrf,'action':'preview','ids':'1','bill_1':'1'})
+        self.assertEqual(response.status_code,404)
+
+
 if __name__ == '__main__':
     unittest.main()

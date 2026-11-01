@@ -88,6 +88,10 @@ from challan_branding import configure_challan_branding
 configure_challan_branding(app,db,Student)
 from fee_increments import configure_fee_increments
 configure_fee_increments(app,db,Student)
+from fine_queue import configure_fine_queue
+configure_fine_queue(app,db,Student)
+from attendance_fines import configure_attendance_fines
+configure_attendance_fines(app,db,Student)
 from late_fees import configure_late_fees
 configure_late_fees(app,db,Student)
 from student_import import configure_student_import

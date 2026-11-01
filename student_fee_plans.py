@@ -203,6 +203,7 @@ def configure_student_fee_plans(app, db, Student):
             mode=request.form.get('timing_mode','selected')
             if mode not in ('selected','auto'):raise ValueError('Choose automatic timings or selected particulars.')
             if not ids or (mode=='selected' and not heads) or not heads<=set(all_heads): raise ValueError('Select students and the fee particulars to charge for this run.')
+            fine_helper=app.extensions.get('fine_queue_helpers');fine_review=fine_helper['load_generation'](request.form.get('fine_review_token','')) if fine_helper and request.form.get('include_pending_fines')=='1' else None
             count=0;skipped=0;helper=app.extensions['fee_setup_helpers']
             for sid in ids:
                 s=db.get_or_404(Student,sid);p=current(sid,at)
@@ -221,16 +222,21 @@ def configure_student_fee_plans(app, db, Student):
                     key=f"student:{sid}:particular:{x['particular']}"
                     if request.form.get('include_arrears')=='on' and x['arrears'] and key not in used and not FeeArrearsClaim.query.filter_by(student_id=sid,particular=x['particular']).first():
                         lines.append(dict(particular=x['particular']+' — First Time Arrears',display_name=rule['label']+' — First Time Arrears',amount=x['arrears'],arrears_key=key,plan_id=p.id));claim_heads.append(x['particular'])
-                if not lines:
+                pending_fines=fine_helper['for_generation'](s,at,fine_review) if fine_review else []
+                if not lines and not pending_fines:
                     if 'timing_mode' not in request.form:raise ValueError('The selected particulars have no amount to charge for a student.')
                     skipped+=1;continue
                 if due is None and not p.data.get('due_day'):raise ValueError('Enter a due-date override for student plans without a saved due day.')
                 bill_due=due or helper['due'](at,p.data['due_day'])
                 bill=Bill(student_id=sid,month=at,due=bill_due,lines=lines,source=source);db.session.add(bill)
+                if pending_fines:
+                    db.session.flush()
+                    for charge in pending_fines:fine_helper['post'](charge,bill)
                 for head in claim_heads: db.session.add(FeeArrearsClaim(student_id=sid,particular=head,bill=bill))
                 count+=1
             db.session.add(Audit(action='Generate assigned fee challans',data=dict(month=at,count=count,skipped=skipped,mode=mode,particulars=sorted(heads))))
             commit();flash(f'{count} challans generated; {skipped} students had no due charges. Existing student/month combinations skipped.','success')
             return redirect(url_for('ops.fees',mode='payments'))
-        return render('student_fee_plan_generate.html',title='Generate from Student Fee Plans',students=[s for s in students if current(s.id)],heads=all_heads,today=date.today().isoformat())
+        fine_helper=app.extensions.get('fine_queue_helpers');pending_fines=fine_helper['rows']() if fine_helper else []
+        return render('student_fee_plan_generate.html',pending_fines=pending_fines,fine_review_token=fine_helper['token'](pending_fines) if fine_helper else '',title='Generate from Student Fee Plans',students=[s for s in students if current(s.id)],heads=all_heads,today=date.today().isoformat())
     app.register_blueprint(bp)

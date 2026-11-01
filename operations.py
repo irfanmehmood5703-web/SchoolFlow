@@ -379,6 +379,7 @@ def configure_operations(app, db, Student, Employee):
         if action=='delete':
             if any(b.paid or b.discount or b.frozen for b in rows): raise ValueError('Paid, discounted or frozen challans cannot be deleted. Reverse receipts first.')
             if request.form.get('confirm')!='yes': raise ValueError('Tick the confirmation box before deleting selected unpaid challans.')
+            if any(app.extensions.get('fine_queue_helpers',{}).get('bill_used',lambda bid:False)(b.id) for b in rows):raise ValueError('A selected challan contains posted fine liabilities. Review those charges before deletion; no debt was discarded.')
             for b in rows: db.session.delete(b)
             audit('Delete unpaid challans',ids=ids);commit();return redirect(url_for('ops.fees',mode='payments'))
         raise ValueError('Choose an available action.')
@@ -794,7 +795,7 @@ def configure_operations(app, db, Student, Employee):
         b=db.get_or_404(Bill,bill_id)
         if request.method=='POST':
             if b.frozen or b.paid or b.discount: raise ValueError('Only unpaid, undiscounted, unfrozen challans can be split in this pre-test build.')
-            if any(line.get('kind')=='late_fee' for line in b.lines):raise ValueError('Challans with assessed late fees need manual review before splitting; no fine history was discarded.')
+            if any(line.get('kind') in ('late_fee','late_fee_forward','attendance_fine') for line in b.lines):raise ValueError('Challans with assessed late fees need manual review before splitting; no fine history was discarded.')
             m=month(request.form.get('month'));due=day(request.form.get('due'))
             lines=[];left=[]
             for i,line in enumerate(b.lines):
@@ -901,7 +902,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v21')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v22')
 
     @app.route('/api/v1/summary')
     def summary_api():

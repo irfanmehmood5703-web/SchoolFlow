@@ -56,7 +56,7 @@ def configure_late_fees(app,db,Student):
         grace=request.form.get('grace','0')
         if not grace.isdigit() or not 0<=int(grace)<=3660:raise ValueError('Enter 0–3,660 grace days.')
         maximum=request.form.get('maximum','').strip();cap=money(maximum) if maximum else None
-        config=dict(mode=mode,rate=0,grace=int(grace),maximum=cap,head='',head_label='')
+        config=dict(mode=mode,rate=0,grace=int(grace),maximum=cap,head='',head_label='',next_challan=request.form.get('next_challan')=='1')
         if mode in ('fixed_double','daily_double'):
             expiry=request.form.get('expiry','')
             if not expiry.isdigit() or not 1<=int(expiry)<=3660:raise ValueError('Enter an expiry of 1–3,660 days after the due date.')
@@ -127,9 +127,11 @@ def configure_late_fees(app,db,Student):
         students={s.id:s for s in Student.query.filter(Student.id.in_({b.student_id for b in bills})).all()}
         if any(b.student_id not in students for b in bills):raise ValueError('A selected challan has no student record. Review it before assessment.')
         details=app.extensions['record_helpers']['raw_many']('student',list(students.values()));settings=policies();heads=head_map();rows=[];sources=[]
+        Charge=app.extensions['fine_charge_model'];forwarded=Charge.query.filter(Charge.kind=='late',Charge.origin_bill_id.in_(ids)).all()
         for b in bills:
             s=students[b.student_id];d=details.get(s.id,{});campus=d.get('campus','');cls=s.class_name
-            existing=[x for x in b.lines if x.get('kind')=='late_fee']
+            queued=[c for c in forwarded if c.origin_bill_id==b.id]
+            existing=[x for x in b.lines if x.get('kind')=='late_fee']+[copy.deepcopy(c.data['line']) for c in queued]
             config=copy.deepcopy(existing[0]['policy']) if existing else resolved(campus,cls,settings)[1]
             row=None if existing else resolved(campus,cls,settings)[0]
             head=heads.get(config['head']);stamp=existing[0].get('policy_source',['saved-on-challan']) if existing else [row.id if row else None,row.version if row else 0,head['version'] if head else 0]
@@ -137,7 +139,7 @@ def configure_late_fees(app,db,Student):
             basis_due=day(existing[0].get('basis_due',b.due.isoformat())) if existing else b.due
             basis=copy.deepcopy(existing[0].get('basis_values',{})) if existing else {}
             if not existing:
-                basis['owing']=max(0,sum(x['amount'] for x in b.lines if x.get('kind')!='late_fee')-b.paid-b.discount)
+                basis['owing']=max(0,sum(x['amount'] for x in b.lines if x.get('kind') not in ('late_fee','late_fee_forward','attendance_fine'))-b.paid-b.discount)
                 if config['mode'] in TUITION_MODES:
                     tuition=[x for x in b.lines if x.get('particular')=='Tuition Fee' and not x.get('arrears_key') and x.get('kind')!='late_fee']
                     if len(tuition)!=1 or not all(k in tuition[0] for k in ('actual','plan_discount')):raise ValueError('This challan has no unambiguous saved actual/decided tuition. Review it manually; no fine was saved.')
@@ -149,12 +151,12 @@ def configure_late_fees(app,db,Student):
             elif s.status!='Active':reason='Inactive student: no assessment';delta=0
             elif b.frozen:reason='Frozen challan: no assessment';delta=0
             elif b.paid or b.discount:reason='Paid/part-paid or discounted challan needs manual review';delta=0
-            elif b.total-previous<=0:reason='No original fee amount remains on this challan';delta=0
+            elif sum(x['amount'] for x in b.lines if x.get('kind') not in ('late_fee','late_fee_forward','attendance_fine'))<=0:reason='No original fee amount remains on this challan';delta=0
             elif config['mode']=='none':reason='No enabled late-fee policy';delta=0
             elif not existing and (not head or head['timing']!='fine'):raise ValueError('The configured fine head changed. Review its policy before assessment.')
             elif any(x.get('particular')==config['head'] and x.get('kind')!='late_fee' for x in b.lines):reason='An untracked amount already uses this fine head; manual review required';delta=0
             digest=hashlib.sha256(json.dumps(b.lines,sort_keys=True,separators=(',',':')).encode()).hexdigest()
-            sources.append([b.id,b.version,b.due.isoformat(),b.paid,b.discount,b.frozen,digest,s.id,s.status,s.name,campus,cls,stamp,config])
+            sources.append([b.id,b.version,b.due.isoformat(),b.paid,b.discount,b.frozen,digest,s.id,s.status,s.name,campus,cls,stamp,config,[[c.id,c.version,c.amount,c.bill_id] for c in queued]])
             policy_scope=copy.deepcopy(existing[0].get('assessment_scope',{})) if existing else dict(campus=campus,class_name=cls,policy_campus=row.scope if row else '',policy_class=row.name if row else '')
             rows.append(dict(bill=b,student=s,campus=campus,class_name=cls,policy_scope=policy_scope,config=config,basis_due=basis_due,stamp=stamp,basis_values=basis,calculation=calculation,existing=previous,delta=delta,reason=reason,saved_policy=bool(existing)))
         return rows,sources
@@ -183,10 +185,17 @@ def configure_late_fees(app,db,Student):
         for row in rows:
             if not row['delta']:continue
             b=row['bill'];line=dict(particular=row['config']['head'],display_name=row['config']['head_label'],amount=row['delta'],kind='late_fee',origin_bill_id=b.id,basis_due=row['basis_due'].isoformat(),basis_values=row['basis_values'],policy_source=row['stamp'],assessment_scope=row['policy_scope'],assessed_through=asof.isoformat(),policy=copy.deepcopy(row['config']),cumulative_target=row['calculation']['total'])
-            before=copy.deepcopy(b.lines);b.lines=[*b.lines,line]
+            before=copy.deepcopy(b.lines)
+            if row['config'].get('next_challan'):
+                first=date.fromisoformat(b.month+'-01')
+                if first.year==9999 and first.month==12:raise ValueError('The source challan month cannot be forwarded.')
+                target=first.replace(year=first.year+1,month=1) if first.month==12 else first.replace(month=first.month+1)
+                Charge=app.extensions['fine_charge_model']
+                db.session.add(Charge(student_id=b.student_id,kind='late',origin_bill_id=b.id,source=f"late:{b.id}:{row['calculation']['total']}",target_month=target.strftime('%Y-%m'),amount=row['delta'],data=dict(line=copy.deepcopy(line))))
+            else:b.lines=[*b.lines,line]
             changed.append(dict(bill_id=b.id,before=before,added=line))
         if changed:db.session.add(Audit(action='Apply reviewed late fees',data=dict(asof=asof.isoformat(),owner_id=session.get('owner_id'),changes=changed)))
-        commit();flash(f'{len(changed)} challans assessed; no duplicate fine was added.','success');return redirect(url_for('ops.fees',mode='payments'))
+        commit();flash(f'{len(changed)} challans assessed; next-challan policies were queued and no duplicate fine was added.','success');return redirect(url_for('ops.fees',mode='payments'))
     @app.cli.command('institute-late-policy')
     @click.option('--code',required=True)
     @click.option('--campus',default='')
@@ -200,13 +209,14 @@ def configure_late_fees(app,db,Student):
     @click.option('--maximum',default='')
     @click.option('--head',default='')
     @click.option('--accept-formula',is_flag=True)
-    def operator_policy(code,campus,show,reset,expected_version,mode,rate,grace,expiry,maximum,head,accept_formula):
+    @click.option('--next-challan',is_flag=True)
+    def operator_policy(code,campus,show,reset,expected_version,mode,rate,grace,expiry,maximum,head,accept_formula,next_challan):
         """Private provider operation; --show first, then use its version for updates."""
         School=app.extensions['identity_models']['institute']
         school=School.query.filter_by(code=code.strip().upper(),active=True).first()
         if not school:raise click.ClickException('Active institute not found.')
         engine=app.extensions['identity_helpers']['engine'](school.id)
-        data=dict(mode=mode or '',rate=rate,grace=grace,expiry=expiry,maximum=maximum,head=head)
+        data=dict(mode=mode or '',rate=rate,grace=grace,expiry=expiry,maximum=maximum,head=head,next_challan='1' if next_challan else '')
         with app.test_request_context('/operator/late-policy',method='POST',data=data):
             g.institute_engine=engine;db.session.remove()
             try:
