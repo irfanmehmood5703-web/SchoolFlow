@@ -47,23 +47,35 @@ public final class Vault {
  public synchronized void configure(String code,int device,String token)throws Exception {
   EndpointPolicy.validate(EndpointPolicy.BASE,code,device,token);JSONObject next=copy();
   if(scopeChanged(code,device)){next.remove("people");next.remove("pending");next.remove("last_result");}
-  next.put("config",new JSONObject().put("base",EndpointPolicy.BASE).put("code",code).put("device",device).put("token",token));persist(next);
+  JSONObject config=new JSONObject().put("base",EndpointPolicy.BASE).put("code",code).put("device",device).put("token",token);
+  JSONObject previous=root.optJSONObject("config");
+  if(previous!=null&&!scopeChanged(code,device)&&previous.has("scope_id"))config.put("scope_id",previous.getString("scope_id"));
+  next.put("config",config);persist(next);
+ }
+ public synchronized boolean bindScope(String scope)throws Exception {
+  if(scope==null||!scope.matches("[a-f0-9]{64}"))throw new SecurityException("Gate identity could not be verified.");
+  JSONObject config=root.optJSONObject("config");if(config==null)throw new SecurityException("Connect the gate first.");
+  String old=config.optString("scope_id","");
+  if(scope.equals(old))return false;
+  JSONObject next=copy();boolean changed=!old.isEmpty()||root.has("people")||root.has("pending");
+  if(changed){next.remove("people");next.remove("pending");next.put("last_result","School/gate identity changed. Old enrollment and pending submission were cleared; verify previous web history.");}
+  next.getJSONObject("config").put("scope_id",scope);persist(next);return changed;
  }
  public synchronized List<RecognitionPolicy.Identity> people()throws JSONException {
   JSONArray rows=root.optJSONArray("people");ArrayList<RecognitionPolicy.Identity> people=new ArrayList<>();
   if(rows!=null)for(int i=0;i<rows.length();i++){
    JSONObject row=rows.getJSONObject(i);JSONArray samples=row.getJSONArray("samples");ArrayList<float[]> features=new ArrayList<>();
    for(int j=0;j<samples.length();j++){JSONArray vector=samples.getJSONArray(j);float[] v=new float[vector.length()];for(int k=0;k<v.length;k++)v[k]=(float)vector.getDouble(k);features.add(v);}
-   people.add(new RecognitionPolicy.Identity(row.getString("kind"),row.getInt("id"),row.getString("label"),features));
+   people.add(new RecognitionPolicy.Identity(row.getString("kind"),row.getInt("id"),row.getString("label"),row.getString("qr_token"),row.getString("identity_binding"),features));
   }
   return people;
  }
  public synchronized void enroll(RecognitionPolicy.Identity identity)throws Exception {
-  if(root.optJSONObject("config")==null)throw new IllegalStateException("Connect the gate first.");
+  if(root.optJSONObject("config")==null||!root.getJSONObject("config").optString("scope_id","").matches("[a-f0-9]{64}"))throw new IllegalStateException("Verify the gate connection first.");
   ArrayList<RecognitionPolicy.Identity> people=new ArrayList<>(people());people.removeIf(p->p.key().equals(identity.key()));
   if(people.size()>=500)throw new IllegalArgumentException("This test build supports up to 500 local identities.");
   people.add(identity);JSONArray rows=new JSONArray();
-  for(RecognitionPolicy.Identity p:people){JSONArray samples=new JSONArray();for(float[] v:p.samples){JSONArray a=new JSONArray();for(float x:v)a.put(x);samples.put(a);}rows.put(new JSONObject().put("kind",p.kind).put("id",p.id).put("label",p.label).put("samples",samples).put("enrolled_at",java.time.Instant.now().toString()).put("permission_attested",true));}
+  for(RecognitionPolicy.Identity p:people){JSONArray samples=new JSONArray();for(float[] v:p.samples){JSONArray a=new JSONArray();for(float x:v)a.put(x);samples.put(a);}rows.put(new JSONObject().put("kind",p.kind).put("id",p.id).put("label",p.label).put("qr_token",p.qrToken).put("identity_binding",p.binding).put("samples",samples).put("enrolled_at",java.time.Instant.now().toString()).put("permission_attested",true));}
   JSONObject next=copy();next.put("people",rows);persist(next);
  }
  public synchronized void remove(String identity)throws Exception {
@@ -74,7 +86,8 @@ public final class Vault {
  public synchronized JSONObject pending()throws JSONException {JSONObject p=root.optJSONObject("pending");return p==null?null:new JSONObject(p.toString());}
  public synchronized void queue(JSONObject body)throws Exception {
   if(root.optJSONObject("pending")!=null)throw new IllegalStateException("Resolve the pending submission first.");
-  JSONObject next=copy();next.put("pending",new JSONObject().put("body",body).put("captured_ms",System.currentTimeMillis()));persist(next);
+  String scope=root.getJSONObject("config").getString("scope_id");if(!scope.matches("[a-f0-9]{64}"))throw new IllegalStateException("Verify the gate first.");
+  JSONObject next=copy();next.put("pending",new JSONObject().put("body",body).put("scope_id",scope).put("captured_ms",System.currentTimeMillis()));persist(next);
  }
  public synchronized void finish(String eventId,String message)throws Exception {
   JSONObject pending=root.optJSONObject("pending");

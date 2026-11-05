@@ -22,20 +22,20 @@ public class GateDeviceTest {
  private final String token="FictionalGateKey_123456789012345678901234567890";
  @Before public void setup(){context=InstrumentationRegistry.getInstrumentation().getTargetContext();file=new File(context.getNoBackupFilesDir(),"gate.vault");file.delete();new File(file.getPath()+".bak").delete();}
  @After public void cleanup(){file.delete();}
- private RecognitionPolicy.Identity person(){float[] v=new float[128];v[0]=1;return new RecognitionPolicy.Identity("student",1,"Fictional enrolled pupil",Arrays.asList(v,v,v));}
+ private RecognitionPolicy.Identity person(){float[] v=new float[128];v[0]=1;return new RecognitionPolicy.Identity("student",1,"Fictional enrolled pupil","schoolflow:student:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",Arrays.asList(v,v,v));}
  private JSONObject event()throws Exception{return new JSONObject().put("event_id","fictional_event_0001").put("person_kind","student").put("person_id",1).put("direction","in").put("occurred_at",java.time.Instant.now().toString());}
  @Test public void vaultEncryptsAndPreservesExactPendingEvent()throws Exception {
-  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.enroll(person());JSONObject event=event();a.queue(event);
+  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");a.enroll(person());JSONObject event=event();a.queue(event);
   byte[] raw;try(FileInputStream in=new FileInputStream(file)){raw=new byte[(int)file.length()];assertEquals(raw.length,in.read(raw));}
   String ciphertext=new String(raw,StandardCharsets.ISO_8859_1);assertFalse(ciphertext.contains(token));assertFalse(ciphertext.contains("Fictional enrolled pupil"));
   Vault b=new Vault(context);assertEquals(token,b.config().getString("token"));assertEquals(1,b.people().size());assertEquals(event.toString(),b.pending().getJSONObject("body").toString());
   b.finish("wrong-event","wrong");assertNotNull(b.pending());b.finish(event.getString("event_id"),"Marked");assertNull(b.pending());assertEquals("Marked",new Vault(context).lastResult());
  }
  @Test public void changingInstituteClearsLocalTemplatesAndPending()throws Exception {
-  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.enroll(person());a.queue(event());a.configure("FICTIONAL-OTHER",2,token);assertTrue(a.people().isEmpty());assertNull(a.pending());
+  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");a.enroll(person());a.queue(event());a.configure("FICTIONAL-OTHER",2,token);assertTrue(a.people().isEmpty());assertNull(a.pending());
  }
  @Test public void tamperingFailsClosed()throws Exception {
-  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);
+  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   try(RandomAccessFile f=new RandomAccessFile(file,"rw")){f.seek(f.length()-1);int old=f.read();f.seek(f.length()-1);f.write(old^1);}
   boolean failed=false;try{new Vault(context);}catch(Exception e){failed=true;}assertTrue(failed);
  }
@@ -59,6 +59,17 @@ public class GateDeviceTest {
     View connection=textView(root,"Connection");assertNotNull(connection);connection.performClick();assertFalse(activity.isFinishing());
    });
   }
+ }
+
+ @Test public void newServerIncarnationClearsEnrollmentEvenWithSameCodeAndDevice()throws Exception {
+  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");a.enroll(person());a.queue(event());
+  assertTrue(a.bindScope("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));assertTrue(a.people().isEmpty());assertNull(a.pending());
+ }
+ @Test public void localQrReaderDecodesSyntheticSchoolFlowIdentity()throws Exception {
+  assertTrue(OpenCVLoader.initLocal());FaceEngine engine=new FaceEngine(context);
+  org.opencv.objdetect.QRCodeEncoder encoder=org.opencv.objdetect.QRCodeEncoder.create();
+  Mat code=new Mat(),border=new Mat(),large=new Mat(),rgba=new Mat();String token="schoolflow:student:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  try{encoder.encode(token,code);Core.copyMakeBorder(code,border,4,4,4,4,Core.BORDER_CONSTANT,new Scalar(255));org.opencv.imgproc.Imgproc.resize(border,large,new Size(),8,8,org.opencv.imgproc.Imgproc.INTER_NEAREST);org.opencv.imgproc.Imgproc.cvtColor(large,rgba,org.opencv.imgproc.Imgproc.COLOR_GRAY2RGBA);assertEquals(token,engine.readQr(rgba));}finally{code.release();border.release();large.release();rgba.release();}
  }
 
 }

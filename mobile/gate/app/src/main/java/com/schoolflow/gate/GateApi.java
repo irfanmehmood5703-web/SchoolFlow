@@ -9,10 +9,11 @@ public final class GateApi {
  public Reply post(JSONObject config,String path,JSONObject body)throws Exception {
   String base=config.getString("base"),code=config.getString("code"),token=config.getString("token");int id=config.getInt("device");
   EndpointPolicy.validate(base,code,id,token);
-  if(!path.equals("heartbeat")&&!path.equals("events"))throw new IllegalArgumentException("Invalid gate operation");
+  if(!path.equals("heartbeat")&&!path.equals("events")&&!path.equals("identity"))throw new IllegalArgumentException("Invalid gate operation");
   HttpsURLConnection c=(HttpsURLConnection)new URL(base+"/api/attendance/devices/"+id+"/"+path).openConnection();
   c.setInstanceFollowRedirects(false);c.setConnectTimeout(10_000);c.setReadTimeout(10_000);c.setRequestMethod("POST");c.setDoOutput(true);c.setUseCaches(false);
   c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("Accept","application/json");c.setRequestProperty("Authorization","Bearer "+token);c.setRequestProperty("X-Institute-Code",code);
+  if(!path.equals("heartbeat")){String scope=config.getString("scope_id");if(!scope.matches("[a-f0-9]{64}"))throw new SecurityException("Verify gate identity first.");c.setRequestProperty("X-Device-Scope",scope);}
   try {
    byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(bytes.length);try(OutputStream out=c.getOutputStream()){out.write(bytes);}
    int status=c.getResponseCode();InputStream in=status>=400?c.getErrorStream():c.getInputStream();ByteArrayOutputStream result=new ByteArrayOutputStream();

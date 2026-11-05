@@ -16,7 +16,7 @@ from sqlalchemy.orm.exc import StaleDataError
 TZ=ZoneInfo('Asia/Karachi')
 CHANNELS=('android','branded','whatsapp','none')
 DEFAULTS=dict(student_channel='android',student_only_absent=True,student_absent=60,student_late=30,staff_channel='android',staff_only_absent=False,staff_absent=0,staff_late=0,teacher_notification=False,auto_staff_absent=False,auto_staff_short=False,early_short=False,early_minutes=0,classes=[])
-API_ENDPOINTS=('attendance_devices.heartbeat','attendance_devices.ingest')
+API_ENDPOINTS=('attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card')
 
 def utc_now():return datetime.now(timezone.utc)
 
@@ -66,7 +66,16 @@ def configure_attendance_devices(app,db,Student,Employee):
         base_status=db.Column(db.String(30),nullable=False,default='')
         first_in=db.Column(db.DateTime)
         first_out=db.Column(db.DateTime)
-    app.extensions['attendance_device_models']=dict(device=Device,scan=Scan,mark=Mark)
+    class IdentityBinding(db.Model):
+        __tablename__='attendance_identity_binding'
+        id=db.Column(db.Integer,primary_key=True)
+        student_id=db.Column(db.Integer,db.ForeignKey('student.id',ondelete='CASCADE'),unique=True)
+        employee_id=db.Column(db.Integer,db.ForeignKey('employee.id',ondelete='CASCADE'),unique=True)
+        nonce=db.Column(db.String(43),nullable=False,unique=True,default=lambda:secrets.token_urlsafe(32))
+        __table_args__=(db.CheckConstraint('(student_id IS NOT NULL AND employee_id IS NULL) OR (student_id IS NULL AND employee_id IS NOT NULL)'),)
+    app.extensions['attendance_device_models']=dict(device=Device,scan=Scan,mark=Mark,binding=IdentityBinding)
+    def device_scope(device):
+        return hashlib.sha256(('schoolflow:gate-scope:'+g.attendance_namespace+':'+str(device.id)+':'+device.campus).encode()).hexdigest()
     def now():return utc_now()
     def aware(value):return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
     def local(value):return aware(value).astimezone(TZ)
@@ -218,6 +227,8 @@ def configure_attendance_devices(app,db,Student,Employee):
         if not device or device.status=='Removed' or not device.token_digest or not hmac.compare_digest(device.token_digest,digest):abort(401)
         app.extensions['admission_capacity']['lock']();db.session.refresh(device)
         if device.status=='Removed' or not device.token_digest or not hmac.compare_digest(device.token_digest,digest):abort(401)
+        claimed=request.headers.get('X-Device-Scope','')
+        if claimed and (not re.fullmatch(r'[a-f0-9]{64}',claimed) or not hmac.compare_digest(claimed,device_scope(device))):abort(409,'Device scope changed. Reconnect and verify enrollment.')
         g.attendance_device_actor=dict(kind='Device',id=device.id,label=device.name)
         return device
     def payload(allowed):
@@ -234,7 +245,7 @@ def configure_attendance_devices(app,db,Student,Employee):
             value=data.get(key,'')
             if not isinstance(value,str) or len(value)>size:raise ValueError('Check device information length.')
             if value:setattr(device,key,value)
-        seen(device,now());commit();return jsonify(status=device.status,marks=device.marks,server_time=now().isoformat())
+        seen(device,now());result=dict(status=device.status,marks=device.marks,scope_id=device_scope(device),server_time=now().isoformat());commit();return jsonify(**result)
     def notify_many(kind,person_ids,status,day,data):
         prefix='student' if kind=='student' else 'staff';channel=data[prefix+'_channel'];sms=channel!='none' and (not data[prefix+'_only_absent'] or status=='Absent');teacher=kind=='staff' and data['teacher_notification']
         if not sms and not teacher:return
@@ -294,13 +305,31 @@ def configure_attendance_devices(app,db,Student,Employee):
             expected=hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:{typ}-qr:{g.attendance_namespace}:{pid}:{code}'.encode(),hashlib.sha256).hexdigest()
             if hmac.compare_digest(value.rsplit(':',1)[1],expected):return ('student' if student else 'staff'),pid
         return ('student' if student else 'staff'),0
+    @bp.post('/api/attendance/devices/<int:did>/identity')
+    def identity_card(did):
+        data=payload(('qr_token',));device=authenticate_device(did)
+        if device.status not in ('Pending','Approved'):abort(403)
+        token=data.get('qr_token')
+        if not isinstance(token,str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',token):raise ValueError('Present a SchoolFlow identity QR.')
+        kind,pid=resolve_qr(token,device)
+        if not pid:abort(404,'Identity is unavailable for this gate.')
+        person=db.session.get(Student if kind=='student' else Employee,pid)
+        column=IdentityBinding.student_id if kind=='student' else IdentityBinding.employee_id
+        binding=IdentityBinding.query.filter(column==pid).first()
+        if not binding:
+            binding=IdentityBinding(**{('student_id' if kind=='student' else 'employee_id'):pid});db.session.add(binding);db.session.flush()
+        seen(device,now());audit('Verify attendance identity enrollment',device_id=device.id,campus=device.campus,record_kind='student' if kind=='student' else 'employee',record_id=pid)
+        result=dict(person_kind=kind,person_id=pid,name=person.name,scope_id=device_scope(device),identity_binding=binding.nonce)
+        commit()
+        return jsonify(**result)
     @bp.post('/api/attendance/devices/<int:did>/events')
     def ingest(did):
-        data=payload(('event_id','person_kind','person_id','direction','occurred_at','qr_token'));device=authenticate_device(did)
+        data=payload(('event_id','person_kind','person_id','direction','occurred_at','qr_token','identity_binding'));device=authenticate_device(did)
         if not isinstance(data.get('event_id'),str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,100}',data['event_id']) or data.get('direction') not in ('in','out'):raise ValueError('Check event ID and IN/OUT direction.')
         if 'qr_token' in data:
             if 'person_kind' in data or 'person_id' in data or not isinstance(data['qr_token'],str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',data['qr_token']):raise ValueError('Use a SchoolFlow QR token, or an identified student/staff ID, not both.')
         elif data.get('person_kind') not in ('student','staff') or type(data.get('person_id')) is not int or not 0<data['person_id']<2147483648:raise ValueError('Check student/staff ID.')
+        if 'identity_binding' in data and ('qr_token' not in data or not isinstance(data['identity_binding'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',data['identity_binding'])):raise ValueError('Use a verified identity binding with its SchoolFlow QR.')
         try:
             stamp=datetime.fromisoformat(data.get('occurred_at','').replace('Z','+00:00'))
             if stamp.tzinfo is None:raise ValueError()
@@ -314,7 +343,14 @@ def configure_attendance_devices(app,db,Student,Employee):
             kind,pid=resolve_qr(data['qr_token'],device);data={**data,'person_kind':kind,'person_id':pid}
         received=now()
         if Scan.query.filter_by(device_id=device.id).filter(Scan.received>received-timedelta(minutes=1)).count()>=600:return jsonify(error='Device event limit exceeded.'),429
-        outcome,reason,pid,name=write_event(device,data,stamp);seen(device,received)
+        binding_ok=True
+        if 'identity_binding' in data:
+            column=IdentityBinding.student_id if data['person_kind']=='student' else IdentityBinding.employee_id
+            binding=IdentityBinding.query.filter(column==data['person_id']).first()
+            binding_ok=bool(binding and hmac.compare_digest(binding.nonce,data['identity_binding']))
+        if binding_ok:outcome,reason,pid,name=write_event(device,data,stamp)
+        else:outcome,reason,pid,name='Not marked','Identity enrollment changed. Verify and re-enroll this person.',None,''
+        seen(device,received)
         row=Scan(device_id=device.id,campus=device.campus,event_id=data['event_id'],fingerprint=digest,person_kind=data['person_kind'],person_id=pid,person_name=name,direction=data['direction'],occurred=stamp,received=received,outcome=outcome,reason=reason);db.session.add(row);db.session.flush();commit()
         return jsonify(id=row.id,outcome=outcome,reason=reason,replayed=False),201
     def manual_write(row):

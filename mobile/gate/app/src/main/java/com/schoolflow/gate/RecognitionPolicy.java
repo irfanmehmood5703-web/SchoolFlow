@@ -5,12 +5,14 @@ public final class RecognitionPolicy {
  public static final int DIMENSIONS=128;
  public static final double THRESHOLD=0.55, MARGIN=0.08;
  public static final class Identity {
-  public final String kind,label; public final int id; public final List<float[]> samples;
-  public Identity(String kind,int id,String label,List<float[]> samples) {
+  public final String kind,label,qrToken,binding; public final int id; public final List<float[]> samples;
+  public Identity(String kind,int id,String label,String qrToken,String binding,List<float[]> samples) {
    if(!("student".equals(kind)||"staff".equals(kind)) || id<=0 || label==null || label.trim().isEmpty() || label.length()>120 || samples==null || samples.size()<1 || samples.size()>3) throw new IllegalArgumentException("Invalid enrollment");
+   String type=kind.equals("student")?"student":"employee";
+   if(qrToken==null||!qrToken.matches("schoolflow:"+type+":[a-f0-9]{64}")||binding==null||!binding.matches("[A-Za-z0-9_-]{43}"))throw new IllegalArgumentException("Verify the SchoolFlow identity QR first.");
    ArrayList<float[]> copy=new ArrayList<>();
    for(float[] v:samples) { validate(v); copy.add(v.clone()); }
-   this.kind=kind;this.id=id;this.label=label;this.samples=Collections.unmodifiableList(copy);
+   this.kind=kind;this.id=id;this.label=label;this.qrToken=qrToken;this.binding=binding;this.samples=Collections.unmodifiableList(copy);
   }
   public String key(){return kind+":"+id;}
  }

@@ -30,6 +30,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private volatile boolean running=false,visible=false,connected=false,clockOK=false;
  private volatile String marks="";private volatile float[] feature;private volatile long featureAt,candidateAt;
  private volatile RecognitionPolicy.Match candidate;private volatile boolean candidateStable;
+ private volatile boolean readEnrollmentQr;private volatile EditText enrollmentQrTarget;
  private long processedAt,lastContact;private Runnable protectedAction;
  private final Runnable poll=new Runnable(){public void run(){if(!visible)return;try{if(vault!=null&&vault.pending()!=null)deliver();else if(vault!=null&&(!contactValid()||SystemClock.elapsedRealtime()-lastContact>40000))heartbeat();}catch(Exception e){show("Protected storage error. Reconnect only after reviewing local data.");}ui.postDelayed(this,15000);}};
  private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -78,6 +79,10 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   Mat rgba=frame.rgba();long now=SystemClock.elapsedRealtime();
   if(!running||engine==null||now-processedAt<500)return rgba;processedAt=now;
   try {
+   if(readEnrollmentQr&&enrollmentQrTarget!=null){
+    EditText target=enrollmentQrTarget;String qr=engine.readQr(rgba);
+    if(qr.matches("schoolflow:(student|employee):[a-f0-9]{64}")){readEnrollmentQr=false;ui.post(()->{if(enrollmentQrTarget==target){target.setText(qr);show("Identity QR read. Press Verify card before enrolling the face.");}});}
+   }
    float[] current=engine.extract(rgba);feature=current;featureAt=now;
    RecognitionPolicy.Match found=current==null?null:RecognitionPolicy.match(current,known);candidate=found;candidateAt=now;candidateStable=stable.observe(found==null?null:found.identity.key(),now);
    ui.post(()->{
@@ -101,7 +106,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   new AlertDialog.Builder(this).setTitle("Verify "+found.identity.label).setMessage("Confirm this is "+found.identity.kind+" #"+found.identity.id+" and record "+dir.toUpperCase(Locale.ROOT)+"? A face score is not proof of a live person.").setNegativeButton("Cancel",null).setPositiveButton("Confirm",(dialog,which)->{
    if(!canConfirm()||candidate==null||!candidate.identity.key().equals(found.identity.key())){show("The recognized face changed or disappeared. Try again.");return;}
    try{
-    JSONObject body=new JSONObject().put("event_id",UUID.randomUUID().toString().replace("-","")).put("person_kind",found.identity.kind).put("person_id",found.identity.id).put("direction",dir).put("occurred_at",Instant.now().toString());
+    JSONObject body=new JSONObject().put("event_id",UUID.randomUUID().toString().replace("-","")).put("qr_token",found.identity.qrToken).put("identity_binding",found.identity.binding).put("direction",dir).put("occurred_at",Instant.now().toString());
     vault.queue(body);confirmedAt.put(key,SystemClock.elapsedRealtime());resetFace();show("Submitting attendance…");deliver();
    }catch(Exception e){show("Submission was not saved locally. No new mark was sent.");}
   }).show();
@@ -139,26 +144,45 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private void enrollmentDialog(){
   if(!contactValid()){show("Verify the connection and automatic device time before enrollment.");return;}
   startCamera();LinearLayout box=form();
-  Spinner kind=new Spinner(this);kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"student","staff"}));box.addView(kind);
-  EditText id=input(box,"SchoolFlow student/staff ID","",InputType.TYPE_CLASS_NUMBER),name=input(box,"Verified display name","",InputType.TYPE_CLASS_TEXT);
-  CheckBox permission=new CheckBox(this);permission.setText("I verified this person’s ID and permission to enroll their face on this school device.");box.addView(permission);
-  TextView count=text("Capture three clear samples of this same person. Photos are not saved.",14);box.addView(count);ArrayList<float[]> samples=new ArrayList<>();long[] sampled={0};
-  Button capture=button("Capture sample",()->{
+  EditText qr=input(box,"SchoolFlow student / employee QR value","",InputType.TYPE_CLASS_TEXT);
+  enrollmentQrTarget=qr;JSONObject[] verified={null};ArrayList<float[]> samples=new ArrayList<>();long[] sampled={0};
+  TextView identity=text("Scan or paste this person's SchoolFlow identity QR, then verify the card.",15);box.addView(identity);
+  box.addView(button("Read identity QR from camera",()->{readEnrollmentQr=true;show("Hold the SchoolFlow identity QR clearly in front of the camera.");}));
+  CheckBox permission=new CheckBox(this);permission.setText("I verified this person and permission to enroll their face on this school device.");box.addView(permission);
+  TextView count=text("After card verification, remove the card and capture three live samples of the same person.",14);box.addView(count);
+  qr.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int d){}public void onTextChanged(CharSequence s,int a,int b,int c){verified[0]=null;samples.clear();identity.setText("Card changed; verify it again.");}public void afterTextChanged(android.text.Editable e){}});
+  box.addView(button("Verify card with SchoolFlow",()->{
+   String value=qr.getText().toString().trim();
+   if(!value.matches("schoolflow:(student|employee):[a-f0-9]{64}")||!contactValid()){identity.setText("Use a SchoolFlow identity QR and verified gate connection.");return;}
+   if(!busy.compareAndSet(false,true)){identity.setText("Wait for the current request.");return;}
+   worker.execute(()->{
+    try{
+     JSONObject config=vault.config();GateApi.Reply reply=new GateApi().post(config,"identity",new JSONObject().put("qr_token",value));
+     if(reply.code!=200||!reply.json.getString("scope_id").equals(config.getString("scope_id")))throw new SecurityException();
+     JSONObject record=new JSONObject(reply.json.toString()).put("qr_token",value);
+     ui.post(()->{if(enrollmentQrTarget==qr&&qr.getText().toString().trim().equals(value)){verified[0]=record;samples.clear();identity.setText(record.optString("name")+" · "+record.optString("person_kind")+" #"+record.optInt("person_id"));count.setText("Identity verified. Capture three clear samples of this same person.");}});
+    }catch(Exception e){ui.post(()->{if(enrollmentQrTarget==qr)identity.setText("Identity could not be verified for this school/gate. No face enrollment saved.");});}
+    finally{busy.set(false);}
+   });
+  }));
+  box.addView(button("Capture face sample",()->{
    float[] current=feature;
-   if(current==null||SystemClock.elapsedRealtime()-featureAt>1500||SystemClock.elapsedRealtime()-sampled[0]<600){count.setText("Keep one clear face visible and wait before capturing.");return;}
+   if(verified[0]==null||current==null||SystemClock.elapsedRealtime()-featureAt>1500||SystemClock.elapsedRealtime()-sampled[0]<600){count.setText("Verify the card, remove it, and keep one clear live face visible.");return;}
    if(!samples.isEmpty()&&RecognitionPolicy.cosine(samples.get(0),current)<RecognitionPolicy.THRESHOLD){samples.clear();count.setText("Samples did not match the same person. Start again.");return;}
-   if(samples.size()<3){samples.add(current.clone());sampled[0]=SystemClock.elapsedRealtime();}
-   count.setText(samples.size()+" / 3 samples captured.");
-  });box.addView(capture);
+   if(samples.size()<3){samples.add(current.clone());sampled[0]=SystemClock.elapsedRealtime();}count.setText(samples.size()+" / 3 samples captured.");
+  }));
   AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Enroll verified identity").setView(scroll(box)).setNegativeButton("Cancel",null).setPositiveButton("Save local enrollment",null).create();
+  dialog.setOnDismissListener(d->{readEnrollmentQr=false;if(enrollmentQrTarget==qr)enrollmentQrTarget=null;});
   dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
    try{
-    if(!permission.isChecked()||samples.size()!=3||!contactValid())throw new IllegalArgumentException();
-    RecognitionPolicy.Identity identity=new RecognitionPolicy.Identity(kind.getSelectedItem().toString(),Integer.parseInt(id.getText().toString()),name.getText().toString().trim(),samples);
+    if(!permission.isChecked()||samples.size()!=3||!contactValid()||verified[0]==null)throw new IllegalArgumentException();
+    JSONObject person=verified[0];
+    if(!person.getString("scope_id").equals(vault.config().getString("scope_id")))throw new SecurityException();
+    RecognitionPolicy.Identity value=new RecognitionPolicy.Identity(person.getString("person_kind"),person.getInt("person_id"),person.getString("name"),person.getString("qr_token"),person.getString("identity_binding"),samples);
     RecognitionPolicy.Match duplicate=RecognitionPolicy.match(samples.get(0),known);
-    if(duplicate!=null&&!duplicate.identity.key().equals(identity.key())){count.setText("This face resembles another enrolled identity. Review both enrollments; do not assign it again.");return;}
-    vault.enroll(identity);known=vault.people();resetFace();dialog.dismiss();show("Local face enrollment saved. Verify with fictional trials before relying on recognition.");
-   }catch(Exception e){count.setText("Verify connection, ID/name, permission and all three samples.");}
+    if(duplicate!=null&&!duplicate.identity.key().equals(value.key())){count.setText("This face resembles another enrolled identity. Review both; do not assign it again.");return;}
+    vault.enroll(value);known=vault.people();resetFace();dialog.dismiss();show("Verified local face enrollment saved. Validate recognition with fictional trials first.");
+   }catch(Exception e){count.setText("Verify the current card/connection, permission and all three samples.");}
   }));dialog.show();
  }
  private void manageDialog(){
@@ -178,6 +202,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject config=vault.config();if(config==null){show("Connect your private institute gate first.");return;}
     GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow Gate 0.1-test"));
     if(reply.code!=200){connected=false;clockOK=false;show("Connection refused ("+reply.code+"). Check the gate key/status.");return;}
+    boolean changed=vault.bindScope(reply.json.getString("scope_id"));if(changed){known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}
     String state=reply.json.getString("status");marks=reply.json.getString("marks");lastContact=SystemClock.elapsedRealtime();clockOK=Math.abs(Duration.between(Instant.now(),OffsetDateTime.parse(reply.json.getString("server_time")).toInstant()).toMillis())<=60000;
     connected=state.equals("Pending")||state.equals("Approved");
     if(!clockOK)show("Correct automatic date/time on this device before marking.");
@@ -194,6 +219,13 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject pending=vault.pending();if(pending==null)return;JSONObject body=pending.getJSONObject("body"),config=vault.config();if(config==null)return;
     long age=System.currentTimeMillis()-pending.getLong("captured_ms");
     if(age< -60000||age>14*60*1000){vault.finish(body.getString("event_id"),"Pending event expired. Check web history and use manual attendance if necessary.");show(vault.lastResult());return;}
+    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","SchoolFlow Gate 0.1-test"));
+    if(check.code!=200){connected=false;show("Cannot verify the gate before retry. Pending mark retained.");return;}
+    String scope=check.json.getString("scope_id");
+    if(!scope.equals(pending.getString("scope_id"))){vault.bindScope(scope);known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}
+    String gateStatus=check.json.getString("status");
+    if(!(gateStatus.equals("Pending")||gateStatus.equals("Approved"))){connected=false;show("Gate is paused. No pending mark was posted.");return;}
+    if(Math.abs(Duration.between(Instant.now(),OffsetDateTime.parse(check.json.getString("server_time")).toInstant()).toMillis())>60000){connected=false;show("Correct device time before retrying the pending mark.");return;}
     GateApi.Reply reply=new GateApi().post(config,"events",body);
     if(reply.code==200||reply.code==201){
      String outcome=reply.json.getString("outcome");if(!Arrays.asList("Marked","Already marked","Not marked").contains(outcome))throw new IllegalStateException();

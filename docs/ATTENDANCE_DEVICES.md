@@ -60,3 +60,17 @@ The institute write gate serializes event claims, manual attendance, configurati
 The existing opt-in `SCHOOLFLOW_FINE_WORKER=1` process now checks enabled attendance rules too. No additional paid worker is created. Attendance checks run once per 15-minute bucket from 06:00 through 20:59 Asia/Karachi while the process is awake. Multiple workers/restarts remain repeat safe through the shared database gate and saved bucket; configured rules or explicit manual checks may rerun a bucket without duplicating marks. No previous date is backfilled.
 
 An operator can run `flask --app app attendance-tick --code <PRIVATE-CODE>` or use Run today's attendance check. Both use current saved settings, shifts, holidays and lock rules. Tick code preloads shifts, holiday rows and current marks; notification snapshots are batched. All validation so far uses fictional isolated school databases; physical reader/recognition/camera verification and durable production hosting remain separate tasks.
+
+## Native gate identity enrollment (v32)
+
+The Android SchoolFlow Gate test client performs local attended face recognition. It verifies enrollment by presenting an existing signed SchoolFlow identity QR to the new authenticated endpoint:
+
+`POST /api/attendance/devices/<device_id>/identity` with `{"qr_token":"schoolflow:student:<signed token>"}`.
+
+An available, active same-campus identity returns only that person's `person_kind`, `person_id`, `name`, `scope_id` and opaque `identity_binding`. Unknown/foreign QR codes return generic 404 and suspended gates cannot enroll. Possession of a device credential alone does not supply a bulk roster or typed-ID lookup. No face image or feature vector is accepted.
+
+Heartbeats now include an opaque `scope_id` derived from the private institute incarnation and gate/campus. Native clients pin it and send `X-Device-Scope` on identity/event requests. A changed scope returns 409 before a scan/mark is written. A new school database using an old institute code or gate number cannot silently inherit old local enrollment. Heartbeat discovery omits the scope header so a legitimately reconnected client can learn that its previous enrollment must be invalidated.
+
+The native client includes `qr_token` and `identity_binding` in each face-derived event, omitting typed identity fields. A binding belongs to the actual current student/employee entity, not just the numeric ID or editable number. New additive table `attendance_identity_binding` has unique nullable student/employee foreign keys, an exactly-one-owner constraint and database ON DELETE CASCADE. A deleted/recreated person receives a new random binding even if ID/admission number are reused. An old binding cannot mark the new person. Returned identity values are captured under the write gate before commit, avoiding a response refresh onto a later recycled row.
+
+Existing QR-scanner/adapter event payloads remain compatible; new native clients always send the stronger scope/binding fields. A bearer device key is still a trusted client capability and must be protected/revoked if compromised; this protocol does not attest that a camera actually recognized a live person. Existing private databases need the explicit operator schema upgrade for the new binding table. The native app remains an attended, debug-signed test client with physical accuracy/liveness/ARM64 camera testing and production signing outstanding.

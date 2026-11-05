@@ -7,8 +7,10 @@ import org.opencv.core.*;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.FaceDetectorYN;
 import org.opencv.objdetect.FaceRecognizerSF;
+import org.opencv.objdetect.QRCodeDetector;
 /** Local YuNet/SFace inference. No camera frame is persisted or transmitted. */
 public final class FaceEngine {
+ private final QRCodeDetector qrDetector=new QRCodeDetector();
  private final FaceDetectorYN detector;private final FaceRecognizerSF recognizer;
  public FaceEngine(Context context)throws Exception {
   String detectorPath=asset(context,"face_detection_yunet_2023mar.onnx","8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4");
@@ -35,6 +37,9 @@ public final class FaceEngine {
  synchronized int runtimeFeatureShape() {
   Mat sample=new Mat(112,112,CvType.CV_8UC3,new Scalar(127,127,127)),out=new Mat();
   try{recognizer.feature(sample,out);return (int)out.total();}finally{sample.release();out.release();}
+ }
+ public synchronized String readQr(Mat rgba){
+  Mat gray=new Mat();try{Imgproc.cvtColor(rgba,gray,Imgproc.COLOR_RGBA2GRAY);return qrDetector.detectAndDecode(gray);}finally{gray.release();}
  }
  public synchronized float[] extract(Mat rgba) {
   Mat bgr=new Mat(),faces=new Mat(),aligned=new Mat(),feature=new Mat(),face=null;
