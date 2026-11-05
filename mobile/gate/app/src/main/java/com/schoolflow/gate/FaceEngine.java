@@ -16,7 +16,7 @@ public final class FaceEngine {
   detector=FaceDetectorYN.create(detectorPath,"",new Size(320,320),0.9f,0.3f,5000);
   recognizer=FaceRecognizerSF.create(recognizerPath,"");
  }
- private static String asset(Context context,String name,String hash)throws Exception {
+ private static synchronized String asset(Context context,String name,String hash)throws Exception {
   File file=new File(context.getNoBackupFilesDir(),name);
   if(!file.exists()||!sha(file).equals(hash)){
    File temporary=new File(context.getNoBackupFilesDir(),name+".tmp");

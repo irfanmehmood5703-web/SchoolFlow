@@ -37,13 +37,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64' >/dev/null
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n schoolflow-test -k 'system-images;android-35;google_apis;x86_64' --force >/dev/null
           "$ANDROID_HOME/emulator/emulator" -avd schoolflow-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-front none -camera-back none >/tmp/schoolflow-emulator.log 2>&1 &
           gate_emulator_pid=$!
-          trap 'kill "$gate_emulator_pid" 2>/dev/null || true' EXIT
+          trap 'gate_exit=$?; if [ "$gate_exit" -ne 0 ]; then tail -n 60 /tmp/schoolflow-emulator.log; fi; kill "$gate_emulator_pid" 2>/dev/null || true; exit "$gate_exit"' EXIT
           timeout 180 adb wait-for-device
           for gate_attempt in $(seq 1 90); do
             if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = '1' ]; then break; fi
@@ -59,7 +60,7 @@ jobs:
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-test.apk
-          sha256sum dist/SchoolFlow-Gate-test.apk >dist/SHA256SUMS.txt
+          (cd dist && sha256sum SchoolFlow-Gate-test.apk) >dist/SHA256SUMS.txt
           printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
           cp app/src/main/assets/models.json dist/MODELS.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4

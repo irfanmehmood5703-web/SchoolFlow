@@ -4,6 +4,9 @@ import android.content.pm.ApplicationInfo;
 import android.security.NetworkSecurityPolicy;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.core.app.ActivityScenario;
+import android.view.*;
+import android.widget.*;
 import org.junit.*;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
@@ -41,4 +44,21 @@ public class GateDeviceTest {
   Mat blank=new Mat(480,640,CvType.CV_8UC4,new Scalar(0,0,0,255));try{assertNull(engine.extract(blank));}finally{blank.release();}
  }
  @Test public void cleartextAndCloudBackupAreDisabled(){assertFalse(NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted());assertEquals(0,context.getApplicationInfo().flags&ApplicationInfo.FLAG_ALLOW_BACKUP);}
+ private View textView(View root,String wanted){
+  if(root instanceof TextView&&wanted.contentEquals(((TextView)root).getText()))return root;
+  if(root instanceof ViewGroup)for(int i=0;i<((ViewGroup)root).getChildCount();i++){View found=textView(((ViewGroup)root).getChildAt(i),wanted);if(found!=null)return found;}
+  return null;
+ }
+ @Test public void activityLaunchesWithProtectedConnectionAndDisabledConfirmation()throws Exception {
+  try(android.os.ParcelFileDescriptor command=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant com.schoolflow.gate android.permission.CAMERA")) { new FileInputStream(command.getFileDescriptor()).read(new byte[256]); }
+  try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+   scenario.onActivity(activity->{
+    View root=activity.findViewById(android.R.id.content);
+    assertNotNull(textView(root,"SchoolFlow Gate  ·  attended test build"));
+    View confirmation=textView(root,"Confirm identity & mark");assertNotNull(confirmation);assertFalse(confirmation.isEnabled());
+    View connection=textView(root,"Connection");assertNotNull(connection);connection.performClick();assertFalse(activity.isFinishing());
+   });
+  }
+ }
+
 }

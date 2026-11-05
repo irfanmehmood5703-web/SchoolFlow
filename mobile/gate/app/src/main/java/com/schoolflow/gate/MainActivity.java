@@ -41,7 +41,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  @Override public void onCreate(Bundle saved){
   super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   getWindow().setStatusBarColor(Color.rgb(23,107,74));
-  LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,250,250));
+  LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,250,250));root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
   TextView title=text("SchoolFlow Gate  ·  attended test build",23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
   LinearLayout toolbar=new LinearLayout(this);toolbar.addView(button("Connection",()->protect(this::connectionDialog)));toolbar.addView(button("Enroll face",()->protect(this::enrollmentDialog)));toolbar.addView(button("Manage faces",()->protect(this::manageDialog)));
   start=button("Start camera",()->{if(running)stopCamera();else startCamera();});toolbar.addView(start);
@@ -56,7 +56,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   confirm=button("Confirm identity & mark",this::confirmIdentity);confirm.setEnabled(false);panel.addView(confirm);
   panel.addView(button("Retry connection / pending mark",()->{try{if(vault!=null&&vault.pending()!=null)deliver();else heartbeat();}catch(Exception e){show("Cannot read protected storage.");}}));
   panel.addView(button("Cancel pending submission",()->protect(this::cancelPending)));
-  body.addView(panel,new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+  body.addView(scroll(panel),new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
   try{vault=new Vault(this);known=vault.people();status.setText(vault.lastResult());}catch(Exception e){status.setText("Protected storage cannot be opened. Attendance is disabled; do not replace it with plaintext.");start.setEnabled(false);return;}
   initializer.execute(()->{
    try{if(!OpenCVLoader.initLocal())throw new IllegalStateException();engine=new FaceEngine(this);show("Models ready. Connect a private institute gate; set a device screen lock before enrollment.");}
