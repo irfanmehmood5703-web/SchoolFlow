@@ -10,7 +10,7 @@ concurrency:
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -23,6 +23,52 @@ jobs:
         with:
           gradle-version: '8.9'
           cache-disabled: true
-      - name: Compile Android app
+      - name: Download and verify pinned recognition models
         working-directory: mobile/gate
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        run: python3 download_models.py
+      - name: Compile, unit test and lint Android
+        working-directory: mobile/gate
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+      - name: Test native models and encrypted storage in Android emulator
+        working-directory: mobile/gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          sdkmanager 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64' >/dev/null
+          echo no | avdmanager create avd -n schoolflow-test -k 'system-images;android-35;google_apis;x86_64' --force >/dev/null
+          "$ANDROID_HOME/emulator/emulator" -avd schoolflow-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-front none -camera-back none >/tmp/schoolflow-emulator.log 2>&1 &
+          gate_emulator_pid=$!
+          trap 'kill "$gate_emulator_pid" 2>/dev/null || true' EXIT
+          timeout 180 adb wait-for-device
+          for gate_attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = '1' ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          gradle --no-daemon :app:connectedDebugAndroidTest
+      - name: Package test APK and provenance
+        working-directory: mobile/gate
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-test.apk
+          sha256sum dist/SchoolFlow-Gate-test.apk >dist/SHA256SUMS.txt
+          printf '%s\n' "${{ github.event.pull_request.head.sha }}" >dist/SOURCE-COMMIT.txt
+          cp app/src/main/assets/models.json dist/MODELS.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: SchoolFlow-Gate-test
+          path: mobile/gate/dist/
+          retention-days: 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: SchoolFlow-Gate-test-reports
+          path: |
+            mobile/gate/app/build/reports/
+            mobile/gate/app/build/outputs/androidTest-results/
+          retention-days: 1
