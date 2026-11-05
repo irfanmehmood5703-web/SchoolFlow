@@ -1,5 +1,8 @@
 name: SchoolFlow Gate Android
 on:
+  push:
+    branches: [main]
+    paths: ['mobile/gate/**', '.github/workflows/gate-android.yml']
   pull_request:
     paths: ['mobile/gate/**', '.github/workflows/gate-android.yml']
 permissions:
@@ -12,14 +15,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
           gradle-version: '8.9'
           cache-disabled: true
@@ -36,8 +39,8 @@ jobs:
           set -euo pipefail
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
-          sdkmanager 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64' >/dev/null
-          echo no | avdmanager create avd -n schoolflow-test -k 'system-images;android-35;google_apis;x86_64' --force >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64' >/dev/null
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n schoolflow-test -k 'system-images;android-35;google_apis;x86_64' --force >/dev/null
           "$ANDROID_HOME/emulator/emulator" -avd schoolflow-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-front none -camera-back none >/tmp/schoolflow-emulator.log 2>&1 &
           gate_emulator_pid=$!
           trap 'kill "$gate_emulator_pid" 2>/dev/null || true' EXIT
@@ -57,14 +60,14 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-test.apk
           sha256sum dist/SchoolFlow-Gate-test.apk >dist/SHA256SUMS.txt
-          printf '%s\n' "${{ github.event.pull_request.head.sha }}" >dist/SOURCE-COMMIT.txt
+          printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
           cp app/src/main/assets/models.json dist/MODELS.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: SchoolFlow-Gate-test
           path: mobile/gate/dist/
           retention-days: 1
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
           name: SchoolFlow-Gate-test-reports
@@ -72,3 +75,28 @@ jobs:
             mobile/gate/app/build/reports/
             mobile/gate/app/build/outputs/androidTest-results/
           retention-days: 1
+  publish-test-apk:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: SchoolFlow-Gate-test
+          path: gate-apk/
+      - name: Verify artifact and publish test APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate_expected_sha="$(cat gate-apk/SOURCE-COMMIT.txt)"
+          test "$gate_expected_sha" = "$GITHUB_SHA"
+          (cd gate-apk && sed 's@dist/@@' SHA256SUMS.txt | sha256sum -c -)
+          gate_tag="gate-test-${{ github.run_number }}"
+          gh release create "$gate_tag" gate-apk/SchoolFlow-Gate-test.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Gate 0.1 — test APK" --notes "Installable attended test build for ARM64 Android 8+ devices. Local YuNet/SFace enrollment and recognition, encrypted device storage, explicit operator confirmation, and private-institute gate delivery. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."

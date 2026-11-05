@@ -1,0 +1,5 @@
+# SchoolFlow Gate 0.1 — attended test build
+
+Camera-based local face enrollment and native YuNet/SFace recognition for the existing SchoolFlow gate API. Device lock protects enrollment/settings; local vectors/credentials are encrypted with Android Keystore. No camera photos or face vectors are sent to the server.
+
+This build requires an operator to verify and confirm a recognized person. It is not certified liveness/anti-spoofing and is debug-signed for fictional trials. Android 8+ ARM64 camera/device testing and production signing are still outstanding. Follow README.md for setup and verify results in web scan history.
