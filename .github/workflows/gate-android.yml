@@ -1,0 +1,28 @@
+name: SchoolFlow Gate Android
+on:
+  pull_request:
+    paths: ['mobile/gate/**', '.github/workflows/gate-android.yml']
+permissions:
+  contents: read
+concurrency:
+  group: gate-android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Compile Android app
+        working-directory: mobile/gate
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
