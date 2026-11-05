@@ -44,3 +44,24 @@ class YearlyFeeTests(unittest.TestCase):
         Map=app.extensions['institute_setup_models']['mapping'];db.session.add(Map(campus='Campus A',class_name='One',active=True,data={}));db.session.commit()
         self.assertEqual(self.post(action='add-plan',campus='Campus A',cohort_class='Two').status_code,422)
         self.assertEqual(self.post(action='add-plan',campus='Campus B',cohort_class='Two').status_code,302)
+
+    def test_main_cohort_table_has_no_invented_percentage_columns(self):
+        row=self.setup_policy();self.post(action='save',id=str(row.id),version='1',year='2027',percentage='10')
+        page=self.c.get(self.path).data
+        table=page.split(b'<table data-yearly-cohorts>',1)[1].split(b'</table>',1)[0]
+        self.assertIn(b'Campus A',table);self.assertNotIn(b'percentage',table);self.assertNotIn(b'2027',table)
+        self.assertIn(b'Advanced',page);self.assertIn(b'SchoolFlow percentage controls',page)
+        self.assertEqual(row.data['years'],{'2027':'10'})
+    def test_separate_add_form_dependent_choices_and_server_validation(self):
+        import json,re
+        Map=app.extensions['institute_setup_models']['mapping'];db.session.add(Map(campus='Campus A',class_name='One',active=True,data={}));db.session.commit()
+        page=self.c.get(self.path+'/add');self.assertEqual(page.status_code,200)
+        self.assertIn(b'name="cohort_class" required disabled',page.data)
+        choices=json.loads(re.search(rb'id="yearly-class-options">(.*?)</script>',page.data)[1]);self.assertEqual(choices['Campus A'],['One']);self.assertEqual(choices['Campus B'],['One','Two'])
+        ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))
+        self.assertEqual(self.c.post(self.path+'/add',data=dict(_csrf=self.csrf,action='add-plan',campus='Campus A',cohort_class='Two')).status_code,422)
+        self.assertEqual(self.c.post(self.path+'/add',data=dict(_csrf=self.csrf,action='add-plan',campus='Campus A',cohort_class='One')).status_code,302)
+        self.assertEqual(self.c.post(self.path+'/add',data=dict(_csrf=self.csrf,action='add-plan',campus='Campus A',cohort_class='One')).status_code,422)
+        self.assertEqual(self.c.get(self.path+'/add?campus=Unknown').status_code,422)
+        self.assertEqual(self.c.post(self.path+'/add',data=dict(action='add-plan',campus='Campus A',cohort_class='One')).status_code,400)
+        self.assertEqual(app.extensions['student_fee_plan_model'].query.count(),0)

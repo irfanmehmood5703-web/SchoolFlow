@@ -69,4 +69,13 @@ def configure_yearly_fees(app,db):
         if cls:query=query.filter_by(name=cls)
         rows=query.order_by(Item.scope,Item.name).all()
         return render_template('yearly_fees.html',title='Student Yearly Fee Increment',cfg=cfg,years=[y for y in years if start<=y<=end],all_years=years,start=start,end=end,rows=rows,campus=campus,class_name=cls,campuses=options('campus'),classes=classes(campus) if campus else [])
+    @bp.route('/add',methods=['GET','POST'])
+    def add_plan():
+        if request.method=='POST':
+            if request.form.get('action')!='add-plan':raise ValueError('Choose Add fee plan.')
+            return index()
+        campus=request.args.get('campus','');names=options('campus')
+        if campus and campus not in names:raise ValueError('Choose a configured campus.')
+        offerings={name:classes(name) for name in names}
+        return render_template('yearly_fee_add.html',title='Add Yearly Fee Plan',campuses=names,campus=campus,offerings=offerings)
     app.register_blueprint(bp)
