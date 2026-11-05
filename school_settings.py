@@ -151,20 +151,20 @@ def configure_school_settings(app,db,Student,Employee):
             if value('schedule_type')=='combined':row['off']=row['in_off'] and row['out_off']
             result[str(i)]=row
         return result
-    def resolved_shift(kind,person,data,day):
+    def resolved_shift(kind,person,data,day,prepared=None):
         if kind=='staff':
-            assigned=config('hrm:shift-assignment').get(str(person.id),{})
+            assigned=(prepared['assignments'] if prepared is not None else config('hrm:shift-assignment')).get(str(person.id),{})
             selected=assigned.get(str(day.weekday()),{})
             if selected.get('off'):return {'off':True,'in':'','out':''}
             result={'off':False,'in':'','out':''}
             for direction in ('in','out'):
                 sid=selected.get(direction)
-                row=db.session.get(SchoolSettingItem,int(sid)) if str(sid or '').isdigit() else None
+                row=(prepared['templates'].get(str(sid)) if prepared is not None else db.session.get(SchoolSettingItem,int(sid))) if str(sid or '').isdigit() else None
                 if row and row.kind=='shift-template' and row.data.get('direction')==direction:
                     daily=row.data.get('days',{}).get(str(day.weekday()),{})
                     result[direction]='' if daily.get('off') else daily.get('time','')
             return result
-        shifts=items('student-shift',data.get('campus',''))
+        shifts=prepared['students'].get(data.get('campus',''),[]) if prepared is not None else items('student-shift',data.get('campus',''))
         matches=[r for r in shifts if person.class_name in r.data.get('classes',[]) and r.data.get('section','') in ('',data.get('section',''))]
         matches.sort(key=lambda r:bool(r.data.get('section')),reverse=True)
         return matches[0].data.get('days',{}).get(str(day.weekday()),{}) if matches else {}
@@ -622,10 +622,11 @@ def configure_school_settings(app,db,Student,Employee):
                 values=tag_values['salary'](salary,person,data.get(person.id,{}));values.update(date=salary.paid_date.isoformat() if salary.paid_date else values['todayDate'],time='')
                 append(person,values,'Generate Salary' if event=='salary-generated' else 'Pay Salary',salary.id)
             return result
+        attendance_rows={r.person_id:r for r in ops['daily'].query.filter_by(kind='staff' if staff else 'student',day=date.fromisoformat(context['day'])).filter(ops['daily'].person_id.in_(ids)).all()} if event=='attendance' else {}
         for person in people:
             values=tag_values['employee' if staff else 'student'](person,data.get(person.id,{}));name=''
             if event=='attendance':
-                day=context.get('day');current=ops['daily'].query.filter_by(kind='staff' if staff else 'student',person_id=person.id,day=date.fromisoformat(day)).first()
+                day=context.get('day');current=attendance_rows.get(person.id)
                 name=current.status if current else ''
                 if staff and name=='Leave':name='Full Day Leave'
                 values.update(date=day,todayDate=day,time=current.time_in if current else '',qr_status=current.status if current else '',qr_att_status=current.status if current else '',qr_in_status=current.time_in if current else '')

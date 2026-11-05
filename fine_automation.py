@@ -236,6 +236,8 @@ def configure_fine_automation(app,db,Student):
                 threading.Event().wait(60)
                 try:tick_all()
                 except Exception:app.logger.exception('Fine schedule worker tick failed')
+                try:app.extensions['attendance_device_helpers']['tick_all']()
+                except Exception:app.logger.exception('Attendance schedule worker tick failed')
         thread=threading.Thread(target=loop,name='schoolflow-fine-worker',daemon=True);thread.start()
         app.logger.warning('SchoolFlow fine scheduler started: 60-second checks for enabled real-institute schedules.')
     app.extensions['fine_automation_helpers']=dict(plan=plan,execute=execute,tick_all=tick_all,start_worker=start_worker,bill_used=lambda bid:FineAutomationRun.query.filter_by(bill_id=bid).first() is not None)

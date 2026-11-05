@@ -299,6 +299,9 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('attendance_devices.'):
+            area='attendance' if ep in ('attendance_devices.scans','attendance_devices.scanner') else 'core'
+            return area+'.'+('export' if request.args.get('export') else 'create' if ep=='attendance_devices.gates' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
         if ep=='staff_access.payment_requests':
             return 'fees.approve' if request.method=='POST' and request.form.get('action') in ('approve','reject') else 'fees.view'
         if ep.startswith('records.'):

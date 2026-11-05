@@ -458,6 +458,7 @@ def configure_operations(app, db, Student, Employee):
                 row=Daily.query.filter_by(kind=kind,person_id=p.id,day=d).first()
                 if not row: row=Daily(kind=kind,person_id=p.id,day=d);db.session.add(row)
                 row.status=status
+                app.extensions.get('attendance_device_helpers',{}).get('manual_write',lambda r:None)(row)
                 val=request.form.get('lectures_'+str(p.id),'0')
                 if not val.isdigit() or int(val)>1000: raise ValueError('Invalid lecture count.')
                 row.lectures=int(val)
@@ -963,7 +964,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v30')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v31')
 
     @app.route('/api/v1/summary')
     def summary_api():

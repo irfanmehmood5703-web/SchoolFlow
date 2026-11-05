@@ -6,7 +6,7 @@ from flask import Blueprint,abort,g,has_request_context,render_template,request,
 from sqlalchemy import case,event,or_,func
 from report_exports import report_xlsx
 
-LEVELS=[('Critical',('delete','reverse','unpay','approve','reject','privilege','password','freeze','permission','role')),('Important',('payment','receipt','salary','challan','fee plan','fee increment','marks','student','employee','import')),('Routine',('attendance','message','notification','scheduler'))]
+LEVELS=[('Critical',('delete','reverse','unpay','approve','reject','privilege','password','freeze','permission','role','credential','gate status','remove attendance gate')),('Important',('payment','receipt','salary','challan','fee plan','fee increment','marks','student','employee','import')),('Routine',('attendance','message','notification','scheduler'))]
 SECRET=re.compile(r'password|secret|token|credential|otp|authorization|cookie|private.key',re.I)
 COLUMNS={'severity':'How serious','summary':'What happened','record':'Record','action':'Action','area':'Area','actor':'Who did it','when':'When (Karachi)'}
 
@@ -30,6 +30,8 @@ def differences(before,after,path=''):
 def configure_user_logging(app,db,Student,Employee):
     bp=Blueprint('user_logging',__name__,url_prefix='/workspace/core/user-logging');Audit=app.extensions['ops_models']['audit']
     def actor():
+        device=getattr(g,'attendance_device_actor',None)
+        if device:return dict(device)
         identity=getattr(g,'school_identity',None) or {}
         principal=getattr(g,'staff_principal',None)
         if principal:return dict(kind='Staff',id=principal.id,label=principal.username)

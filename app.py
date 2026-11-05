@@ -116,6 +116,8 @@ from certificate_manager import configure_certificate_manager
 configure_certificate_manager(app,db)
 from staff_access import configure_staff_access
 configure_staff_access(app,db,Student,Employee)
+from attendance_devices import configure_attendance_devices
+configure_attendance_devices(app,db,Student,Employee)
 
 @app.route('/')
 def home():
