@@ -71,7 +71,7 @@ def configure_certificates(app,db,Student):
         created=db.Column(db.DateTime,nullable=False,default=lambda:datetime.now(ZoneInfo('UTC')))
     app.extensions['certificate_models']=dict(campus=CertificateCampus,template=CertificateTemplate,batch=CertificateBatch,issue=CertificateIssue)
     def now():return datetime.now(ZoneInfo('Asia/Karachi'))
-    def campuses():return sorted({x.value for x in rm['settings'].query.filter_by(category='campus').all()}|{x[0] for x in db.session.query(CertificateCampus.campus).all()})
+    def campuses():return sorted(({x.value for x in rm['settings'].query.filter_by(category='campus').all()}|{x[0] for x in db.session.query(CertificateCampus.campus).all()})-{''})
     def commit():
         try:db.session.commit()
         except (IntegrityError,StaleDataError):db.session.rollback();raise ValueError('This record was already saved or changed. Reload before retrying.')
@@ -166,14 +166,14 @@ def configure_certificates(app,db,Student):
     # All render state is passed explicitly; no globals or shared request state.
     def document(s,c,t,ref,copy_type,content=None):
         values,amounts,data=mapping(s,c,ref,copy_type)
-        values['reference']=f"{CATALOG[t.key]['prefix']}-{ref}"
+        values['reference']=f"{CATALOG.get(t.key,{'prefix':'DOC'})['prefix']}-{ref}"
         def replace(match):
             value=values.get(match.group(1).casefold())
             if value is None:return str(escape(match.group(0)))
             return str(value) if isinstance(value,Markup) else str(escape(value))
         content=content or {key:getattr(t,key) for key in ('header','body','footer')}
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
-        html=render_template('certificate_document.html',sections=sections,layout=CATALOG[t.key]['layout'])
+        html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
         return html,amounts,data
 
     qr_columns=[('sid','SID'),('roll','Roll No.'),('name','Student Name'),('father','Father Name'),('campus','Campus'),('class','Class'),('section','Section'),('gender','Gender'),('photo','Student Photo'),('qr','QR Code')]
@@ -211,7 +211,8 @@ def configure_certificates(app,db,Student):
                 values=qr_values(s,d,photos);export_rows.append([values[key] for key in columns])
             return csv_response([dict(qr_columns)[key] for key in columns],export_rows,'student-qr' if tab=='qr' else 'certificate-students')
         photos=photos_for([s for s,d in rows]);option_rows=rm['settings'].query.filter(rm['settings'].category.in_(['class_name','section','gender'])).all()
-        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=CATALOG,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time)
+        catalog={**CATALOG,**{t.key:dict(name=t.name,captured=True) for t in templates if t.key not in CATALOG}}
+        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=catalog,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time)
     def local_time(value):
         return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p') if value.tzinfo is None else value.astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p')
 
@@ -323,7 +324,7 @@ def configure_certificates(app,db,Student):
         for s in students:
             issue=CertificateIssue(batch_id=batch.id,student_id=s.id,template_id=t.id,campus=c.campus,document_name=t.name,student_name=s.name,reference='Pending',snapshot={});db.session.add(issue);db.session.flush()
             html,amounts,d=document(s,c,t,issue.id,copy_type)
-            issue.reference=f"{CATALOG[t.key]['prefix']}-{issue.id}";issue.html=html
+            issue.reference=f"{CATALOG.get(t.key,{'prefix':'DOC'})['prefix']}-{issue.id}";issue.html=html
             # Freeze image bytes as well as names/fees; later profile/logo edits do not alter a reprint.
             def freeze(match):
                 src=match.group(1)

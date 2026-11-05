@@ -1,0 +1,202 @@
+"""Real staff sign-in, per-action campus scopes and revoked-session enforcement."""
+import os,tempfile,unittest,time
+from datetime import date
+from flask import g
+from werkzeug.security import generate_password_hash
+os.environ['DATABASE_URL']='sqlite:///:memory:'
+from app import app,db,Student,Employee
+
+class StaffAccessTests(unittest.TestCase):
+    password='Fictional-staff-password-2026'
+    def setUp(self):
+        self.dir=tempfile.TemporaryDirectory();app.config.update(TESTING=True,IDENTITY_ENFORCE_IN_TESTS=True,INSTITUTE_DATABASE_DIR=self.dir.name,SECRET_KEY='staff-access-test')
+        self.ctx=app.app_context();self.ctx.push();db.drop_all();db.create_all();self.M=app.extensions['identity_models'];self.Staff=app.extensions['staff_account_model'];self.rm=app.extensions['record_models'];self.ops=app.extensions['ops_models']
+        self.school=app.extensions['identity_helpers']['provision']('STAFF-TEST','Fictional school','owner@example.invalid',self.password).id
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+            for c in ('Campus A','Campus B'):db.session.add(self.rm['settings'](category='campus',value=c,class_name=''))
+            e=Employee(employee_no='E1',name='Fictional teacher',role='Teacher',status='Active');db.session.add(e);db.session.flush();db.session.add(self.rm['employee'](employee_id=e.id,data={'campus':'Campus A'}))
+            for i,c in enumerate(('Campus A','Campus B'),1):
+                s=Student(admission_no='S'+str(i),name='Pupil '+c,class_name='One',status='Active');db.session.add(s);db.session.flush();db.session.add(self.rm['student'](student_id=s.id,data={'campus':c}));db.session.add(self.ops['bill'](student_id=s.id,month='2026-11',due=date(2026,11,10),lines=[{'particular':'Tuition','amount':10000}]))
+            staff=self.Staff(employee_id=e.id,username='teacher.one',email='teacher@example.invalid',password_hash=generate_password_hash(self.password),active=True,data=dict(role='Teacher',campuses=['Campus A','Campus B'],accounts=['Cash in Hand'],payment_mode='day',payment_days=0,permissions={'dashboard.view':['Campus A'],'admissions.view':['Campus A'],'admissions.export':['Campus A'],'fees.view':['Campus A'],'fees.pay':['Campus A'],'attendance.view':['Campus A']}));db.session.add(staff);db.session.commit();self.sid=staff.id;db.session.remove()
+        g.pop('institute_engine',None);self.c=app.test_client()
+    def tearDown(self):db.session.remove();db.drop_all();self.ctx.pop();app.config.update(IDENTITY_ENFORCE_IN_TESTS=False,INSTITUTE_DATABASE_DIR=None);self.dir.cleanup()
+    def csrf(self):
+        self.c.get('/auth/institute')
+        with self.c.session_transaction() as s:return s['record_csrf']
+    def login(self,username='teacher.one',password=None):
+        token=self.csrf();self.c.post('/auth/institute',data={'_csrf':token,'code':'STAFF-TEST'})
+        with self.c.session_transaction() as s:token=s['record_csrf']
+        return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
+    def token(self):
+        with self.c.session_transaction() as s:return s['record_csrf']
+    def test_staff_username_and_email_login_and_wrong_password(self):
+        self.assertEqual(self.login(password='wrong').status_code,200);self.assertEqual(self.login().status_code,302)
+        with self.c.session_transaction() as s:self.assertEqual(s['staff_id'],self.sid);self.assertNotIn('owner_id',s)
+        self.assertEqual(self.c.get('/workspace/dashboard').status_code,200)
+        self.assertEqual(self.login('teacher@example.invalid').status_code,302)
+    def test_staff_views_exports_and_record_ids_are_scoped_to_permission_campus(self):
+        self.login();page=self.c.get('/records/student');self.assertEqual(page.status_code,200);self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        self.assertEqual(self.c.get('/records/student/2').status_code,404);self.assertEqual(self.c.get('/records/student?campus=Campus+B').status_code,403)
+        export=self.c.get('/records/student/export.csv');self.assertEqual(export.status_code,200);self.assertNotIn(b'Pupil Campus B',export.data)
+        fees=self.c.get('/workspace/fees/payments');self.assertEqual(fees.status_code,200);self.assertNotIn(b'Pupil Campus B',fees.data)
+    def test_ungranted_writes_settings_and_unknown_api_are_denied(self):
+        self.login();token=self.token()
+        self.assertEqual(self.c.post('/records/student/new',data={'_csrf':token,'name':'Forged'}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/core/users').status_code,403)
+        self.assertEqual(self.c.get('/workspace/core/institute').status_code,403)
+        self.assertEqual(self.c.get('/api/v1/summary').status_code,403)
+    def test_cash_account_and_payment_date_rules_are_checked_before_payment(self):
+        self.login();token=self.token()
+        base={'_csrf':token,'student_id':'1','account':'Cash at Bank','paid_date':date.today().isoformat()}
+        self.assertEqual(self.c.post('/workspace/pay',data=base).status_code,403)
+        base.update(account='Cash in Hand',paid_date='2020-01-01');self.assertEqual(self.c.post('/workspace/pay',data=base).status_code,403)
+    def test_account_or_permission_change_invalidates_an_existing_sign_in(self):
+        self.login()
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();staff=db.session.get(self.Staff,self.sid);staff.data={**staff.data,'permissions':{}};db.session.commit();db.session.remove()
+        g.pop('institute_engine',None);self.assertEqual(self.c.get('/records/student').status_code,302)
+    def test_primary_owner_retains_access_and_can_create_staff_with_no_permissions(self):
+        self.assertEqual(self.login('owner@example.invalid').status_code,302)
+        self.assertEqual(self.c.get('/workspace/core/users').status_code,200);self.assertEqual(self.c.get('/workspace/core/users/new').status_code,200)
+        self.assertEqual(self.c.get('/workspace/core/users/1').status_code,200)
+    def test_owner_can_save_campus_permissions_and_role_labels_without_changing_password(self):
+        self.login('owner@example.invalid');token=self.token()
+        r=self.c.post('/workspace/core/users/1',data={'_csrf':token,'version':'1','action':'permissions','perm_admissions.view':['Campus B']});self.assertEqual(r.status_code,302)
+        self.login();page=self.c.get('/records/student');self.assertIn(b'Pupil Campus B',page.data);self.assertNotIn(b'Pupil Campus A',page.data)
+    def tenant(self,fn):
+        with app.test_request_context('/'):
+            g.staff_principal=None;g.access_campuses=None
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();value=fn();db.session.commit();db.session.remove()
+        g.pop('institute_engine',None);return value
+    def two_step(self):
+        def save():
+            row=db.session.get(self.Staff,1);row.data={**row.data,'two_step':True}
+        self.tenant(save)
+    def payment(self,**extra):
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        data={'_csrf':self.token(),'student_id':'1','mode':'current','bill_id':'1','token':'fictionalPaymentToken_1234567890','account':'Cash in Hand','paid_date':datetime.now(ZoneInfo('Asia/Karachi')).date().isoformat(),'amount_1':'25','action':'pay'};data.update(extra)
+        return self.c.post('/workspace/pay',data=data)
+    def balances(self):return self.tenant(lambda:(db.session.get(self.ops['bill'],1).paid,self.ops['receipt'].query.count(),self.ops['workflow'].query.filter_by(kind='staff-payment-approval').count()))
+    def test_two_step_request_does_not_post_until_different_owner_approves_and_cannot_replay(self):
+        self.two_step();self.login();self.assertEqual(self.payment().status_code,302);self.assertEqual(self.balances(),(0,0,1))
+        self.assertEqual(self.c.get('/workspace/core/users/payment-requests').status_code,200)
+        self.assertEqual(self.payment().status_code,302);self.assertEqual(self.balances(),(0,0,1))
+        self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'1','action':'approve'}).status_code,403)
+        self.login('owner@example.invalid');token=self.token()
+        self.assertEqual(self.c.get('/workspace/core/users/payment-requests').status_code,200)
+        response=self.c.post('/workspace/core/users/payment-requests',data={'_csrf':token,'id':'1','action':'approve'});self.assertEqual(response.status_code,302,response.data)
+        self.assertEqual(self.balances(),(2500,1,1))
+        self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':token,'id':'1','action':'approve'}).status_code,422);self.assertEqual(self.balances(),(2500,1,1))
+    def test_queue_reject_stale_balance_and_cross_campus_forgery(self):
+        self.two_step();self.login();self.assertEqual(self.payment(amount_2='25').status_code,403);self.assertEqual(self.balances(),(0,0,0))
+        self.assertEqual(self.payment().status_code,302)
+        def change():db.session.get(self.ops['bill'],1).paid=1000
+        self.tenant(change);self.login('owner@example.invalid');token=self.token()
+        self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':token,'id':'1','action':'approve'}).status_code,422);self.assertEqual(self.balances(),(1000,0,1))
+        self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':token,'id':'1','action':'reject','reason':'Balance changed'}).status_code,302);self.assertEqual(self.balances(),(1000,0,1))
+    def test_queue_rejects_missing_csrf_discount_account_and_missing_payment_day(self):
+        self.two_step();self.login()
+        self.assertEqual(self.payment(_csrf='').status_code,400)
+        self.assertEqual(self.payment(discount_1='5').status_code,403)
+        self.assertEqual(self.payment(paid_date='').status_code,422);self.assertEqual(self.balances(),(0,0,0))
+    def test_staff_can_change_own_password_without_access_admin_and_old_password_fails(self):
+        self.login();new='Changed-fictional-password-2026'
+        self.assertEqual(self.c.get('/workspace/core/users/my-password').status_code,200)
+        self.assertEqual(self.c.post('/workspace/core/users/my-password',data={'_csrf':self.token(),'current_password':'wrong','password':new,'confirm_password':new}).status_code,422)
+        self.assertEqual(self.c.post('/workspace/core/users/my-password',data={'_csrf':self.token(),'current_password':self.password,'password':new,'confirm_password':new}).status_code,302)
+        self.assertEqual(self.c.get('/workspace/dashboard').status_code,200)
+        self.assertEqual(self.login().status_code,200);self.assertEqual(self.login(password=new).status_code,302)
+    def test_primary_owner_can_change_own_password(self):
+        self.login('owner@example.invalid');new='Changed-owner-password-2026'
+        self.assertEqual(self.c.post('/workspace/core/users/my-password',data={'_csrf':self.token(),'current_password':self.password,'password':new,'confirm_password':new}).status_code,302)
+        self.assertEqual(self.c.get('/workspace/dashboard').status_code,200);self.assertEqual(self.login('owner@example.invalid',new).status_code,302)
+    def test_grid_preferences_are_saved_used_in_exports_and_copied_without_rights(self):
+        self.login();self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'users','size':'25','columns':['username','status']}).status_code,302)
+        def second():
+            e=Employee(employee_no='E2',name='Another fictional teacher',role='Teacher',status='Active');db.session.add(e);db.session.flush();db.session.add(self.rm['employee'](employee_id=e.id,data={'campus':'Campus B'}));db.session.add(self.Staff(employee_id=e.id,username='teacher.two',password_hash=generate_password_hash(self.password),active=True,data={'permissions':{},'campuses':[]}))
+        self.tenant(second);self.login('owner@example.invalid')
+        response=self.c.post('/workspace/core/users/copy-grid',data={'_csrf':self.token(),'source':'1','target':'2','source_version':'2','version':'1'});self.assertEqual(response.status_code,302,response.data)
+        copied=self.tenant(lambda:dict(db.session.get(self.Staff,2).data));self.assertEqual(copied['grid_settings']['users']['columns'],['username','status']);self.assertEqual(copied['permissions'],{})
+    def test_owner_creates_staff_and_new_account_has_no_implicit_rights(self):
+        def employee():
+            e=Employee(employee_no='E2',name='New fictional employee',role='Teacher',status='Active');db.session.add(e);db.session.flush();db.session.add(self.rm['employee'](employee_id=e.id,data={'campus':'Campus A'}))
+        self.tenant(employee);self.login('owner@example.invalid')
+        response=self.c.post('/workspace/core/users/new',data={'_csrf':self.token(),'version':'0','employee_id':'2','username':'new.teacher','password':self.password,'active':'1','role':'User','campuses':['Campus A'],'accounts':['Cash in Hand'],'payment_mode':'day','payment_days':'0'});self.assertEqual(response.status_code,302,response.data)
+        self.assertEqual(self.login('new.teacher').status_code,302);self.assertEqual(self.c.get('/records/student').status_code,403)
+    def test_payroll_send_requires_pay_permission_not_update(self):
+        def scope():
+            r=db.session.get(self.Staff,1);r.data={**r.data,'permissions':{'payroll.update':['Campus A']}}
+        self.tenant(scope);self.login()
+        self.assertEqual(self.c.post('/workspace/payroll',data={'_csrf':self.token(),'action':'send','month':'2026-10','ids':['1'],'credit':'Cash in Hand','debit':'Cash in Hand','paid_date':date.today().isoformat()}).status_code,403)
+    def test_direct_payment_request_and_discount_approval_keep_real_receipt_amounts(self):
+        self.two_step();self.login()
+        response=self.c.post('/workspace/direct-payment',data={'_csrf':self.token(),'number':'1','lookup':'sid','token':'directQueuePayment_1234567890','account':'Cash in Hand','paid_date':date.today().isoformat(),'amount_1':'10','action':'pay'});self.assertEqual(response.status_code,302,response.data);self.assertEqual(self.balances(),(0,0,1))
+        self.login('owner@example.invalid');self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'1','action':'approve'}).status_code,302);self.assertEqual(self.balances(),(1000,1,1))
+        def discount_access():
+            r=db.session.get(self.Staff,1);r.data={**r.data,'accounts':['Cash in Hand','Discounts']}
+        self.tenant(discount_access);self.login();self.assertEqual(self.payment(amount_1='5',discount_1='2',token='discountQueuePayment_1234567890').status_code,302)
+        self.login('owner@example.invalid');self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'2','action':'approve'}).status_code,302)
+        self.assertEqual(self.tenant(lambda:(db.session.get(self.ops['bill'],1).paid,db.session.get(self.ops['bill'],1).discount)),(1500,200))
+        audit=self.tenant(lambda:self.ops['audit'].query.filter_by(action='Fee payment').one().data);self.assertEqual(audit['changes'][0]['after']['paid_paisa'],1500);self.assertEqual(audit['_activity_actor']['label'],'owner@example.invalid')
+    def test_self_approval_is_denied_even_with_approval_permission(self):
+        self.two_step()
+        def allow():
+            r=db.session.get(self.Staff,1);r.data={**r.data,'permissions':{**r.data['permissions'],'fees.approve':['Campus A']}}
+        self.tenant(allow);self.login();self.assertEqual(self.payment().status_code,302)
+        response=self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'1','action':'approve'});self.assertEqual(response.status_code,403);self.assertIn(b'different user',response.data);self.assertEqual(self.balances(),(0,0,1))
+    def test_certificate_delete_and_create_require_their_own_permissions(self):
+        self.login('owner@example.invalid');self.assertEqual(self.c.post('/workspace/core/certificates/new',data={'_csrf':self.token(),'version':'0','name':'Fictional design','campus':'Campus A','body':'<p>Hello</p>'}).status_code,302)
+        def allow():
+            r=db.session.get(self.Staff,1);r.data={**r.data,'permissions':{'certificates.update':['Campus A','Campus B']}}
+        self.tenant(allow);self.login();token=self.token()
+        self.assertEqual(self.c.post('/workspace/core/certificates/1/delete',data={'_csrf':token,'version':'1','confirm':'yes'}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/core/certificates/new',data={'_csrf':token,'version':'0','name':'Forged','campus':'Campus A','body':'Forged'}).status_code,403)
+        self.assertEqual(self.tenant(lambda:app.extensions['certificate_models']['template'].query.count()),1)
+    def test_disabled_requester_cannot_have_an_old_request_approved(self):
+        self.two_step();self.login();self.payment()
+        def disable():db.session.get(self.Staff,1).active=False
+        self.tenant(disable);self.login('owner@example.invalid')
+        self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'1','action':'approve'}).status_code,422);self.assertEqual(self.balances(),(0,0,1))
+    def test_simultaneous_approvals_post_one_receipt_only(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.two_step();self.login();self.payment();self.login('owner@example.invalid')
+        with self.c.session_transaction() as saved:credentials=dict(saved)
+        def approve(_):
+            client=app.test_client()
+            with client.session_transaction() as cookie:cookie.update(credentials)
+            return client.post('/workspace/core/users/payment-requests',data={'_csrf':credentials['record_csrf'],'id':'1','action':'approve'}).status_code
+        # Concurrent requests need separate real connections for the identity
+        # registry too; in-memory SQLite's StaticPool shares one DBAPI handle.
+        from sqlalchemy import create_engine,select
+        original=db.engines[None];control=create_engine('sqlite:///'+self.dir.name+'/control.db',connect_args={'timeout':20})
+        tables=[t for t in db.metadata.sorted_tables if t.info.get('identity_control')]
+        db.session.remove();db.metadata.create_all(control,tables=tables)
+        with original.connect() as source,control.begin() as target:
+            for table in tables:
+                records=[dict(r) for r in source.execute(select(table)).mappings()]
+                if records:target.execute(table.insert(),records)
+        db.engines[None]=control
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(approve,range(2)))
+            self.assertEqual(sorted(statuses),[302,422]);self.assertEqual(self.balances(),(2500,1,1))
+        finally:db.session.remove();db.engines[None]=original;control.dispose()
+    def test_account_email_cannot_collide_with_another_username(self):
+        def employee():
+            e=Employee(employee_no='E2',name='Fictional second teacher',role='Teacher',status='Active');db.session.add(e);db.session.flush()
+        self.tenant(employee);self.login('owner@example.invalid')
+        response=self.c.post('/workspace/core/users/new',data={'_csrf':self.token(),'version':'0','employee_id':'2','username':'teacher@example.invalid','email':'another@example.invalid','password':self.password,'active':'1','role':'User','payment_mode':'day','payment_days':'0'});self.assertEqual(response.status_code,422)
+        self.assertEqual(self.tenant(lambda:self.Staff.query.count()),1)
+    def test_role_titles_save_only_labels_and_reject_duplicate_titles(self):
+        self.login('owner@example.invalid');token=self.token()
+        values={'_csrf':token,'version':'0','Super Admin':'Principal','Admin':'Office Admin','User':'Staff member','Teacher':'Teacher'}
+        self.assertEqual(self.c.post('/workspace/core/users/roles',data=values).status_code,302)
+        self.assertIn(b'Principal',self.c.get('/workspace/core/users/roles').data)
+        values.update(version='1',Teacher='Principal');self.assertEqual(self.c.post('/workspace/core/users/roles',data=values).status_code,422)
+        self.login();self.assertEqual(self.c.get('/workspace/core/users').status_code,403)
+    def test_saved_grid_columns_are_used_by_matching_user_logging_export(self):
+        self.login('owner@example.invalid')
+        self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'logs','size':'25','columns':['summary']}).status_code,302)
+        response=self.c.get('/workspace/core/user-logging?export=csv');self.assertEqual(response.status_code,200);self.assertEqual(response.data.decode('utf-8-sig').splitlines()[0],'What happened')
+        self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'logs','size':'25','columns':['password_hash']}).status_code,422)

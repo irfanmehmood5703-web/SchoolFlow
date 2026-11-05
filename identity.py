@@ -153,6 +153,8 @@ def configure_identity(app, db):
     def require_institute():
         g.school_identity = None
         g.institute_engine = None
+        g.staff_principal = None
+        g.access_campuses = None
         if app.testing and not app.config['IDENTITY_ENFORCE_IN_TESTS']:
             return
         # Never carry ORM identity-map entries across school selections, even
@@ -167,6 +169,19 @@ def configure_identity(app, db):
             # real institute ID supplied by a visitor.
             g.school_identity = dict(name='SchoolFlow Demo', code='DEMO', demo=True)
             return
+        if session.get('staff_id'):
+            school=db.session.get(Institute,session.get('institute_id'))
+            if school and school.active and time.time()-session.get('signed_in_at',0)<=8*3600:
+                g.institute_engine=tenant_engine(school.id);db.session.remove()
+                helper=app.extensions.get('staff_access_helpers',{})
+                staff=helper.get('resolve',lambda *args:None)(session['staff_id'],session.get('staff_version'))
+                if staff:
+                    g.staff_principal=staff
+                    g.school_identity=dict(name=school.name,code=school.code,scope=school.storage_key,demo=False,email=staff.email or staff.username)
+                    return
+            session.clear()
+            if request.path.startswith('/api/'):return jsonify(error='Institute sign-in required'),401
+            return redirect(url_for('identity.institute'))
         owner = db.session.get(Owner, session.get('owner_id')) if session.get('owner_id') else None
         school = db.session.get(Institute, owner.institute_id) if owner else None
         if (not owner or not owner.active or not school or not school.active
@@ -227,6 +242,12 @@ def configure_identity(app, db):
                 session.permanent = True
                 session.update(owner_id=owner.id, owner_version=owner.version, institute_id=school.id,
                                signed_in_at=time.time(), record_csrf=secrets.token_urlsafe(32))
+                return redirect(url_for('ops.dashboard'))
+            helper=app.extensions.get('staff_access_helpers',{})
+            staff=helper.get('authenticate',lambda *args:None)(school,email,password)
+            if staff:
+                session.clear();session.permanent=True
+                session.update(staff_id=staff['id'],staff_version=staff['version'],institute_id=school.id,signed_in_at=time.time(),record_csrf=secrets.token_urlsafe(32))
                 return redirect(url_for('ops.dashboard'))
             error = 'Email or password is incorrect.'
         return render_template('identity.html', step='login', school=school, error=error)

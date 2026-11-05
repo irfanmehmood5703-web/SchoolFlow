@@ -357,7 +357,7 @@ def configure_operations(app, db, Student, Employee):
             paid_day=day(request.form.get('paid_date'))
             account=request.form.get('account','').strip()
             if not account: raise ValueError('Receiving account is required.')
-            count=0
+            count=0;changes=[]
             locked=Bill.query.filter(Bill.id.in_([b.id for b in rows])).with_for_update().all()
             for b in locked:
                 amount=money(request.form.get('amount_'+str(b.id)))
@@ -365,12 +365,14 @@ def configure_operations(app, db, Student, Employee):
                 if not amount and not discount: continue
                 if b.frozen: raise ValueError('Unfreeze this challan before changing it.')
                 if amount+discount>b.remaining: raise ValueError('Payment and discount cannot exceed the remaining amount.')
+                before=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)
                 b.paid+=amount;b.discount+=discount
+                changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)))
                 db.session.add(Receipt(student_id=s.id,bill_id=b.id,amount=amount,discount=discount,day=paid_day,account=account,discount_account=request.form.get('discount_account','Discounts'),notes=request.form.get('notes','')[:5000],token=token+':'+str(b.id)))
                 count+=1
             if not count: raise ValueError('Enter a payment or discount amount.')
             if request.form.get('action')=='send': queue('Fee receipt',[s.id])
-            audit('Fee payment',student=s.id,count=count);commit();flash('Payment saved. Requested messages are recorded, but no provider is connected.','success')
+            audit('Fee payment',student=s.id,count=count,changes=changes);commit();flash('Payment saved. Requested messages are recorded, but no provider is connected.','success')
             return redirect(url_for('ops.history',student_id=s.id,detail='1'))
         return render('pay.html',title='Pay all dues' if mode=='all' else 'Pay this challan',student=s,rows=rows,token=secrets.token_urlsafe(24),mode=mode)
 
@@ -398,11 +400,14 @@ def configure_operations(app, db, Student, Employee):
         if request.form.get('confirm')!='yes': raise ValueError('Confirm the receipt reversal.')
         rows=Receipt.query.filter(Receipt.id.in_(selected()),Receipt.voided==False).with_for_update().all()
         if not rows: raise ValueError('Select receipts.')
+        changes=[]
         for r in rows:
             b=db.session.execute(db.select(Bill).where(Bill.id==r.bill_id).with_for_update()).scalar_one()
             if b.frozen: raise ValueError('Unfreeze challan before reversing its receipt.')
+            before=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)
             b.paid-=r.amount;b.discount-=r.discount;r.voided=True
-        audit('Reverse receipts',ids=[r.id for r in rows]);commit();return redirect(url_for('ops.fees',mode='paid-challans'))
+            changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)))
+        audit('Reverse receipts',ids=[r.id for r in rows],changes=changes);commit();return redirect(url_for('ops.fees',mode='paid-challans'))
 
     @bp.route('/history')
     def history():
@@ -886,15 +891,16 @@ def configure_operations(app, db, Student, Employee):
             if Receipt.query.filter(Receipt.token.like(token+':%')).first(): raise ValueError('Already submitted.')
             d=day(request.form.get('paid_date'));account=request.form.get('account','').strip()
             if not account: raise ValueError('Receiving account is required.')
-            saved=[]
+            saved=[];changes=[]
             for b in Bill.query.filter(Bill.id.in_([b.id for b in rows])).with_for_update().all():
                 value=money(request.form.get('amount_'+str(b.id)))
                 if not value: continue
                 if b.frozen or value>b.remaining: raise ValueError('Unfreeze challans and enter amounts no greater than the balance.')
-                b.paid+=value;db.session.add(Receipt(student_id=b.student_id,bill_id=b.id,amount=value,discount=0,day=d,account=account,token=token+':'+str(b.id)));saved.append(b.student_id)
+                before=dict(paid_paisa=b.paid,remaining_paisa=b.remaining)
+                b.paid+=value;changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,remaining_paisa=b.remaining)));db.session.add(Receipt(student_id=b.student_id,bill_id=b.id,amount=value,discount=0,day=d,account=account,token=token+':'+str(b.id)));saved.append(b.student_id)
             if not saved: raise ValueError('Enter at least one payment amount.')
             if request.form.get('action')=='send': queue('Fee receipt',list(set(saved)))
-            audit('Family payment' if family_mode else 'Direct payment',students=saved);commit();flash('Payments saved.','success');return redirect(url_for('ops.history'))
+            audit('Family payment' if family_mode else 'Direct payment',students=saved,changes=changes);commit();flash('Payments saved.','success');return redirect(url_for('ops.history'))
         return render('batch_payment.html',title='Family-wise Payment' if family_mode else 'Direct Payment',family_mode=family_mode,number=query,lookup=lookup,rows=rows,student=lambda id:db.session.get(Student,id),token=secrets.token_urlsafe(24))
 
     @bp.route('/setup-demo',methods=['POST'])
@@ -957,7 +963,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v29')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v30')
 
     @app.route('/api/v1/summary')
     def summary_api():

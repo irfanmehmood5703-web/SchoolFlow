@@ -370,6 +370,8 @@ def configure_records(app, db, Student, Employee):
 
     def save_record(kind, obj=None):
         if kind=='employee':app.extensions['admission_capacity']['lock']()
+        from user_logging import safe
+        audit_before=safe(read_data(kind,obj)) if obj else {}
         data, errors = validate_form(kind, obj)
         files, file_errors = incoming_files()
         if kind=='employee':
@@ -449,6 +451,8 @@ def configure_records(app, db, Student, Employee):
             for f in files:
                 db.session.add(RecordFile(owner_kind=kind, owner_id=obj.id, **f))
             db.session.add(RecordEvent(owner_kind=kind, owner_id=obj.id, action="Created" if created else "Updated"))
+            Audit=app.extensions['ops_models']['audit']
+            db.session.add(Audit(action=('Create ' if created else 'Update ')+kind,data=dict(record_kind=kind,record_id=obj.id,record_name=obj.name,before=audit_before,after=safe(data))))
             db.session.commit()
         except ValueError as error:
             db.session.rollback()

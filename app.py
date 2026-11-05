@@ -110,6 +110,12 @@ from setup_readiness import configure_setup_readiness
 configure_setup_readiness(app,db,Student)
 from student_import import configure_student_import
 configure_student_import(app,db,Student)
+from user_logging import configure_user_logging
+configure_user_logging(app,db,Student,Employee)
+from certificate_manager import configure_certificate_manager
+configure_certificate_manager(app,db)
+from staff_access import configure_staff_access
+configure_staff_access(app,db,Student,Employee)
 
 @app.route('/')
 def home():
