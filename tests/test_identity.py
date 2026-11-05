@@ -435,5 +435,22 @@ class IdentityTests(unittest.TestCase):
             self.assertIn(own,text);self.assertNotIn(other,text)
 
 
+    def test_roll_holiday_and_year_settings_are_private_to_each_institute(self):
+        import re
+        self.assertEqual(self.login().status_code,302);token=self.csrf()
+        path='/workspace/core/roll-number-series';page=self.client.get(path)
+        key=re.search(rb'name="series_key" value="([^"]+)"',page.data)[1].decode()
+        form={'_csrf':token,'action':'series','series_key':key,'prefix_'+key:'PRIVATE-A-','start_'+key:'1','digits_'+key:'3','version_'+key:'0'}
+        self.assertEqual(self.client.post(path,data=form).status_code,302)
+        self.assertEqual(self.client.post('/workspace/core/holidays',data=dict(_csrf=token,action='save',version='0',name='Private School A closure',date='2027-02-01',campus='')).status_code,302)
+        self.assertEqual(self.client.post('/workspace/core/fees/yearly-increment',data=dict(_csrf=token,action='add-year',version='0',year='2028')).status_code,302)
+        self.assertEqual(self.login('TEST-B').status_code,302)
+        self.assertNotIn(b'PRIVATE-A-',self.client.get(path).data)
+        self.assertNotIn(b'Private School A closure',self.client.get('/workspace/core/holidays').data)
+        self.assertNotIn(b'2028',self.client.get('/workspace/core/fees/yearly-increment').data)
+        self.assertEqual(self.login('TEST-A').status_code,302)
+        self.assertIn(b'PRIVATE-A-',self.client.get(path).data);self.assertIn(b'Private School A closure',self.client.get('/workspace/core/holidays').data)
+
+
 if __name__ == '__main__':
     unittest.main()

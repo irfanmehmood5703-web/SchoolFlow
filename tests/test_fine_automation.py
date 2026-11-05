@@ -128,3 +128,35 @@ class FineAutomationTests(unittest.TestCase):
                     runs=connection.execute(select(self.Run.__table__.c.amount)).scalars().all();lines=connection.execute(select(self.ops['bill'].__table__.c.lines)).scalar_one()
                 self.assertEqual(runs,[1000]);self.assertEqual(len(lines),2)
             finally:app.before_request_funcs[None].remove(bind);db.session.remove();g.pop('institute_engine',None);engine.dispose()
+
+    def holiday(self,**changes):
+        form=dict(_csrf=self.csrf,action='save',version='0',name='Fictional closure',date='2026-10-12',campus='Campus A',notes='Test only');form.update(changes)
+        return self.c.post('/workspace/core/holidays',data=form)
+    def test_holiday_calendar_crud_restore_and_read_only_export(self):
+        import io
+        from openpyxl import load_workbook
+        self.assertEqual(self.c.get('/workspace/core/holidays').status_code,200);self.assertEqual(self.Item.query.filter_by(kind='calendar-holiday').count(),0)
+        self.assertEqual(self.holiday().status_code,302);row=self.Item.query.filter_by(kind='calendar-holiday').one()
+        self.assertEqual(self.holiday(id=str(row.id),version='0',name='Stale').status_code,422)
+        self.assertEqual(self.holiday(id=str(row.id),version='1',name='Updated closure',repeats='1').status_code,302)
+        response=self.c.get('/workspace/core/holidays?campus=Campus+A&q=updated&export=xlsx');self.assertEqual(response.status_code,200);self.assertEqual(list(load_workbook(io.BytesIO(response.data)).active.values)[1][0],'Updated closure')
+        self.assertEqual(self.c.post('/workspace/core/holidays',data=dict(_csrf=self.csrf,action='restore')).status_code,302)
+        self.assertEqual(self.c.post('/workspace/core/holidays',data=dict(_csrf=self.csrf,action='restore')).status_code,302);self.assertEqual(self.Item.query.filter_by(kind='calendar-holiday').count(),7)
+        self.assertEqual(self.c.post('/workspace/core/holidays',data=dict(_csrf=self.csrf,action='delete',id=str(row.id),version=str(row.version))).status_code,302)
+        self.assertEqual(self.bill.total,100000);self.assertEqual(self.Run.query.count(),0)
+    def test_calendar_scope_repeat_and_edit_invalidates_automation_preview(self):
+        self.assertEqual(self.holiday(date='2020-10-12',repeats='1',campus='').status_code,302)
+        row=self.enable();result=self.tick();self.assertEqual(result['applied'],0);self.assertIn('holiday',result['reason'])
+        holiday=self.Item.query.filter_by(kind='calendar-holiday').one();holiday.scope='Other campus';db.session.commit()
+        self.assertEqual(self.tick()['applied'],1)
+        token=self.token(self.post('preview'));holiday.data={**holiday.data,'notes':'Changed calendar'};holiday.scope='Campus A';db.session.commit()
+        self.assertEqual(self.post('run',preview_token=token).status_code,422)
+    def test_weekly_and_holiday_deferral_are_independent_and_notice_is_only_queued(self):
+        self.holiday();self.enable(calendar_controls='1',defer_weekly='1',defer_holidays='',notify='1')
+        self.assertEqual(self.tick()['applied'],1);message=self.ops['workflow'].query.filter_by(kind='message').one();self.assertEqual(message.status,'Provider not configured');self.assertEqual(message.data['audience'],'owner')
+        self.assertEqual(self.tick()['applied'],0);self.assertEqual(self.ops['workflow'].query.filter_by(kind='message').count(),1)
+    def test_invalid_holidays_and_foreign_item_ids_do_not_change_settings(self):
+        for changes in [dict(date='2026-02-30'),dict(campus='Unknown'),dict(name='')]:self.assertEqual(self.holiday(**changes).status_code,422)
+        self.assertEqual(self.holiday(id=str(self.policy.id),version='1').status_code,404)
+        self.assertEqual(self.Item.query.filter_by(kind='calendar-holiday').count(),0)
+        self.assertEqual(self.c.post('/workspace/core/holidays',data=dict(action='restore')).status_code,400)

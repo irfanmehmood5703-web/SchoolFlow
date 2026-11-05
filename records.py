@@ -411,6 +411,7 @@ def configure_records(app, db, Student, Employee):
                     db.session.add(family)
                     db.session.flush()
                 data.update(family_id=str(family.id), family_no=family.number)
+                if created:app.extensions['roll_number_helpers']['assign'](data)
                 detail = StudentDetails.query.filter_by(student_id=obj.id).first() or StudentDetails(student_id=obj.id)
                 detail.family_id = family.id
                 detail.data = data

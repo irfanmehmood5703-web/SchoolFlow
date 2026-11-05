@@ -83,6 +83,8 @@ from institute_setup import configure_institute_setup
 configure_institute_setup(app,db)
 from school_settings import configure_school_settings
 configure_school_settings(app,db,Student,Employee)
+from roll_numbers import configure_roll_numbers
+configure_roll_numbers(app,db,Student)
 from fee_setup import configure_fee_setup
 configure_fee_setup(app,db,Student)
 from challan_branding import configure_challan_branding
@@ -91,6 +93,8 @@ from challan_consumers import configure_challan_consumers
 configure_challan_consumers(app,db)
 from fee_increments import configure_fee_increments
 configure_fee_increments(app,db,Student)
+from yearly_fees import configure_yearly_fees
+configure_yearly_fees(app,db)
 from fine_queue import configure_fine_queue
 configure_fine_queue(app,db,Student)
 from attendance_fines import configure_attendance_fines
@@ -98,6 +102,8 @@ configure_attendance_fines(app,db,Student)
 from late_fees import configure_late_fees
 configure_late_fees(app,db,Student)
 from fine_automation import configure_fine_automation
+from holiday_calendar import configure_holiday_calendar
+configure_holiday_calendar(app,db)
 configure_fine_automation(app,db,Student)
 app.config['FINE_WORKER_ENABLED']=os.getenv('SCHOOLFLOW_FINE_WORKER','0')=='1'
 from setup_readiness import configure_setup_readiness

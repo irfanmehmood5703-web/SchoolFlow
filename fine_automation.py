@@ -19,13 +19,16 @@ def local_now():return datetime.now(ZoneInfo('Asia/Karachi'))
 
 def first_run_day(due,policy,schedule):
     at=due+timedelta(days=max(1,policy.get('grace',0)+1,schedule['delay']))
-    holidays=set(schedule.get('holidays',[]));off=set(schedule.get('off_days',[]))
-    if schedule.get('defer'):
-        for _ in range(3670):
-            if at.weekday() not in off and at.isoformat() not in holidays:return at
-            at+=timedelta(days=1)
-        raise ValueError('This calendar has no reachable working day.')
-    return at
+    for _ in range(3670):
+        if not closed_day(at,schedule):return at
+        at+=timedelta(days=1)
+    raise ValueError('This calendar has no reachable working day.')
+
+
+def closed_day(day,schedule):
+    weekly=schedule.get('defer_weekly',schedule.get('defer',False)) and day.weekday() in schedule.get('off_days',[])
+    holiday=schedule.get('defer_holidays',schedule.get('defer',False)) and (day.isoformat() in schedule.get('holidays',[]) or day.isoformat() in schedule.get('calendar_dates',[]) or day.strftime('%m-%d') in schedule.get('calendar_annual',[]))
+    return bool(weekly or holiday)
 
 
 def configure_fine_automation(app,db,Student):
@@ -45,7 +48,7 @@ def configure_fine_automation(app,db,Student):
     def campuses():return sorted({r.value for r in rm['settings'].query.filter_by(category='campus').all()})
     def schedule(campus):return Item.query.filter_by(kind='late-fee-automation',scope=campus,name='').first()
     def policy(campus):return Item.query.filter_by(kind='late-fee-policy',scope=campus,name='').first() or Item.query.filter_by(kind='late-fee-policy',scope='',name='').first()
-    def defaults():return dict(enabled=False,activation_day=local_now().date().isoformat(),delay=1,time='00:05',defer=True,off_days=[],holidays=[])
+    def defaults():return dict(enabled=False,activation_day=local_now().date().isoformat(),delay=1,time='02:00',defer=True,off_days=[6],holidays=[])
     def actor():return dict(scope=(getattr(g,'school_identity',None) or {}).get('scope'),owner=session.get('owner_id'),csrf=session.get('record_csrf'))
     def signer():return URLSafeTimedSerializer(app.config['SECRET_KEY'],salt='schoolflow-fine-schedule-v1')
     def digest(value):return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),default=str).encode()).hexdigest()
@@ -62,14 +65,19 @@ def configure_fine_automation(app,db,Student):
             if d.isoformat()!=raw:raise ValueError('Use full YYYY-MM-DD holiday dates.')
             holidays.append(raw)
         if len(holidays)>366:raise ValueError('Save at most 366 holiday dates per campus.')
-        enabled=request.form.get('enabled')=='1';defer=request.form.get('defer')=='1'
-        if defer and len(set(off))==7:raise ValueError('Leave at least one working weekday.')
+        enabled=request.form.get('enabled')=='1';defer=request.form.get('defer')=='1';extra={}
+        if request.form.get('calendar_controls')=='1':
+            extra=dict(defer_weekly=request.form.get('defer_weekly')=='1',defer_holidays=request.form.get('defer_holidays')=='1',notify=request.form.get('notify')=='1')
+            defer=extra['defer_weekly'] or extra['defer_holidays']
+        if extra.get('defer_weekly',defer) and len(set(off))==7:raise ValueError('Leave at least one working weekday.')
         activation=row.data.get('activation_day') if row and row.data.get('enabled') else local_now().date().isoformat()
-        return dict(enabled=enabled,activation_day=activation,delay=int(delay),time=when,defer=defer,off_days=sorted({int(x) for x in off}),holidays=sorted(set(holidays)))
+        return dict(enabled=enabled,activation_day=activation,delay=int(delay),time=when,defer=defer,off_days=sorted({int(x) for x in off}),holidays=sorted(set(holidays)),**extra)
     def fingerprint(bill,charges):return digest([bill.due.isoformat(),bill.student_id,bill.lines,[[c.id,c.amount,c.data] for c in charges]])
     def plan(row,cfg,now):
         at=now.date();p=policy(row.scope if row else request.values.get('campus',''));campus=row.scope if row else request.values.get('campus','')
-        base=p.data if p else {};sid=row.id if row else 0;activation=date.fromisoformat(cfg['activation_day']);closed=cfg['defer'] and (at.weekday() in cfg['off_days'] or at.isoformat() in cfg['holidays'])
+        calendar=app.extensions['holiday_calendar_helpers']['rows'](campus)
+        effective={**cfg,'calendar_dates':[r.data['date'] for r in calendar if not r.data['repeats']],'calendar_annual':[r.data['date'][5:] for r in calendar if r.data['repeats']]}
+        base=p.data if p else {};sid=row.id if row else 0;activation=date.fromisoformat(cfg['activation_day']);closed=closed_day(at,effective)
         state='Weekly off / holiday: defer to the next working day' if closed else ('Before configured Pakistan-time run time' if now.strftime('%H:%M')<cfg['time'] else '')
         if not p or base.get('mode')=='none':state='No active late-fee policy'
         if base.get('maximum')==0:state='Fine policy maximum is zero'
@@ -90,7 +98,7 @@ def configure_fine_automation(app,db,Student):
             owned=[c for c in charges if c.origin_bill_id==b.id];fine_lines=[x for x in b.lines if x.get('kind')=='late_fee']+[c.data['line'] for c in owned]
             prior=latest.get(b.id);reason=state
             saved_policy=fine_lines[0].get('policy',base) if fine_lines else base
-            first=first_run_day(b.due,saved_policy,cfg)
+            first=first_run_day(b.due,saved_policy,effective)
             stamp=fingerprint(b,owned)
             if not reason and b.id in done:reason='Already processed today'
             if not reason and first>at:reason='Scheduled for '+first.isoformat()
@@ -114,7 +122,7 @@ def configure_fine_automation(app,db,Student):
             if r['delta']:ready.append(r)
             else:
                 noops.append(r);skips.append(dict(bill=r['bill'],student=r['student'],reason=r['reason']))
-        return dict(rows=ready,noops=noops,skips=skips,reason=state,total=sum(r['delta'] for r in ready),stamp=digest([sid,row.version if row else 0,cfg,[p.id,p.version,p.data] if p else None,sources]),candidate_count=len(bills))
+        return dict(rows=ready,noops=noops,skips=skips,reason=state,total=sum(r['delta'] for r in ready),stamp=digest([sid,row.version if row else 0,cfg,[[r.id,r.version,r.data] for r in calendar],[p.id,p.version,p.data] if p else None,sources]),candidate_count=len(bills))
     def execute(row,now,mode='schedule'):
         app.extensions['admission_capacity']['lock']();db.session.expire_all();row=db.session.get(Item,row.id)
         if not row or not row.data.get('enabled'):return dict(applied=0,total=0,reason='Schedule disabled')
@@ -134,6 +142,8 @@ def configure_fine_automation(app,db,Student):
                 amount=sum(c['added']['amount'] for c in changes)
                 db.session.add(FineAutomationRun(key=key,schedule_id=row.id,campus=row.scope,day=at,bill_id=r['bill'].id,status='Applied',amount=amount,data=dict(mode=mode,owner_id=session.get('owner_id'),after_fingerprint=fingerprint(r['bill'],owned))))
                 count+=1;total+=amount
+        if count and row.data.get('notify'):
+            db.session.add(ops['workflow'](kind='message',status='Provider not configured',data=dict(subject='Late-fee automation run',audience='owner',ids=[],campus=row.scope,day=at.isoformat(),applied=count,total=total,preferences={'parent_notification':False},messages=[])))
         db.session.commit();return dict(applied=count,total=total,reason=preview['reason'])
     @bp.before_request
     def protect():
@@ -176,8 +186,17 @@ def configure_fine_automation(app,db,Student):
                 else:row=Item(kind='late-fee-automation',scope=campus,name='',data=cfg);db.session.add(row)
                 db.session.add(Audit(action='Save late-fee automation',data=dict(campus=campus,before=before,after=cfg,owner_id=session.get('owner_id'))));db.session.commit();flash('Schedule saved. Saving itself did not charge a bill.','success');return redirect(url_for('fine_automation.index',campus=campus))
             else:raise ValueError('Choose Preview, Save or Run now.')
-        history=FineAutomationRun.query.filter_by(campus=campus).order_by(FineAutomationRun.created.desc()).limit(50).all()
-        response=render_template('fine_automation.html',title='Late-fee automation',campus=campus,campuses=campuses(),row=row,config=cfg,preview=preview,token=token,history=history,worker=bool(app.config.get('FINE_WORKER_ENABLED')))
+        history_query=FineAutomationRun.query.filter_by(campus=campus)
+        history_q=request.args.get('q','').strip()
+        if len(history_q)>160:raise ValueError('Use a history search up to 160 characters.')
+        history=history_query.order_by(FineAutomationRun.created.desc()).all()
+        if history_q:history=[r for r in history if history_q.casefold() in (' '.join(map(str,[r.day,r.bill_id or '',r.status,r.data.get('mode',''),r.data.get('reason','')]))).casefold()]
+        if request.args.get('export')=='xlsx':
+            from report_exports import report_xlsx
+            return report_xlsx(['Run date','Challan','Result','Amount','Started by / reason'],[[r.day.isoformat(),r.bill_id or 'Campus',r.status,f'{r.amount/100:.2f}',r.data.get('mode','')+' / '+r.data.get('reason','')] for r in history],'late-fee-runs')
+        history=history[:100]
+        p=policy(campus);active_policy=bool(p and p.data.get('mode')!='none' and p.data.get('maximum')!=0)
+        response=render_template('fine_automation.html',title='Late-fee automation',campus=campus,campuses=campuses(),row=row,config=cfg,preview=preview,token=token,history=history,worker=bool(app.config.get('FINE_WORKER_ENABLED')),active_policy=active_policy)
         if request.method=='POST':db.session.rollback()
         return response
     @app.cli.command('late-fee-tick')

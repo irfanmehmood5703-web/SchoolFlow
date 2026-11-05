@@ -134,6 +134,8 @@ def configure_student_import(app,db,Student):
         batch=StudentImportBatch(id=token,owner=owner(),data=dict(headers=headers,rows=rows,row_numbers=positions,mapping=mapping_for(headers,columns()),default_date=today(),ready=False,hash=''))
         db.session.add(batch);commit();return redirect(url_for('student_import.review',token=token))
     def prepare(batch):
+        roll_allocator=app.extensions['roll_number_helpers']['allocator'](imports=True)
+        request.roll_import_allocator=roll_allocator
         fields=columns();mapping=batch.data['mapping'];raw=batch.data['rows'];errors={};prepared=[];choices=app.extensions['record_helpers']['choices']();canonical={cat:{v[0].casefold():v[0] for v in values} for cat,values in choices.items()}
         families={f.number:f for f in Family.query.all()};family_values={};mapped=[]
         known=dict(admissions={r[0] for r in db.session.query(Student.admission_no).all()},families={f.id:f for f in families.values()},family_numbers=set(families))
@@ -191,7 +193,11 @@ def configure_student_import(app,db,Student):
             if validated.get('status')=='Active' and limit and limit['seats'] is not None:
                 if limit['occupied']>=limit['seats']:validated['status']='Waiting'
                 else:limit['occupied']+=1
-            prepared.append(dict(row=i,sheet_row=batch.data.get('row_numbers',list(range(2,len(raw)+2)))[i],student=validated,plan=plan))
+            prepared.append(dict(row=i,sheet_row=batch.data.get('row_numbers',list(range(2,len(raw)+2)))[i],student=validated,plan=plan,roll_revision=roll_allocator.stamp))
+        # Reserve typed rolls from the entire sheet before assigning blanks,
+        # including typed values that appear later in the file.
+        roll_allocator.reserved=[copy.deepcopy(entry['student']) for entry in prepared if str(entry['student'].get('roll_no','')).strip()]
+        for entry in prepared:roll_allocator.allocate(entry['student'])
         return prepared,errors
     @bp.route('/<token>',methods=['GET','POST'])
     def review(token):
@@ -243,6 +249,7 @@ def configure_student_import(app,db,Student):
             data['bio_id']=data.get('bio_id') or str(pupil.id)
             db.session.add(Details(student_id=pupil.id,family_id=family.id,data=data));db.session.flush()
             plan=entry['plan'];db.session.add(P(student_id=pupil.id,effective=plan['effective'],data=plan['data']));db.session.add(rm['event'](owner_kind='student',owner_id=pupil.id,action='Imported'))
+        request.roll_import_allocator.persist()
         db.session.flush();batch.status='Imported';batch.data={**batch.data,'student_ids':ids,'created_families':created_families,'snapshot':snapshot(ids)}
         db.session.add(Audit(action='Import students',data=dict(batch=batch.id,student_ids=ids,owner_id=session.get('owner_id'))));commit()
         flash(f'{len(ids)} students and their fee plans imported. No messages were sent.','success');return redirect(url_for('student_import.review',token=token))

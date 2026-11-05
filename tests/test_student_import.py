@@ -159,3 +159,18 @@ class StudentImportTests(unittest.TestCase):
                 with engine.connect() as connection:self.assertEqual(connection.scalar(select(func.count()).select_from(Student.__table__)),1)
             finally:
                 app.before_request_funcs[None].remove(bind_test_database);db.session.remove();g.pop('institute_engine',None);engine.dispose()
+
+    def roll_setup(self):
+        Setting=app.extensions['school_settings_models']['setting'];Item=app.extensions['school_settings_models']['item']
+        db.session.add(Setting(key='roll-numbers',data=dict(enabled=True,skip=True,imports=True)))
+        db.session.add(Item(kind='roll-series',scope='',name='test-global',data=dict(class_name='',section='',prefix='R-',digits=3,start=1,next=1)));db.session.commit()
+    def test_import_roll_preview_reserves_later_typed_roll_and_apply_consumes_once(self):
+        self.roll_setup();rows=self.rows(2);rows[1]['roll_no']='R-001';batch=self.upload(rows);self.review(batch);token=self.confirmation(batch)
+        Item=app.extensions['school_settings_models']['item'];series=Item.query.filter_by(kind='roll-series').one();self.assertEqual(series.data['next'],1)
+        self.assertEqual(self.apply(batch,token).status_code,302)
+        details=self.rm['student'].query.order_by(self.rm['student'].student_id).all();self.assertEqual([r.data['roll_no'] for r in details],['R-002','R-001']);self.assertEqual(series.data['next'],3)
+        self.assertEqual(self.apply(batch,token).status_code,422);self.assertEqual(series.data['next'],3)
+    def test_changed_roll_controls_invalidate_reviewed_import(self):
+        self.roll_setup();batch=self.upload();self.review(batch);token=self.confirmation(batch)
+        Setting=app.extensions['school_settings_models']['setting'];row=db.session.get(Setting,'roll-numbers');row.data={**row.data,'imports':False};db.session.commit()
+        self.assertEqual(self.apply(batch,token).status_code,422);self.assertEqual(Student.query.count(),0)
