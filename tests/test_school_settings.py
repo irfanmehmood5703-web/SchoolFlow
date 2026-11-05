@@ -203,6 +203,46 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertIn("'=TEST-FORMULA",values)
         self.assertEqual(self.ops['audit'].query.count(),before)
 
+    def test_saved_list_and_excel_share_search_and_exact_campus_filters(self):
+        import io
+        from openpyxl import load_workbook
+        Item=self.m['item']
+        for name,scope in [('North A template','Campus A'),('North B template','Campus B'),('North default template',''),('South A template','Campus A')]:
+            db.session.add(Item(kind='print-template',name=name,scope=scope,data={'header':'','body':'','footer':''}))
+        db.session.commit();before=self.ops['audit'].query.count()
+        path='/workspace/core/hrm/print-templates?q=nOrTh&campus_filter=Campus+A'
+        page=self.c.get(path);self.assertEqual(page.status_code,200)
+        self.assertIn(b'North A template',page.data)
+        for hidden in [b'North B template',b'North default template',b'South A template']:self.assertNotIn(hidden,page.data)
+        response=self.c.get(path+'&export=xlsx');self.assertEqual(response.status_code,200)
+        book=load_workbook(io.BytesIO(response.data));self.assertEqual(list(book.active.values)[1:],[('North A template','Campus A','Header: ; Body: ; Footer: ')])
+        self.assertEqual(dict(list(book['Filters'].values)[1:])['Search'],'nOrTh');self.assertIn('no-store',response.headers['Cache-Control'])
+        default=self.c.get('/workspace/core/hrm/print-templates?campus_filter=__default__&export=xlsx')
+        self.assertEqual(list(load_workbook(io.BytesIO(default.data)).active.values)[1][0],'North default template')
+        self.assertEqual(self.ops['audit'].query.count(),before)
+
+    def test_catalog_search_and_excel_include_the_saved_designation_group(self):
+        import io
+        from openpyxl import load_workbook
+        self.post('hrm','designations',name='Science Teacher',group='Teaching')
+        page=self.c.get('/workspace/core/hrm/designations?q=teaching');self.assertIn(b'Science Teacher',page.data);self.assertNotIn(b'<td>Clerk</td>',page.data)
+        response=self.c.get('/workspace/core/hrm/designations?q=teaching&export=xlsx')
+        self.assertEqual(list(load_workbook(io.BytesIO(response.data)).active.values)[1:],[('Science Teacher',None,'Group: Teaching')])
+
+    def test_filtered_subject_list_cannot_reorder_or_drop_hidden_subjects(self):
+        self.post('exam','subject-groups',name='Sciences')
+        for name in ['Math','Physics']:self.post('exam','subjects',name=name,group='Sciences',grading='Marks')
+        rows=self.m['item'].query.filter_by(kind='subject').order_by(self.m['item'].id).all();before=[r.data.copy() for r in rows]
+        page=self.c.get('/workspace/core/exam/subjects?q=math');self.assertNotIn(b'id="settings-order"',page.data)
+        response=self.c.post('/workspace/core/exam/subjects?q=math',data={'_csrf':self.csrf,'action':'reorder','order_ids':[str(rows[0].id)],'version_'+str(rows[0].id):str(rows[0].version)})
+        self.assertEqual(response.status_code,422);self.assertEqual([r.data for r in rows],before)
+
+    def test_invalid_saved_list_filters_and_non_list_exports_fail_read_only(self):
+        before=self.ops['audit'].query.count()
+        for path in ['/workspace/core/hrm/print-templates?campus_filter=Unknown','/workspace/core/hrm/print-templates?q='+'a'*161,'/workspace/core/hrm/employee-fields?export=xlsx']:
+            self.assertEqual(self.c.get(path).status_code,422)
+        self.assertEqual(self.ops['audit'].query.count(),before)
+
     def test_root_settings_forms_submit_to_their_visible_page(self):
         response=self.c.post('/workspace/core/exam',data={'_csrf':self.csrf,'version':'0','written':'Root Theory','decimals':'2'})
         self.assertEqual(response.status_code,302)

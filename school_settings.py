@@ -421,7 +421,24 @@ def configure_school_settings(app,db,Student,Employee):
             meta={r.name:r for r in items(CATALOG_PAGES[page])}
             edit=request.args.get('catalog_edit','');catalog_edit=next((r for r in rows if str(r.id)==edit),None)
         else:rows=items(kind);meta={};catalog_edit=None
+        list_page=page in CATALOG_PAGES or page in kinds
+        search=request.args.get('q','').strip()
+        campus_filter=request.args.get('campus_filter','')
+        if len(search)>160:raise ValueError('Use a search up to 160 characters.')
+        if campus_filter and campus_filter!='__default__' and campus_filter not in campuses:raise ValueError('Choose a configured campus filter.')
+        def saved_details(r):
+            if page not in CATALOG_PAGES:return r.data
+            entry=meta.get(r.value)
+            return entry.data if entry else {}
+        if list_page:
+            def matches(r):
+                label=r.value if page in CATALOG_PAGES else r.name
+                scope='' if page in CATALOG_PAGES else r.scope
+                detail=saved_details(r)
+                return (not campus_filter or scope==('' if campus_filter=='__default__' else campus_filter)) and (not search or search.casefold() in (label+' '+scope+' '+str(detail)).casefold())
+            rows=[r for r in rows if matches(r)]
         if request.args.get('export')=='xlsx':
+            if not list_page:raise ValueError('Excel export is available for saved settings lists.')
             from openpyxl import Workbook
             book=Workbook();sheet=book.active;sheet.title='Settings'
             sheet.append(['Name / Layout','Campus','Details'])
@@ -431,15 +448,17 @@ def configure_school_settings(app,db,Student,Employee):
             for r in rows:
                 label=r.value if page in CATALOG_PAGES else r.name
                 scope='' if page in CATALOG_PAGES else r.scope
-                details={} if page in CATALOG_PAGES else r.data
+                details=saved_details(r)
                 text='; '.join(str(k).replace('_',' ').title()+': '+str(v) for k,v in details.items())
                 sheet.append([cell(label),cell(scope),cell(text)])
             sheet.column_dimensions['A'].width=36;sheet.column_dimensions['B'].width=26;sheet.column_dimensions['C'].width=90
             sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
+            filters=book.create_sheet('Filters');filters.append(['Filter','Value'])
+            for label,v in [('Settings',dict(pages)[page]),('Search',search),('Campus',campus_filter or 'All campuses')]:filters.append([label,cell(v)])
             output=io.BytesIO();book.save(output)
             response=app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response.headers['Content-Disposition']='attachment; filename="schoolflow-'+module+'-'+page+'.xlsx"'
-            return response
-        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit)
+            response.headers['Cache-Control']='private, no-store';return response
+        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter)
 
     @bp.route('/hrm/assign-shifts',methods=['GET','POST'])
     def assign_shifts():
