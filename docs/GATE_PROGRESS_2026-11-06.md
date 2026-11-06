@@ -1,5 +1,7 @@
 # SchoolFlow continuation — 6 November 2026
 
+> Update: A separately deployed connected trial and new 0.2 APK are now available. See [GATE_TRIAL.md](GATE_TRIAL.md) for current verification and setup. The original main deployment remains unchanged. The older APK evidence below is retained as history.
+
 ## Preserved source
 
 The existing repository was resumed, not recreated. Reviewed all four remote branches: main, feature/schoolflow-gate-android, upgrade/reference-complete-phase1 and upgrade/report-workflows. Main remains at 66b5747b9d07c6232c7a27db0ac7522a46877e7c (v31). The resumed Android branch was at 5d53ff84f2633cd94cf057faf0276e3546812e63. Earlier Android commits and all server features are retained. No merge, Render deploy, restart, environment change or production-data write was performed.
