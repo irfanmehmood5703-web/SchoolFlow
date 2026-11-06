@@ -461,5 +461,15 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/workspace/core/fees/discount-types?edit=1').status_code,404)
 
 
+    def test_finance_master_records_are_private_to_each_institute(self):
+        self.login('TEST-A');token=self.csrf()
+        response=self.client.post('/workspace/finance/groups/new',data={'_csrf':token,'version':'0','name':'Only School A Finance','account_class':'Assets','active':'1'})
+        self.assertEqual(response.status_code,302)
+        self.assertIn(b'Only School A Finance',self.client.get('/workspace/finance/groups').data)
+        self.login('TEST-B')
+        self.assertNotIn(b'Only School A Finance',self.client.get('/workspace/finance/groups').data)
+        self.assertEqual(self.client.get('/workspace/finance/groups/1').status_code,404)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -125,6 +125,9 @@ configure_whatsapp(app,db)
 from client_subscription import configure_client_subscription
 configure_client_subscription(app,db)
 
+from finance_setup import configure_finance
+configure_finance(app,db)
+
 @app.route('/')
 def home():
     from flask import render_template

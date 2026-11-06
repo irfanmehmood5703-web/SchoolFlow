@@ -9,6 +9,9 @@ from gate_trial import bootstrap
 
 if __name__ == '__main__':
     with app.app_context():
-        bootstrap(app, db, Student, Employee, os.environ)
+        institute_id=bootstrap(app, db, Student, Employee, os.environ)
+        # Add new master tables only in this explicitly isolated trial.
+        helpers=app.extensions['identity_helpers']
+        db.metadata.create_all(helpers['engine'](institute_id),tables=helpers['workspace_tables']())
     # Do not print credentials, identity QR values or environment variables.
     os.execvp('gunicorn', ['gunicorn', 'app:app', '--bind', '0.0.0.0:' + os.environ.get('PORT', '10000')])

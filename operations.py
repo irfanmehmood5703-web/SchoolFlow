@@ -203,6 +203,8 @@ def configure_operations(app, db, Student, Employee):
         return render('operation_error.html',title='Please check this operation',error=str(exc)),422
 
     def menu_url(key):
+        if key.startswith('finance-'):
+            return url_for('finance.chart') if key=='finance-chart' else url_for('finance.index',kind=key.removeprefix('finance-'))
         if key in ('students','employees'): return url_for('records.record_list',kind='student' if key=='students' else 'employee')
         if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return url_for('ops.fees',mode=key)
         if key=='certificates': return url_for('certificates.index')

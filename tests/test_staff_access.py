@@ -200,3 +200,35 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'logs','size':'25','columns':['summary']}).status_code,302)
         response=self.c.get('/workspace/core/user-logging?export=csv');self.assertEqual(response.status_code,200);self.assertEqual(response.data.decode('utf-8-sig').splitlines()[0],'What happened')
         self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'logs','size':'25','columns':['password_hash']}).status_code,422)
+
+    def test_finance_requires_separate_all_campus_permissions(self):
+        self.login();self.assertEqual(self.c.get('/workspace/finance/groups').status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+            person=db.session.get(self.Staff,self.sid);data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.view']=['Campus A'];data['permissions']=permissions;person.data=data;db.session.commit();self.version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=self.version
+        self.assertEqual(self.c.get('/workspace/finance/groups').status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+            person=db.session.get(self.Staff,self.sid);data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.view']=['Campus A','Campus B'];data['permissions']=permissions;person.data=data;db.session.commit();self.version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=self.version
+        self.assertEqual(self.c.get('/workspace/finance/groups').status_code,200)
+        self.assertEqual(self.c.post('/workspace/finance/groups/new',data={'_csrf':self.token(),'version':'0','name':'Forbidden','account_class':'Assets','active':'1'}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/chart-of-accounts?print=1').status_code,403)
+
+    def test_closing_or_reopening_finance_period_requires_approval(self):
+        def grant_finance(approval=False):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+                person=db.session.get(self.Staff,self.sid);data=dict(person.data);permissions=dict(data['permissions'])
+                for action in ('view','create','update')+ (('approve',) if approval else ()):
+                    permissions['finance.'+action]=['Campus A','Campus B']
+                data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+        self.login();grant_finance()
+        form=dict(_csrf=self.token(),version='0',begin='2026-01-01',end='2026-12-31',closed='1')
+        self.assertEqual(self.c.post('/workspace/finance/periods/new',data=form).status_code,403)
+        form['closed']='0';response=self.c.post('/workspace/finance/periods/new',data=form);self.assertEqual(response.status_code,302)
+        self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,403)
+        grant_finance(True)
+        self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,302)
