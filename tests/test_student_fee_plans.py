@@ -98,3 +98,25 @@ class StudentFeePlanTests(unittest.TestCase):
     def test_increment_rounding_and_excludes_arrears(self):
         self.save(percentage='50',discount_1='3499.99',arrears_1='100')
         line=self.P.query.one().data['lines'][1];self.assertEqual((line['net'],line['increment'],line['arrears']),(2,1,10000))
+
+    def test_discount_category_snapshot_retirement_and_invalid_assignments(self):
+        Item=app.extensions['school_settings_models']['item']
+        category=Item(kind='discount-type',scope='',name='Sibling concession',data={'active':True})
+        retired=Item(kind='discount-type',scope='',name='Retired category',data={'active':False})
+        db.session.add_all([category,retired]);db.session.commit()
+        for invalid in ['999999','abc',str(retired.id)]:
+            self.assertEqual(self.save(discount_type=invalid).status_code,422)
+            self.assertEqual(self.P.query.count(),0)
+        self.assertEqual(self.save(discount_type=str(category.id)).status_code,302)
+        plan=self.P.query.one();original_lines=plan.data['lines']
+        self.assertEqual(plan.data['discount_type_name'],'Sibling concession')
+        self.assertEqual(plan.data['reason'],'Test concession')
+        category.name='Renamed category';category.data={'active':False};db.session.commit()
+        self.assertIn(b'Sibling concession',self.c.get(f'/workspace/student-fee-plans/{self.s.id}').data)
+        self.assertIn(b'Inactive (existing)',self.c.get(f'/workspace/student-fee-plans/{self.s.id}/edit').data)
+        self.assertEqual(self.save(discount_type=str(category.id)).status_code,302)
+        self.assertEqual(self.P.query.one().data['lines'],original_lines)
+        self.assertEqual(self.P.query.one().data['discount_type_name'],'Sibling concession')
+        self.assertEqual(self.save(effective='2026-10',discount_type='').status_code,302)
+        self.assertNotIn('discount_type_id',self.P.query.filter_by(effective='2026-10').one().data)
+        self.assertEqual(self.P.query.filter_by(effective='2026-09').one().data['discount_type_name'],'Sibling concession')

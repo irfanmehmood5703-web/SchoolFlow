@@ -78,6 +78,38 @@ def configure_fee_setup(app,db,Student):
     def invalid(error):
         db.session.rollback();return render_template('operation_error.html',title='Check fee settings',error=str(error)),422
 
+    def discount_choices():
+        Item=app.extensions['school_settings_models']['item']
+        return Item.query.filter_by(kind='discount-type',scope='').order_by(Item.name,Item.id).all()
+
+    @bp.route('/discount-types',methods=['GET','POST'])
+    def discount_types():
+        Item=app.extensions['school_settings_models']['item']
+        if request.method=='POST':
+            raw=request.form.get('id','')
+            if raw and (not raw.isdigit() or len(raw)>18):raise ValueError('Choose a valid discount type.')
+            row=Item.query.filter_by(id=int(raw),kind='discount-type',scope='').first() if raw else None
+            if raw and not row:abort(404)
+            if request.form.get('version','0')!=str(row.version if row else 0):raise ValueError('This discount type changed. Reload before saving.')
+            action=request.form.get('action','save')
+            before=dict(name=row.name,active=row.data.get('active',True)) if row else None
+            if action=='save':
+                name=text('name',True)
+                if any(r.id!=(row.id if row else None) and r.name.casefold()==name.casefold() for r in discount_choices()):raise ValueError('That discount type already exists.')
+                row=row or Item(kind='discount-type',scope='',name=name,data={})
+                row.name=name;row.data={'active':request.form.get('active')=='1'};db.session.add(row)
+                audit('Save discount type',before=before,after=dict(name=name,active=row.data['active']))
+            elif action=='delete' and row:
+                if P.query.filter(P.data['discount_type_id'].as_integer()==row.id).first():raise ValueError('This discount type is used by a saved fee plan. Make it inactive instead.')
+                audit('Delete discount type',id=row.id,before=before);db.session.delete(row)
+            else:raise ValueError('Choose Save or Delete.')
+            commit();flash('Discount types updated. Saved fee amounts and category snapshots are unchanged.','success')
+            return redirect(url_for('fee_setup.discount_types'))
+        rows=discount_choices();edit=request.args.get('edit','')
+        selected=next((r for r in rows if str(r.id)==edit),None)
+        if edit and not selected:abort(404)
+        return render_template('discount_types.html',title='Discount Types',rows=rows,selected=selected)
+
     def used_head(key):
         return (app.extensions.get('fine_queue_helpers',{}).get('head_used',lambda k:False)(key) or app.extensions.get('attendance_fine_helpers',{}).get('head_used',lambda k:False)(key) or app.extensions.get('late_fee_helpers',{}).get('head_used',lambda k:False)(key) or any(any(x['key']==key for x in r.lines) for r in FeeSchedule.query.all()) or
                 any(any(x['particular']==key for x in r.data['lines']) for r in P.query.all()) or
@@ -209,5 +241,5 @@ def configure_fee_setup(app,db,Student):
 
     @app.context_processor
     def context():return dict(fee_head_label=label)
-    app.extensions['fee_setup_helpers']=dict(heads=heads,label=label,for_student=for_student,scoped_schedule=scoped_schedule,assigned_rows=assigned_rows,snapshot=snapshot,resolve=resolve,effective_rule=effective_rule,eligible=eligible,due=due)
+    app.extensions['fee_setup_helpers']=dict(heads=heads,label=label,for_student=for_student,scoped_schedule=scoped_schedule,assigned_rows=assigned_rows,snapshot=snapshot,resolve=resolve,effective_rule=effective_rule,eligible=eligible,due=due,discount_choices=discount_choices)
     app.register_blueprint(bp)

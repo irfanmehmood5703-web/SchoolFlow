@@ -204,3 +204,26 @@ class FeeSetupTests(unittest.TestCase):
         self.assertEqual(self.schedule(include_first_0='1',override_0='1',months_0=[],amount_1='0',amount_2='0',amount_3='0').status_code,302)
         self.assign(percentage='0',discount_1='0');self.generate('2026-09');self.generate('2026-10')
         self.assertEqual(self.B.query.count(),1);self.assertEqual(self.B.query.one().total,350000)
+
+    def test_discount_type_management_validates_duplicates_versions_and_csrf(self):
+        Item=app.extensions['school_settings_models']['item']
+        self.assertEqual(self.c.get('/workspace/core/fees/discount-types').status_code,200)
+        self.assertEqual(Item.query.filter_by(kind='discount-type').count(),0)
+        self.assertEqual(self.c.post('/workspace/core/fees/discount-types',data={'name':'Sibling'}).status_code,400)
+        self.assertEqual(self.post('discount-types',name='',active='1',version='0').status_code,422)
+        self.assertEqual(self.post('discount-types',name='Sibling',active='1',version='0').status_code,302)
+        row=Item.query.filter_by(kind='discount-type').one()
+        self.assertEqual(self.post('discount-types',name='sIBLING',active='1',version='0').status_code,422)
+        self.assertEqual(self.post('discount-types',id=str(row.id),name='Staff',active='1',version='0').status_code,422)
+        self.assertEqual(self.post('discount-types',id=str(row.id),name='Staff',active='1',version=str(row.version)).status_code,302)
+        self.assertEqual(self.post('discount-types',id=str(row.id),action='delete',version=str(row.version)).status_code,302)
+        self.assertEqual(Item.query.filter_by(kind='discount-type').count(),0)
+
+    def test_used_discount_type_cannot_be_deleted_but_can_be_retired(self):
+        Item=app.extensions['school_settings_models']['item']
+        row=Item(kind='discount-type',scope='',name='Sibling',data={'active':True});db.session.add(row);db.session.flush()
+        db.session.add(self.P(student_id=self.s.id,effective='2026-09',data={'discount_type_id':row.id,'discount_type_name':'Sibling','lines':[]}));db.session.commit()
+        self.assertEqual(self.post('discount-types',id=str(row.id),action='delete',version=str(row.version)).status_code,422)
+        self.assertEqual(self.post('discount-types',id=str(row.id),name='Sibling',version=str(row.version)).status_code,302)
+        self.assertFalse(Item.query.filter_by(kind='discount-type').one().data['active'])
+        self.assertEqual(self.P.query.one().data['discount_type_name'],'Sibling')

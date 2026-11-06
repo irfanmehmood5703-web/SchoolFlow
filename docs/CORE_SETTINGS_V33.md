@@ -65,3 +65,12 @@ The fictional preview at https://schoolflow-gate-trial-irfan.onrender.com is liv
 The existing optional awake-server worker was enabled on the trial service. A separate verification started from empty alert history, saved an immediate student-alert setting and observed a background-created owner alert without making any Check now request. Thus the timer path, not just its button, was exercised. The reference's normal 15-minute delay remains user-configurable; free sleeping hosting still does not guarantee scheduled execution while asleep. WhatsApp outbound requests/sending remain disabled until the software owner explicitly configures and verifies a real provider.
 
 Original main remains `66b5747b9d07c6232c7a27db0ac7522a46877e7c`, live deployment `dep-dbmb6cavcj2c738dcl0g`; this pass did not merge to main or modify/restart that service. The later report commit changes documentation only.
+
+
+## Discount Types gap from the legacy menu review
+
+Institute Setup → Related settings → Discount Types now manages school-owned concession categories. The same manager is linked from Fee heads and student fee plans. Owners or authorized Core Settings staff may add, rename, retire/reactivate, and delete unused types. Writes use CSRF, optimistic versions, the existing institute write lock, and audit records. Duplicate names are rejected case-insensitively. Types referenced by any historical fee plan cannot be deleted.
+
+Student Create/Update Fee Plan now has an optional category dropdown alongside the existing free-text reason. The plan stores a category ID and name snapshot. Inactive categories are unavailable for new assignments; an existing assignment may be retained. Renaming a category does not rewrite old labels, discounts, increments, challans, or reason text. Each institute has its own category store; no defaults or monetary discounts are silently applied.
+
+Validation: 65 existing and updated fee/identity tests plus the additional tenant-isolation test passed (66 distinct tests). New coverage checks category validation, stale saves, CSRF, rename snapshots, retirement, deletion restrictions, historical plans, and cross-school isolation.

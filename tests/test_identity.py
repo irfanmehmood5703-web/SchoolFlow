@@ -451,6 +451,15 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.login('TEST-A').status_code,302)
         self.assertIn(b'PRIVATE-A-',self.client.get(path).data);self.assertIn(b'Private School A closure',self.client.get('/workspace/core/holidays').data)
 
+    def test_discount_type_catalog_is_private_to_each_school(self):
+        self.login('TEST-A');token=self.csrf()
+        response=self.client.post('/workspace/core/fees/discount-types',data={'_csrf':token,'name':'Private School A concession','active':'1','version':'0'})
+        self.assertEqual(response.status_code,302)
+        self.assertIn(b'Private School A concession',self.client.get('/workspace/core/fees/discount-types').data)
+        self.login('TEST-B')
+        self.assertNotIn(b'Private School A concession',self.client.get('/workspace/core/fees/discount-types').data)
+        self.assertEqual(self.client.get('/workspace/core/fees/discount-types?edit=1').status_code,404)
+
 
 if __name__ == '__main__':
     unittest.main()
