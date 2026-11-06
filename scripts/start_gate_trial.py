@@ -12,6 +12,7 @@ if __name__ == '__main__':
         institute_id=bootstrap(app, db, Student, Employee, os.environ)
         # Add new master tables only in this explicitly isolated trial.
         helpers=app.extensions['identity_helpers']
-        db.metadata.create_all(helpers['engine'](institute_id),tables=helpers['workspace_tables']())
+        engine=helpers['engine'](institute_id);db.session.remove()
+        helpers['create_workspace'](engine)
     # Do not print credentials, identity QR values or environment variables.
     os.execvp('gunicorn', ['gunicorn', 'app:app', '--bind', '0.0.0.0:' + os.environ.get('PORT', '10000')])

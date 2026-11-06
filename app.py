@@ -10,7 +10,7 @@ from identity import InstituteSession, configure_identity
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.getenv('SECRET_KEY') or secrets.token_hex(32),
-    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL','sqlite:///schoolflow.db').replace('postgres://','postgresql://',1),
+    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL','sqlite:///schoolflow.db').replace('postgres://','postgresql+psycopg2://',1).replace('postgresql://','postgresql+psycopg2://',1),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SCHOOLFLOW_API_TOKEN=os.getenv('SCHOOLFLOW_API_TOKEN'),
     SESSION_COOKIE_HTTPONLY=True,
@@ -19,6 +19,10 @@ app.config.update(
     PUBLIC_DEMO_ENABLED=os.getenv('PUBLIC_DEMO_ENABLED', '1') == '1',
     INSTITUTE_DATABASE_DIR=os.getenv('INSTITUTE_DATABASE_DIR'),
 )
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS']=dict(pool_pre_ping=True,pool_size=3,max_overflow=2,pool_recycle=300,connect_args={'connect_timeout':10})
+if os.getenv('SCHOOLFLOW_REQUIRE_POSTGRES')=='1' and not app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
+    raise RuntimeError('Persistent mode requires PostgreSQL; refusing an ephemeral SQLite fallback.')
 from performance import configure_performance
 configure_performance(app)
 db=SQLAlchemy(app, session_options={'class_': InstituteSession})

@@ -1,0 +1,29 @@
+# Review-only plan for the existing isolated trial. Never targets main.
+services:
+  - type: web
+    name: schoolflow-gate-trial-irfan
+    runtime: python
+    region: singapore
+    plan: free
+    repo: https://github.com/irfanmehmood5703-web/SchoolFlow
+    branch: feature/schoolflow-gate-android
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/start_gate_trial.py
+    autoDeployTrigger: "off"
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: schoolflow-storage-trial
+          property: connectionString
+      - key: SCHOOLFLOW_REQUIRE_POSTGRES
+        value: "1"
+# Upgrading this existing free database incurs recurring charges.
+# Applying this plan requires the owner's explicit cost/deploy approval.
+databases:
+  - name: schoolflow-storage-trial
+    region: singapore
+    postgresMajorVersion: "16"
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    ipAllowList: []
