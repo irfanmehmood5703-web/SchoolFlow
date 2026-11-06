@@ -11,9 +11,10 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','communication':'Communication requests','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
+PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
 PERMISSIONS['attendance.self']='My Geo Attendance · self only'
 ACCOUNTS=('Cash in Hand','Cash at Bank','Petty Cash','Accounts Receivable','Fee Receivable','Discounts','Bad Debts')
 ROLES=('Super Admin','Admin','User','Teacher')
@@ -300,6 +301,14 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('daily_snapshots.'):
+            return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('requisitions.'):
+            if ep=='requisitions.settings':return 'core.'+('update' if request.method=='POST' else 'view')
+            if ep in ('requisitions.approvals','requisitions.decide'):return 'requisitions.approve'
+            if ep in ('requisitions.issue','requisitions.settle','requisitions.reports'):return 'requisitions.manage'
+            if ep=='requisitions.blocked_posting':return 'requisitions.'+('pay' if request.path.endswith('/issue') else 'update')
+            return 'requisitions.'+('create' if ep=='requisitions.mine' and request.method=='POST' else 'update' if ep=='requisitions.cancel' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_partners.'):
             return 'finance.'+('create' if ep=='finance_partners.edit' and not args.get('rid') else 'update' if ep=='finance_partners.edit' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_reports.'):

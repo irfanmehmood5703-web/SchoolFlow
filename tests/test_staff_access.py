@@ -277,3 +277,38 @@ class StaffAccessTests(unittest.TestCase):
             self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,200)
             self.assertEqual(self.c.get('/workspace/finance/'+path+'?print=1').status_code,403)
         self.assertEqual(self.c.get('/workspace/finance/shareholders/new').status_code,403)
+
+    def test_requisitions_my_rows_and_decisions_are_separately_scoped(self):
+        R=app.extensions['requisition_models']['request']
+        def seed():
+            for rid,campus,key,purpose in [(1,'Campus A','staff:'+str(self.sid),'Own A'),(2,'Campus B','staff:'+str(self.sid),'Own B'),(9,'Campus A','owner:1','Other A'),(99,'Campus B','owner:1','Other B')]:
+                db.session.add(R(id=rid,number='REQ-'+str(rid),campus=campus,actor_key=key,raised_by=key,category='Procurement / Supplies',purpose=purpose,items=[{'item':'Test','qty':'1','unit_price':1000,'amount':1000}],estimated=1000,token='fictional-token-'+str(rid),fingerprint='test'))
+            p=db.session.get(self.Staff,self.sid);p.data={**p.data,'permissions':{'requisitions.view':['Campus A'],'requisitions.create':['Campus A']}}
+            db.session.flush();return p.version
+        version=self.tenant(seed);self.login()
+        page=self.c.get('/workspace/finance/requisitions/mine');self.assertEqual(page.status_code,200);self.assertIn(b'Own A',page.data);self.assertNotIn(b'Own B',page.data);self.assertNotIn(b'Other A',page.data)
+        for rid in (2,9):self.assertEqual(self.c.get(f'/workspace/finance/requisitions/{rid}').status_code,404)
+        for endpoint in ('approvals','issue','settle','reports','settings'):
+            self.assertEqual(self.c.get('/workspace/finance/requisitions/'+endpoint).status_code,403)
+        token=self.token();form=dict(_csrf=token,post_token='FictionalToken012345678901234567890123',campus='Campus A',category='Procurement / Supplies',purpose='New A',item=['Paper'],qty=['1'],unit_price=['1'])
+        response=self.c.post('/workspace/finance/requisitions/mine',data=form);self.assertEqual(response.status_code,302);self.assertTrue(response.location.endswith('/100'))
+        form['campus']='Campus B';self.assertEqual(self.c.post('/workspace/finance/requisitions/mine',data=form).status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/requisitions/9/decide',data={'_csrf':token}).status_code,403)
+        def approve_permission():
+            p=db.session.get(self.Staff,self.sid);p.data={**p.data,'permissions':{'requisitions.approve':['Campus A']}};db.session.flush();return p.version
+        version=self.tenant(approve_permission)
+        with self.c.session_transaction() as sess:sess['staff_version']=version
+        page=self.c.get('/workspace/finance/requisitions/approvals');self.assertEqual(page.status_code,200);self.assertIn(b'Other A',page.data);self.assertNotIn(b'Own B',page.data)
+        r=self.c.post('/workspace/finance/requisitions/9/decide',data=dict(_csrf=self.token(),post_token='DecisionToken012345678901234567890123',version='1',decision='Approved',approved='10'));self.assertEqual(r.status_code,302)
+
+    def test_internal_snapshot_capture_is_whole_institute_and_restores_staff_scope(self):
+        def check():
+            p=db.session.get(self.Staff,self.sid);g.staff_principal=p;g.access_campuses={'Campus A'}
+            app.extensions['snapshot_helpers']['capture']()
+            self.assertIs(g.staff_principal,p);self.assertEqual(g.access_campuses,{'Campus A'})
+            g.staff_principal=None;g.access_campuses=None
+            row=app.extensions['snapshot_models']['snapshot'].query.filter_by(campus='Campus B').one()
+            self.assertEqual(row.metrics['strength'],1);self.assertEqual(row.metrics['expected'],10000)
+        self.tenant(check)
+        self.login();self.assertEqual(self.c.get('/workspace/finance/snapshots').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/snapshots/capture',data={'_csrf':self.token()}).status_code,403)

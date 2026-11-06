@@ -133,6 +133,10 @@ from finance_reports import configure_finance_reports
 configure_finance_reports(app,db)
 from finance_partners import configure_finance_partners
 configure_finance_partners(app,db)
+from requisitions import configure_requisitions
+configure_requisitions(app,db)
+from daily_snapshots import configure_daily_snapshots
+configure_daily_snapshots(app,db,Student)
 
 @app.route('/')
 def home():

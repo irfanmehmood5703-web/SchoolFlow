@@ -499,5 +499,22 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/workspace/finance/reports/journal/1/edit').status_code,404)
 
 
+    def test_snapshot_history_and_requisition_requests_are_school_private(self):
+        import re
+        self.login('TEST-A');token=self.csrf()
+        r=self.client.post('/workspace/finance/requisitions/mine',data=dict(_csrf=token,post_token='FictionalTenantToken01234567890123456789',campus='Campus Only School A',category='Procurement / Supplies',purpose='Private School A request',item=['Private item A'],qty=['1'],unit_price=['10']))
+        self.assertEqual(r.status_code,302,r.data)
+        self.assertEqual(self.client.post('/workspace/finance/snapshots/capture',data={'_csrf':token}).status_code,302)
+        history=self.client.get('/workspace/finance/snapshots');self.assertEqual(history.status_code,200)
+        ids=re.findall(rb'/workspace/finance/snapshots/(\d+)/students',history.data)
+        details=b''.join(self.client.get('/workspace/finance/snapshots/'+i.decode()+'/students').data for i in ids)
+        self.assertIn(b'Only School A',details)
+        self.login('TEST-B')
+        self.assertNotIn(b'Private School A request',self.client.get('/workspace/finance/requisitions/mine').data)
+        self.assertEqual(self.client.get('/workspace/finance/requisitions/1').status_code,404)
+        for i in ids:self.assertEqual(self.client.get('/workspace/finance/snapshots/'+i.decode()+'/students').status_code,404)
+        self.assertNotIn(b'Only School A',self.client.get('/workspace/finance/snapshots').data)
+
+
 if __name__ == '__main__':
     unittest.main()
