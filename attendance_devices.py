@@ -286,6 +286,7 @@ def configure_attendance_devices(app,db,Student,Employee):
             if state and state.first_in:return result('Already marked','An IN mark is already recorded for today.')
             if row and row.status!='Absent':return result('Not marked','Existing attendance needs manual review.')
             status='Late' if when>begin+timedelta(minutes=config[prefix+'_late']) else 'Present'
+            if not app.extensions['attendance_control_helpers']['allowed'](kind,status):return result('Not marked','This attendance status is inactive.')
             if not row:row=Daily(kind=kind,person_id=person.id,day=day,status=status,lectures=0,time_in='',time_out='');db.session.add(row);db.session.flush()
             if not state:state=Mark(daily_id=row.id,campus=device.campus,origin='device');db.session.add(state)
             row.status=status;row.time_in=when.strftime('%H:%M');state.origin='device';state.first_in=stamp;state.base_status=status
@@ -294,8 +295,9 @@ def configure_attendance_devices(app,db,Student,Employee):
             if state.first_out:return result('Already marked','An OUT mark is already recorded for today.')
             if aware(stamp)<aware(state.first_in):return result('Not marked','OUT cannot precede IN.')
             if not end:return result('Not marked','Configure an OUT shift before recording departure.')
-            row.time_out=when.strftime('%H:%M');state.first_out=stamp
-            row.status='Short Leave' if kind=='staff' and config['early_short'] and when<end-timedelta(minutes=config['early_minutes']) else state.base_status
+            status='Short Leave' if kind=='staff' and config['early_short'] and when<end-timedelta(minutes=config['early_minutes']) else state.base_status
+            if not app.extensions['attendance_control_helpers']['allowed'](kind,status,row.status):return result('Not marked','This attendance status is inactive.')
+            row.time_out=when.strftime('%H:%M');state.first_out=stamp;row.status=status
         notify_many(kind,[person.id],row.status,day,config);device.last_marked=now();audit('Device attendance marked',campus=device.campus,device_id=device.id,record_kind='student' if kind=='student' else 'employee',record_id=person.id,record_name=person.name,before=before,after=dict(status=row.status,time_in=row.time_in,time_out=row.time_out),direction=direction)
         return result('Marked','Attendance saved.')
     def resolve_qr(value,device):
@@ -381,7 +383,7 @@ def configure_attendance_devices(app,db,Student,Employee):
                 start,end=schedule;existing=daily.get((kind,person.id));state=states.get(existing.id) if existing else None;status=None
                 if not existing and (kind=='student' or config['auto_staff_absent']) and current>=start+timedelta(minutes=config[('student' if kind=='student' else 'staff')+'_absent']):status='Absent'
                 elif kind=='staff' and config['auto_staff_short'] and existing and state and state.origin=='device' and state.first_in and not state.first_out and existing.status in ('Present','Late') and end and current>=end+timedelta(minutes=config['staff_absent']):status='Short Leave'
-                if not status:continue
+                if not status or not app.extensions['attendance_control_helpers']['allowed'](kind,status):continue
                 before={'status':existing.status,'time_in':existing.time_in,'time_out':existing.time_out} if existing else {}
                 if not existing:
                     existing=Daily(kind=kind,person_id=person.id,day=day,status=status,lectures=0,time_in='',time_out='');db.session.add(existing);db.session.flush();state=Mark(daily_id=existing.id,campus=campus,origin='auto');db.session.add(state)
@@ -412,5 +414,5 @@ def configure_attendance_devices(app,db,Student,Employee):
             g.institute_engine=engine;db.session.remove()
             try:click.echo(str(tick(now(),force=True))+' attendance records updated.')
             finally:db.session.remove()
-    app.extensions['attendance_device_helpers']=dict(tick=tick,tick_all=tick_all,manual_write=manual_write)
+    app.extensions['attendance_device_helpers']=dict(tick=tick,tick_all=tick_all,manual_write=manual_write,write_event=write_event)
     app.register_blueprint(bp)

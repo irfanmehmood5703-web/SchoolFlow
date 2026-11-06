@@ -118,6 +118,12 @@ from staff_access import configure_staff_access
 configure_staff_access(app,db,Student,Employee)
 from attendance_devices import configure_attendance_devices
 configure_attendance_devices(app,db,Student,Employee)
+from attendance_controls import configure_attendance_controls
+configure_attendance_controls(app,db,Student,Employee)
+from whatsapp_settings import configure_whatsapp
+configure_whatsapp(app,db)
+from client_subscription import configure_client_subscription
+configure_client_subscription(app,db)
 
 @app.route('/')
 def home():

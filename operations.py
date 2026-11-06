@@ -186,7 +186,7 @@ def configure_operations(app, db, Student, Employee):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
         db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context))))
     def render(name, **kw):
-        return render_template(name, choices=choices, today=date.today().isoformat(), statuses=STATUSES, **kw)
+        return render_template(name, choices=choices, today=date.today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
     @app.context_processor
     def nav_context(): return dict(module_menus=MENUS, menu_url=menu_url, build_label='Pre-test • fictional records only')
@@ -454,8 +454,8 @@ def configure_operations(app, db, Student, Employee):
             for p in objs:
                 status=request.form.get('status_'+str(p.id))
                 if not status: continue
-                if status not in STATUSES or status=='Sandwich Leave': raise ValueError('Invalid or disabled attendance status.')
                 row=Daily.query.filter_by(kind=kind,person_id=p.id,day=d).first()
+                if status not in STATUSES or not app.extensions['attendance_control_helpers']['allowed'](kind,status,row.status if row else None): raise ValueError('Invalid or disabled attendance status.')
                 if not row: row=Daily(kind=kind,person_id=p.id,day=d);db.session.add(row)
                 row.status=status
                 app.extensions.get('attendance_device_helpers',{}).get('manual_write',lambda r:None)(row)
@@ -964,7 +964,7 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v32')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v33')
 
     @app.route('/api/v1/summary')
     def summary_api():

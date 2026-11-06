@@ -14,6 +14,7 @@ from werkzeug.datastructures import MultiDict
 MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','communication':'Communication requests','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
+PERMISSIONS['attendance.self']='My Geo Attendance · self only'
 ACCOUNTS=('Cash in Hand','Cash at Bank','Petty Cash','Accounts Receivable','Fee Receivable','Discounts','Bad Debts')
 ROLES=('Super Admin','Admin','User','Teacher')
 
@@ -299,6 +300,12 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep=='attendance_controls.self_attendance':return 'attendance.self'
+        if ep=='whatsapp_settings.command' and request.form.get('operation')=='send':return 'communication.create'
+        if ep.startswith(('whatsapp_settings.','client_subscription.')):
+            return 'core.'+('delete' if request.form.get('action')=='delete-provider' or request.form.get('operation')=='account_remove' else 'update' if request.method=='POST' else 'view')
+        if ep.startswith('attendance_controls.'):
+            return 'core.'+('delete' if ep=='attendance_controls.devices' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
         if ep.startswith('attendance_devices.'):
             area='attendance' if ep in ('attendance_devices.scans','attendance_devices.scanner') else 'core'
             return area+'.'+('export' if request.args.get('export') else 'create' if ep=='attendance_devices.gates' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
@@ -352,7 +359,7 @@ def configure_staff_access(app,db,Student,Employee):
             db.session.refresh(p)
             if not resolve(p.id,session.get('staff_version')) or not grant(p,code):abort(403,'Your access changed. Sign in again.')
         allowed=grant(p,code);g.access_campuses=allowed
-        if (code.split('.')[0] in ('core','access') or (request.blueprint=='certificate_manager' and request.method=='POST')) and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
+        if (code.split('.')[0] in ('core','access') or (request.blueprint=='certificate_manager' and request.method=='POST') or request.endpoint=='whatsapp_settings.command') and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
         if request.values.get('campus') and request.values['campus'] not in allowed:abort(403,'This campus is not granted for this action.')
         if code.endswith(('.pay','.reverse')):
             for key in ('account','discount_account','credit','debit'):
