@@ -175,6 +175,7 @@ def configure_finance(app,db):
                 except ValueError:raise ValueError('Enter valid Begin and End dates.')
                 if end<begin:raise ValueError('End must be on or after Begin.')
                 if Period.query.filter(Period.id!=(rid or 0),Period.begin<=end,Period.end>=begin).first():raise ValueError('Accounting periods cannot overlap, including closed periods.')
+                if row and (begin!=row.begin or end!=row.end) and app.extensions.get('ledger_helpers',{}).get('used_period',lambda rid:False)(row.id):raise ValueError('A period with posted journals cannot change its dates.')
                 data=dict(begin=begin,end=end,closed=flag('closed'))
                 principal=getattr(g,'staff_principal',None)
                 if principal is not None and data['closed']!=(row.closed if row else False):
@@ -195,6 +196,7 @@ def configure_finance(app,db):
                     group=db.session.get(Group,int(raw))
                     if not group or (not group.active and (not row or row.group_id!=group.id)):raise ValueError('Choose an active account group.')
                     if row and row.group_id!=group.id and row.group.account_class!=group.account_class:raise ValueError('An account cannot move to a different account class. Create a new account instead.')
+                    if row and row.group_id!=group.id and app.extensions.get('ledger_helpers',{}).get('used_account',lambda rid:False)(row.id):raise ValueError('An account with posted journals cannot change its group.')
                     data=dict(name=name,group_id=group.id,inactive=flag('inactive'))
                     if not row:data['code']=next_code(group)
             new=row is None;row=row or Model(**data)
@@ -216,8 +218,9 @@ def configure_finance(app,db):
             version(row)
             if request.form.get('action')!='delete' or request.form.get('confirm')!='1':raise ValueError('Confirm deletion of this unused record.')
             if kind=='groups' and Account.query.filter_by(group_id=rid).first():raise ValueError('This group has accounts. Make it inactive instead.')
-            # Only master records exist in this phase. Future journal posting
-            # must add references and prevent deletion of used accounts/periods.
+            helper=app.extensions.get('ledger_helpers',{})
+            if kind=='periods' and helper.get('used_period',lambda rid:False)(rid):raise ValueError('A period with posted journals cannot be deleted.')
+            if kind=='accounts' and helper.get('used_account',lambda rid:False)(rid):raise ValueError('An account with posted journals cannot be deleted. Make it inactive instead.')
             db.session.add(Audit(action='Delete Finance '+kind,data={'actor':actor(),'before':snapshot(row)}));db.session.delete(row);commit()
             return redirect(url_for('finance.index',kind=kind))
         return render_template('finance_view.html',title=heading,kind=kind,row=row,**context())

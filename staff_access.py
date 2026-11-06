@@ -300,6 +300,8 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('ledger.'):
+            return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance.'):
             return 'finance.'+('print' if ep=='finance.chart' and request.args.get('print')=='1' else 'view' if request.method=='GET' else 'delete' if request.form.get('action')=='delete' else 'create' if ep=='finance.initialize' or not args.get('rid') else 'update')
         if ep=='attendance_controls.self_attendance':return 'attendance.self'

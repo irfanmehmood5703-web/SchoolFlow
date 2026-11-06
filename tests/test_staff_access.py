@@ -232,3 +232,14 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,403)
         grant_finance(True)
         self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,302)
+
+    def test_ledger_posting_and_print_do_not_use_student_fee_permissions(self):
+        self.login()
+        self.assertEqual(self.c.get('/workspace/finance/ledger/entry/journal').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token()}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/ledger/report/profit?print=1').status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+            data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.create']=['Campus A','Campus B'];data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=version
+        self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)

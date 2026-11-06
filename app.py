@@ -127,6 +127,8 @@ configure_client_subscription(app,db)
 
 from finance_setup import configure_finance
 configure_finance(app,db)
+from finance_ledger import configure_ledger
+configure_ledger(app,db)
 
 @app.route('/')
 def home():

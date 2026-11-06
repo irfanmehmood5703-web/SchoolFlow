@@ -203,6 +203,9 @@ def configure_operations(app, db, Student, Employee):
         return render('operation_error.html',title='Please check this operation',error=str(exc)),422
 
     def menu_url(key):
+        if key.startswith('ledger-'):
+            mode=key.removeprefix('ledger-')
+            return url_for('ledger.entry',kind=mode) if mode in ('journal','expense','income') else url_for('ledger.report',mode='ledger' if mode=='home' else mode)
         if key.startswith('finance-'):
             return url_for('finance.chart') if key=='finance-chart' else url_for('finance.index',kind=key.removeprefix('finance-'))
         if key in ('students','employees'): return url_for('records.record_list',kind='student' if key=='students' else 'employee')

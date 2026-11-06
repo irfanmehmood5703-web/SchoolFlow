@@ -19,3 +19,7 @@ Verification covers period overlap/closure/version checks, CSRF, duplicate valid
 Final backend suite: 514 tests passed in 162.055 seconds. Python compilation, JavaScript syntax check and git diff whitespace validation passed.
 
 Live source commit: 5c1311b588c5d95a239254539ac724c6987f4728. Separate trial deployment dep-dbmojd5g1s2s73bfvqtg is live. Fourteen remote checks passed, including temporary fictional group/account create, update, filters, reference rejection and cleanup; existing Core Settings also opens. No real financial transactions were posted. Original main remains 66b5747b9d07c6232c7a27db0ac7522a46877e7c.
+
+## Later Ledger batch
+
+The manual journal posting/reporting and posted-master reference guards described as future work above are now implemented in the subsequent Ledger batch. See LEDGER.md for the current behavior and remaining fee/payroll source-integration limits.
