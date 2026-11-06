@@ -90,3 +90,10 @@ class CoreServiceTests(unittest.TestCase):
             db.session.add(M['command'](provider_id=1,token='1'*48,action='send',fingerprint='a'*64,status='Submitted',payload='fictional-encrypted-payload',created=datetime.now(timezone.utc)-timedelta(days=8)))
         self.tenant(seed);r=self.cli('whatsapp-history-prune','--code','DEVICE-TEST');self.assertEqual(r.exit_code,0,r.output)
         self.assertIsNone(self.tenant(lambda:M['command'].query.one().payload));self.assertEqual(self.tenant(lambda:M['command'].query.count()),1)
+
+    def test_subscription_default_range_includes_pending_current_month(self):
+        from zoneinfo import ZoneInfo
+        import calendar
+        today=datetime.now(ZoneInfo('Asia/Karachi')).date();due=today.replace(day=calendar.monthrange(today.year,today.month)[1]);month=today.strftime('%Y-%m')
+        M=app.extensions['client_subscription_models'];db.session.add(M['invoice'](institute_id=self.school,month=month,due=due,amount=123400,discount=0,paid=0,snapshot={}));db.session.commit()
+        self.login();page=self.c.get('/workspace/core/subscription');self.assertEqual(page.status_code,200,page.data);self.assertIn(b'Pending',page.data);self.assertIn(b'1234.00',page.data)

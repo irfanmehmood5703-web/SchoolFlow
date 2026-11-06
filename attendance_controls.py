@@ -1,5 +1,6 @@
 """Owner alerts, campus geofences and enabled attendance choices."""
-import hashlib,hmac,json,math,re,secrets
+import hashlib,hmac,json,math,re,secrets,os,html
+from urllib.parse import urlsplit
 from collections import defaultdict
 from datetime import datetime,time,timedelta,timezone
 from types import SimpleNamespace
@@ -182,6 +183,24 @@ def configure_attendance_controls(app,db,Student,Employee):
                 if not any(new[kind].values()):raise ValueError('Keep at least one active status for each audience.')
             save('attendance-acronyms',new);audit('Update attendance acronyms',before=data,after=new);commit();return redirect(url_for('attendance_controls.acronyms'))
         return render_template('attendance_acronyms.html',title='Attendance Acronym Active/Inactive',row=row,choices=STATUSES,active={k:statuses(k) for k in ('student','staff')})
+    def map_layers():
+        try:
+            raw=app.config.get('GEO_MAP_LAYERS') or json.loads(os.getenv('SCHOOLFLOW_GEO_MAP_LAYERS','{}'))
+        except (ValueError,TypeError):return {}
+        if not isinstance(raw,dict):return {}
+        result={}
+        for style in ('satellite','hybrid','topographic'):
+            value=raw.get(style)
+            if not isinstance(value,dict):continue
+            def valid(url):
+                if not isinstance(url,str) or len(url)>2000:return False
+                try:parts=urlsplit(url)
+                except ValueError:return False
+                return parts.scheme=='https' and bool(parts.hostname) and parts.hostname not in ('localhost','127.0.0.1','::1') and not parts.username and not parts.password and all(x in url for x in ('{z}','{x}','{y}'))
+            if not valid(value.get('url')) or not isinstance(value.get('attribution'),str) or not value['attribution'].strip():continue
+            if value.get('overlay_url') and not valid(value['overlay_url']):continue
+            result[style]=dict(url=value['url'],attribution=html.escape(value['attribution'][:500]),overlay_url=value.get('overlay_url'))
+        return result
     @bp.route('/workspace/core/geo-attendance',methods=['GET','POST'])
     def geofences():
         names=campuses();campus=request.values.get('campus',names[0] if names else '')
@@ -196,7 +215,7 @@ def configure_attendance_controls(app,db,Student,Employee):
             row.latitude=lat;row.longitude=lon;row.radius=int(raw);row.enabled=request.form.get('enabled')=='1';row.within_only=request.form.get('within_only')=='1'
             audit('Save campus geofence',campus=campus,radius=row.radius,enabled=row.enabled);commit();flash('Campus geo location saved.','success');return redirect(url_for('attendance_controls.geofences',campus=campus))
         _,qr=config('attendance-devices',{})
-        return render_template('geo_attendance.html',title='Geo Location Attendance',campuses=names,campus=campus,row=row,rows=Fence.query.order_by(Fence.campus).all(),early_out=bool(qr.get('early_short')),map_config=dict(latitude=row.latitude if row else None,longitude=row.longitude if row else None,radius=row.radius if row else 50))
+        return render_template('geo_attendance.html',title='Geo Location Attendance',campuses=names,campus=campus,row=row,rows=Fence.query.order_by(Fence.campus).all(),early_out=bool(qr.get('early_short')),map_config=dict(latitude=row.latitude if row else None,longitude=row.longitude if row else None,radius=row.radius if row else 50,layers=map_layers()))
     @bp.route('/workspace/core/geo-attendance/devices',methods=['GET','POST'])
     def devices():
         if request.method=='POST':

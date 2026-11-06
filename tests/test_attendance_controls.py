@@ -121,3 +121,20 @@ class AttendanceControlsTests(unittest.TestCase):
             self.assertIsNone(db.session.get(self.controls['device'],1).employee_id)
             self.assertEqual(self.controls['event'].query.count(),1)
         self.tenant(remove)
+
+    def test_configured_map_views_are_wired_without_loading_tiles_on_get(self):
+        self.login();old=app.config.get('GEO_MAP_LAYERS')
+        try:
+            app.config['GEO_MAP_LAYERS']={'satellite':{'url':'https://tiles.example.invalid/{z}/{x}/{y}.png','attribution':'Fictional provider'},'hybrid':{'url':'https://tiles.example.invalid/{z}/{x}/{y}.png','overlay_url':'https://labels.example.invalid/{z}/{x}/{y}.png','attribution':'Fictional labels'}}
+            page=self.c.get('/workspace/core/geo-attendance');self.assertEqual(page.status_code,200,page.data)
+            self.assertIn(b'data-map-style="satellite"  title="Configured tile provider"',page.data)
+            self.assertIn(b'https://tiles.example.invalid/',page.data);self.assertIn(b'data-geo-map-config',page.data)
+        finally:app.config['GEO_MAP_LAYERS']=old
+
+    def test_invalid_map_provider_configuration_does_not_enable_a_view(self):
+        self.login();old=app.config.get('GEO_MAP_LAYERS')
+        try:
+            app.config['GEO_MAP_LAYERS']={'satellite':{'url':'http://127.0.0.1/{z}/{x}/{y}','attribution':'Invalid'}}
+            page=self.c.get('/workspace/core/geo-attendance');self.assertEqual(page.status_code,200,page.data)
+            self.assertIn(b'data-map-style="satellite" disabled',page.data);self.assertNotIn(b'http://127.0.0.1/',page.data)
+        finally:app.config['GEO_MAP_LAYERS']=old
