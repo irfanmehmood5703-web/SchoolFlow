@@ -70,3 +70,21 @@ partial issues and retry protection, invalid uploads and amounts, approved-budge
 checks, carry allocation/age preservation, stale versions, closed periods,
 settings/block-open guards, system-voucher protection and staff campus/cash/date
 permissions. Python compilation, JavaScript syntax and whitespace checks passed.
+
+## Isolated live validation — 6 November 2026
+
+**33 live checks passed** in the private fictional Gate institute. Created active
+ledger mappings and an open period, approved two fictional requests, issued20,
+recorded bill15 with a downloadable PDF attachment, returned3, carried2 to the
+same person's next request, recorded bill5 (advance2 plus payable3) and reimbursed3.
+Final held/payable positions were zero; Advance Ageing and Register reconciled
+with the ledger, the printed register included branding/data, and P&L recognised
+expense20. Exact issue retry was safe and a changed retry was rejected.
+
+Runtime commit: `96404bc643ae4ffb5fe45348f2924e8b36090c04`.
+Live deployment: `dep-dbn0b3mtlv9c73c5ddj0`, live at 2026-11-06T16:52:36Z on the
+separate `schoolflow-gate-trial-irfan` service. The verification-only documentation
+commit does not require a redeploy. No real bank operation or school record was
+used. Post-deploy runtime error-log query found no Traceback/ERROR/Exception.
+Browser/phone/PDF appearance was not visually verified; server print/export and
+attachment responses were checked. Trial database persistence remains unresolved.
