@@ -48,3 +48,19 @@ SQLite storage is ephemeral and must not hold real school data. Durable storage
 is unresolved. Requisition issuance/settlement and daily snapshot accounting
 bridges remain blocked/unconnected as documented in REQUISITIONS_SNAPSHOTS.md.
 This change does not claim the complete Finance module is finished.
+
+## Verification — 6 November 2026
+
+- Full automated suite: **582 tests passed**, 118.339 seconds.
+- Isolated Render trial: **22 live checks passed**. Verified setup, both audit
+  views, voided reports, summary/student CSV, complete print responses, named
+  period, narrated 12.50 balanced journal, exact retry, changed-header rejection,
+  journal narration, balanced void and two original voided lines.
+- Runtime revision: `a105a5ec1863ff0d03d4c32cb88c49d400215678`.
+- Live deploy: `dep-dbmueggm7kps73cc5r50`, service
+  `srv-dbmkmfutlv9c73ba1eog`, live at 2026-11-06T14:43:18Z.
+- Tests used the private fictional Gate institute and date 2099-07-15. No real
+  school records were imported. Main remained unchanged at
+  `66b5747b9d07c6232c7a27db0ac7522a46877e7c` in the draft PR snapshot.
+- Post-deploy error-log query returned no Traceback/ERROR/Exception entries.
+  Visual browser/phone/PDF checks remain unverified.
