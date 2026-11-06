@@ -14,7 +14,8 @@ Security: CSRF, institute routing, institute write lock, audit events, optimisti
 
 Scope boundary: these are Finance masters/reporting. Journals, double-entry posting, account balances, opening balances, automatic fee/payroll reconciliation, requisitions and ledger reports are not implemented in this batch. Period Closed currently protects master editing; future journal posting must reject closed-period transactions and protect referenced period/account deletion. Public trial storage remains temporary; this change does not fix hosting data durability.
 
-Verification covers period overlap/closure/version checks, CSRF, duplicate validation, server-owned codes, retired groups, references, filtered lists, chart/print route, audit history, tenant separation and all-campus staff permissions. Browser/PDF visual QA remains pending: the local browser runtime download was unavailable. No claim of rendered PDF/device verification is made.
+Verification covers period overlap/closure/version checks, CSRF, duplicate validation, server-owned codes, retired groups, references, filtered lists, chart/print route, audit history, tenant separation and all-campus staff permissions. Desktop Finance menu, GL Group form and Chart of Accounts were visually reviewed in the cloud browser. The local browser runtime download was unavailable. Actual exported PDF and phone-layout/device verification remain pending.
 
 Final backend suite: 514 tests passed in 162.055 seconds. Python compilation, JavaScript syntax check and git diff whitespace validation passed.
 
+Live source commit: 5c1311b588c5d95a239254539ac724c6987f4728. Separate trial deployment dep-dbmojd5g1s2s73bfvqtg is live. Fourteen remote checks passed, including temporary fictional group/account create, update, filters, reference rejection and cleanup; existing Core Settings also opens. No real financial transactions were posted. Original main remains 66b5747b9d07c6232c7a27db0ac7522a46877e7c.
