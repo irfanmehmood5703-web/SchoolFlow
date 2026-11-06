@@ -71,7 +71,7 @@ jobs:
         with:
           name: SchoolFlow-Gate-test
           path: mobile/gate/dist/
-          retention-days: 1
+          retention-days: 14
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
@@ -79,7 +79,7 @@ jobs:
           path: |
             mobile/gate/app/build/reports/
             mobile/gate/app/build/outputs/androidTest-results/
-          retention-days: 1
+          retention-days: 14
   publish-test-apk:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [android, backend]

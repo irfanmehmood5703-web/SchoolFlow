@@ -73,6 +73,7 @@ public final class Vault {
  public synchronized void enroll(RecognitionPolicy.Identity identity)throws Exception {
   if(root.optJSONObject("config")==null||!root.getJSONObject("config").optString("scope_id","").matches("[a-f0-9]{64}"))throw new IllegalStateException("Verify the gate connection first.");
   ArrayList<RecognitionPolicy.Identity> people=new ArrayList<>(people());people.removeIf(p->p.key().equals(identity.key()));
+  if(RecognitionPolicy.enrollmentConflict(identity,people)!=null)throw new IllegalArgumentException("This face resembles another enrolled identity. Review enrollment before saving.");
   if(people.size()>=500)throw new IllegalArgumentException("This test build supports up to 500 local identities.");
   people.add(identity);JSONArray rows=new JSONArray();
   for(RecognitionPolicy.Identity p:people){JSONArray samples=new JSONArray();for(float[] v:p.samples){JSONArray a=new JSONArray();for(float x:v)a.put(x);samples.put(a);}rows.put(new JSONObject().put("kind",p.kind).put("id",p.id).put("label",p.label).put("qr_token",p.qrToken).put("identity_binding",p.binding).put("samples",samples).put("enrolled_at",java.time.Instant.now().toString()).put("permission_attested",true));}

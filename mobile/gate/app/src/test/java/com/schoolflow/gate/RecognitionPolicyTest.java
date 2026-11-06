@@ -8,6 +8,21 @@ public class RecognitionPolicyTest {
  @Test public void knownFaceHasClearMargin(){RecognitionPolicy.Match m=RecognitionPolicy.match(axis(0),Arrays.asList(person(1,axis(0)),person(2,axis(1))));assertNotNull(m);assertEquals(1,m.identity.id);}
  @Test public void unknownFaceDoesNotDefaultToFirstEnrollment(){assertNull(RecognitionPolicy.match(axis(2),Arrays.asList(person(1,axis(0)),person(2,axis(1)))));}
  @Test public void ambiguousMatchIsRefused(){assertNull(RecognitionPolicy.match(axis(0),Arrays.asList(person(1,axis(0)),person(2,axis(0)))));}
+ @Test public void ambiguousRecognitionCannotPermitDuplicateEnrollment(){
+  List<RecognitionPolicy.Identity> existing=Arrays.asList(person(1,axis(0)),person(2,axis(0)));
+  assertNull(RecognitionPolicy.match(axis(0),existing));
+  assertNotNull(RecognitionPolicy.enrollmentConflict(person(3,axis(0)),existing));
+ }
+ @Test public void enrollmentChecksEveryNewAndExistingSample(){
+  RecognitionPolicy.Identity incoming=new RecognitionPolicy.Identity("student",3,"Fictional pupil 3",String.format(Locale.ROOT,"schoolflow:student:%064x",3),"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",Arrays.asList(axis(2),axis(1),axis(3)));
+  RecognitionPolicy.Identity existing=new RecognitionPolicy.Identity("student",1,"Fictional pupil 1",String.format(Locale.ROOT,"schoolflow:student:%064x",1),"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",Arrays.asList(axis(0),axis(1)));
+  assertNull(RecognitionPolicy.match(incoming.samples.get(0),Collections.singletonList(existing)));
+  assertEquals(1,RecognitionPolicy.enrollmentConflict(incoming,Collections.singletonList(existing)).id);
+ }
+ @Test public void distinctEnrollmentAndSameIdentityReplacementAreAllowed(){
+  assertNull(RecognitionPolicy.enrollmentConflict(person(3,axis(2)),Arrays.asList(person(1,axis(0)),person(2,axis(1)))));
+  assertNull(RecognitionPolicy.enrollmentConflict(person(1,axis(0)),Collections.singletonList(person(1,axis(0)))));
+ }
  @Test public void noEnrollmentHasNoMatch(){assertNull(RecognitionPolicy.match(axis(0),Collections.emptyList()));}
  @Test(expected=IllegalArgumentException.class) public void zeroFeaturesRefused(){RecognitionPolicy.match(new float[128],Collections.emptyList());}
  @Test(expected=IllegalArgumentException.class) public void nanRefused(){float[] v=axis(0);v[1]=Float.NaN;RecognitionPolicy.validate(v);}

@@ -40,6 +40,16 @@ public final class RecognitionPolicy {
   }
   return best!=null&&first>=THRESHOLD&&first-second>=MARGIN?new Match(best,first):null;
  }
+ /** Enrollment must refuse every similar existing identity, even when a
+  * normal recognition result is ambiguous and therefore returns no match. */
+ public static Identity enrollmentConflict(Identity incoming,List<Identity> people) {
+  for(Identity person:people) {
+   if(person.key().equals(incoming.key()))continue;
+   for(float[] sample:incoming.samples)for(float[] enrolled:person.samples)
+    if(cosine(sample,enrolled)>=THRESHOLD)return person;
+  }
+  return null;
+ }
  public static final class Stable {
   private String key="";private int count;private long first,last;
   public synchronized boolean observe(String candidate,long clock) {

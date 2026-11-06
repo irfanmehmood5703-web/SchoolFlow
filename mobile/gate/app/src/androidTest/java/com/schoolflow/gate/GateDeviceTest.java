@@ -34,6 +34,14 @@ public class GateDeviceTest {
  @Test public void changingInstituteClearsLocalTemplatesAndPending()throws Exception {
   Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");a.enroll(person());a.queue(event());a.configure("FICTIONAL-OTHER",2,token);assertTrue(a.people().isEmpty());assertNull(a.pending());
  }
+ @Test public void duplicateEnrollmentCannotChangeProtectedRoster()throws Exception {
+  Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");a.enroll(person());
+  RecognitionPolicy.Identity original=person();
+  RecognitionPolicy.Identity duplicate=new RecognitionPolicy.Identity("student",2,"Another fictional pupil","schoolflow:student:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","ddddddddddddddddddddddddddddddddddddddddddd",original.samples);
+  boolean refused=false;try{a.enroll(duplicate);}catch(IllegalArgumentException e){refused=true;}
+  assertTrue(refused);assertEquals(1,new Vault(context).people().size());
+  a.enroll(original);assertEquals(1,new Vault(context).people().size());
+ }
  @Test public void tamperingFailsClosed()throws Exception {
   Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   try(RandomAccessFile f=new RandomAccessFile(file,"rw")){f.seek(f.length()-1);int old=f.read();f.seek(f.length()-1);f.write(old^1);}

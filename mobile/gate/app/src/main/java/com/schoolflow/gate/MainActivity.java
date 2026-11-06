@@ -28,8 +28,14 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private JavaCameraView camera;private TextView status,personText,detail;
  private Button start,confirm;private Spinner direction;
  private volatile boolean running=false,visible=false,connected=false,clockOK=false;
- private volatile String marks="";private volatile float[] feature;private volatile long featureAt,candidateAt;
- private volatile RecognitionPolicy.Match candidate;private volatile boolean candidateStable;
+ private volatile String marks="";
+ /** Publish each camera result atomically; never mix a new identity with an
+  * earlier frame's stability flag or timestamp across camera/UI threads. */
+ private static final class Observation {
+  final float[] feature;final RecognitionPolicy.Match match;final long capturedAt;final boolean stable;
+  Observation(float[] feature,RecognitionPolicy.Match match,long capturedAt,boolean stable){this.feature=feature;this.match=match;this.capturedAt=capturedAt;this.stable=stable;}
+ }
+ private volatile Observation observation=new Observation(null,null,0,false);
  private volatile boolean readEnrollmentQr;private volatile EditText enrollmentQrTarget;
  private long processedAt,lastContact;private Runnable protectedAction;
  private final Runnable poll=new Runnable(){public void run(){if(!visible)return;try{if(vault!=null&&vault.pending()!=null)deliver();else if(vault!=null&&(!contactValid()||SystemClock.elapsedRealtime()-lastContact>40000))heartbeat();}catch(Exception e){show("Protected storage error. Reconnect only after reviewing local data.");}ui.postDelayed(this,15000);}};
@@ -37,7 +43,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private TextView text(String value,int size){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(Color.rgb(39,39,42));v.setPadding(dp(8),dp(7),dp(8),dp(7));return v;}
  private Button button(String value,Runnable action){Button b=new Button(this);b.setText(value);b.setAllCaps(false);b.setOnClickListener(v->action.run());return b;}
  private void show(String value){ui.post(()->{if(!isFinishing())status.setText(value);});}
- private void resetFace(){candidate=null;feature=null;candidateStable=false;stable.reset();ui.post(()->{if(confirm!=null)confirm.setEnabled(false);});}
+ private void resetFace(){observation=new Observation(null,null,0,false);stable.reset();ui.post(()->{if(confirm!=null)confirm.setEnabled(false);});}
  private boolean contactValid(){return connected&&clockOK&&SystemClock.elapsedRealtime()-lastContact<80000;}
  @Override public void onCreate(Bundle saved){
   super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -47,7 +53,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   LinearLayout toolbar=new LinearLayout(this);toolbar.addView(button("Connection",()->protect(this::connectionDialog)));toolbar.addView(button("Enroll face",()->protect(this::enrollmentDialog)));toolbar.addView(button("Manage faces",()->protect(this::manageDialog)));
   start=button("Start camera",()->{if(running)stopCamera();else startCamera();});toolbar.addView(start);
   direction=new Spinner(this);direction.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"IN","OUT"}));toolbar.addView(direction);direction.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int n,long id){resetFace();}public void onNothingSelected(android.widget.AdapterView<?> p){}});
-  root.addView(toolbar);
+  HorizontalScrollView toolbarScroll=new HorizontalScrollView(this);toolbarScroll.addView(toolbar);root.addView(toolbarScroll);
   LinearLayout body=new LinearLayout(this);
   camera=new JavaCameraView(this,CameraBridgeViewBase.CAMERA_ID_FRONT);camera.setVisibility(View.VISIBLE);camera.setMaxFrameSize(640,480);camera.setCvCameraViewListener(this);
   body.addView(camera,new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,2));
@@ -83,8 +89,9 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     EditText target=enrollmentQrTarget;String qr=engine.readQr(rgba);
     if(qr.matches("schoolflow:(student|employee):[a-f0-9]{64}")){readEnrollmentQr=false;ui.post(()->{if(enrollmentQrTarget==target){target.setText(qr);show("Identity QR read. Press Verify card before enrolling the face.");}});}
    }
-   float[] current=engine.extract(rgba);feature=current;featureAt=now;
-   RecognitionPolicy.Match found=current==null?null:RecognitionPolicy.match(current,known);candidate=found;candidateAt=now;candidateStable=stable.observe(found==null?null:found.identity.key(),now);
+   float[] current=engine.extract(rgba);
+   RecognitionPolicy.Match found=current==null?null:RecognitionPolicy.match(current,known);
+   observation=new Observation(current,found,now,stable.observe(found==null?null:found.identity.key(),now));
    ui.post(()->{
     if(!visible)return;
     personText.setText(found==null?(current==null?"Show one clear face.":"Face not enrolled / match uncertain."):found.identity.label+" · "+found.identity.kind+" #"+found.identity.id);
@@ -93,18 +100,21 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   }catch(Exception e){resetFace();show("This camera frame could not be recognized. No attendance was marked.");}
   return rgba;
  }
- private boolean canConfirm(){
-  if(!running||!contactValid()||!candidateStable||candidate==null||SystemClock.elapsedRealtime()-candidateAt>1500||busy.get())return false;
+ private boolean canConfirm(){return canConfirm(observation);}
+ private boolean canConfirm(Observation frame){
+  if(!visible||!running||!contactValid()||!frame.stable||frame.match==null||SystemClock.elapsedRealtime()-frame.capturedAt>1500||busy.get())return false;
   String dir=direction.getSelectedItemPosition()==0?"in":"out";
   if(!marks.equals("both")&&!marks.equals(dir))return false;
   try{return vault!=null&&vault.pending()==null;}catch(Exception e){return false;}
  }
  private void confirmIdentity(){
-  if(!canConfirm()){show("Keep the same recognized person visible and reconnect if required.");return;}
-  RecognitionPolicy.Match found=candidate;String dir=direction.getSelectedItemPosition()==0?"in":"out";String key=found.identity.key()+":"+dir;long clock=SystemClock.elapsedRealtime();
+  Observation frame=observation;
+  if(!canConfirm(frame)){show("Keep the same recognized person visible and reconnect if required.");return;}
+  RecognitionPolicy.Match found=frame.match;String dir=direction.getSelectedItemPosition()==0?"in":"out";String key=found.identity.key()+":"+dir;long clock=SystemClock.elapsedRealtime();
   if(clock-confirmedAt.getOrDefault(key,-30000L)<10000){show("This person/direction was just submitted. Check the result before repeating.");return;}
   new AlertDialog.Builder(this).setTitle("Verify "+found.identity.label).setMessage("Confirm this is "+found.identity.kind+" #"+found.identity.id+" and record "+dir.toUpperCase(Locale.ROOT)+"? A face score is not proof of a live person.").setNegativeButton("Cancel",null).setPositiveButton("Confirm",(dialog,which)->{
-   if(!canConfirm()||candidate==null||!candidate.identity.key().equals(found.identity.key())){show("The recognized face changed or disappeared. Try again.");return;}
+   Observation latest=observation;
+   if(!canConfirm(latest)||!latest.match.identity.key().equals(found.identity.key())||!latest.match.identity.binding.equals(found.identity.binding)||!(direction.getSelectedItemPosition()==0?"in":"out").equals(dir)){show("The recognized face changed or disappeared. Try again.");return;}
    try{
     JSONObject body=new JSONObject().put("event_id",UUID.randomUUID().toString().replace("-","")).put("qr_token",found.identity.qrToken).put("identity_binding",found.identity.binding).put("direction",dir).put("occurred_at",Instant.now().toString());
     vault.queue(body);confirmedAt.put(key,SystemClock.elapsedRealtime());resetFace();show("Submitting attendance…");deliver();
@@ -166,8 +176,8 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
    });
   }));
   box.addView(button("Capture face sample",()->{
-   float[] current=feature;
-   if(verified[0]==null||current==null||SystemClock.elapsedRealtime()-featureAt>1500||SystemClock.elapsedRealtime()-sampled[0]<600){count.setText("Verify the card, remove it, and keep one clear live face visible.");return;}
+   Observation latest=observation;float[] current=latest.feature;
+   if(verified[0]==null||current==null||SystemClock.elapsedRealtime()-latest.capturedAt>1500||SystemClock.elapsedRealtime()-sampled[0]<600){count.setText("Verify the card, remove it, and keep one clear live face visible.");return;}
    if(!samples.isEmpty()&&RecognitionPolicy.cosine(samples.get(0),current)<RecognitionPolicy.THRESHOLD){samples.clear();count.setText("Samples did not match the same person. Start again.");return;}
    if(samples.size()<3){samples.add(current.clone());sampled[0]=SystemClock.elapsedRealtime();}count.setText(samples.size()+" / 3 samples captured.");
   }));
@@ -179,8 +189,8 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject person=verified[0];
     if(!person.getString("scope_id").equals(vault.config().getString("scope_id")))throw new SecurityException();
     RecognitionPolicy.Identity value=new RecognitionPolicy.Identity(person.getString("person_kind"),person.getInt("person_id"),person.getString("name"),person.getString("qr_token"),person.getString("identity_binding"),samples);
-    RecognitionPolicy.Match duplicate=RecognitionPolicy.match(samples.get(0),known);
-    if(duplicate!=null&&!duplicate.identity.key().equals(value.key())){count.setText("This face resembles another enrolled identity. Review both; do not assign it again.");return;}
+   RecognitionPolicy.Identity duplicate=RecognitionPolicy.enrollmentConflict(value,known);
+    if(duplicate!=null){count.setText("This face resembles another enrolled identity. Review both; do not assign it again.");return;}
     vault.enroll(value);known=vault.people();resetFace();dialog.dismiss();show("Verified local face enrollment saved. Validate recognition with fictional trials first.");
    }catch(Exception e){count.setText("Verify the current card/connection, permission and all three samples.");}
   }));dialog.show();
