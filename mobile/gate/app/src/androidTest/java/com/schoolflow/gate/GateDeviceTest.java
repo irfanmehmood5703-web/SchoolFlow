@@ -58,7 +58,7 @@ public class GateDeviceTest {
   return null;
  }
  @Test public void activityLaunchesWithProtectedConnectionAndDisabledConfirmation()throws Exception {
-  try(android.os.ParcelFileDescriptor command=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant com.schoolflow.gate android.permission.CAMERA")) { new FileInputStream(command.getFileDescriptor()).read(new byte[256]); }
+  try(android.os.ParcelFileDescriptor command=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand("pm grant "+context.getPackageName()+" android.permission.CAMERA")) { new FileInputStream(command.getFileDescriptor()).read(new byte[256]); }
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
    scenario.onActivity(activity->{
     View root=activity.findViewById(android.R.id.content);

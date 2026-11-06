@@ -50,6 +50,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   getWindow().setStatusBarColor(Color.rgb(23,107,74));
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,250,250));root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
   TextView title=text("SchoolFlow Gate  ·  attended test build",23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
+  if(BuildConfig.DEBUG)root.addView(text("Fictional trial only · "+EndpointPolicy.BASE,12));
   LinearLayout toolbar=new LinearLayout(this);toolbar.addView(button("Connection",()->protect(this::connectionDialog)));toolbar.addView(button("Enroll face",()->protect(this::enrollmentDialog)));toolbar.addView(button("Manage faces",()->protect(this::manageDialog)));
   start=button("Start camera",()->{if(running)stopCamera();else startCamera();});toolbar.addView(start);
   direction=new Spinner(this);direction.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"IN","OUT"}));toolbar.addView(direction);direction.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int n,long id){resetFace();}public void onNothingSelected(android.widget.AdapterView<?> p){}});
@@ -210,7 +211,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   worker.execute(()->{
    try{
     JSONObject config=vault.config();if(config==null){show("Connect your private institute gate first.");return;}
-    GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow Gate 0.1-test"));
+    GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow Gate 0.2-trial"));
     if(reply.code!=200){connected=false;clockOK=false;show("Connection refused ("+reply.code+"). Check the gate key/status.");return;}
     if(!reply.json.optString("scope_id").matches("[a-f0-9]{64}")){connected=false;clockOK=false;resetFace();show("Server enrollment update is required before this app can connect. Attendance is paused; ask the software owner to review the gate backend update.");return;}
     boolean changed=vault.bindScope(reply.json.getString("scope_id"));if(changed){known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}
@@ -230,7 +231,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject pending=vault.pending();if(pending==null)return;JSONObject body=pending.getJSONObject("body"),config=vault.config();if(config==null)return;
     long age=System.currentTimeMillis()-pending.getLong("captured_ms");
     if(age< -60000||age>14*60*1000){vault.finish(body.getString("event_id"),"Pending event expired. Check web history and use manual attendance if necessary.");show(vault.lastResult());return;}
-    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","SchoolFlow Gate 0.1-test"));
+    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","SchoolFlow Gate 0.2-trial"));
     if(check.code!=200){connected=false;show("Cannot verify the gate before retry. Pending mark retained.");return;}
     String scope=check.json.getString("scope_id");
     if(!scope.equals(pending.getString("scope_id"))){vault.bindScope(scope);known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}

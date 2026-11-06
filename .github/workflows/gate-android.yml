@@ -63,8 +63,8 @@ jobs:
         working-directory: mobile/gate
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-test.apk
-          (cd dist && sha256sum SchoolFlow-Gate-test.apk) >dist/SHA256SUMS.txt
+          cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-Trial.apk
+          (cd dist && sha256sum SchoolFlow-Gate-Trial.apk) >dist/SHA256SUMS.txt
           printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
           cp app/src/main/assets/models.json dist/MODELS.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
@@ -104,7 +104,7 @@ jobs:
           test "$gate_expected_sha" = "$GITHUB_SHA"
           (cd gate-apk && sed 's@dist/@@' SHA256SUMS.txt | sha256sum -c -)
           gate_tag="gate-test-${{ github.run_number }}"
-          gh release create "$gate_tag" gate-apk/SchoolFlow-Gate-test.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Gate 0.1 — test APK" --notes "Installable attended test build for ARM64 Android 8+ devices. Local YuNet/SFace enrollment and recognition, encrypted device storage, explicit operator confirmation, and private-institute gate delivery. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
+          gh release create "$gate_tag" gate-apk/SchoolFlow-Gate-Trial.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Gate 0.2 — trial APK" --notes "Installable attended trial build for ARM64 Android 8+ devices, pinned to the separate fictional Gate trial server. Local YuNet/SFace enrollment and recognition, encrypted device storage, explicit operator confirmation, and private-institute gate delivery. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 12

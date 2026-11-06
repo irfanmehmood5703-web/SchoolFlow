@@ -2,7 +2,7 @@
 <uses-permission android:name="android.permission.CAMERA"/>
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-feature android:name="android.hardware.camera.any" android:required="true"/>
-<application android:allowBackup="false" android:usesCleartextTraffic="false" android:label="SchoolFlow Gate (Test)" android:icon="@drawable/gate_icon" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+<application android:allowBackup="false" android:usesCleartextTraffic="false" android:label="@string/app_name" android:icon="@drawable/gate_icon" android:theme="@android:style/Theme.Material.Light.NoActionBar">
 <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape">
 <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
 </activity></application></manifest>

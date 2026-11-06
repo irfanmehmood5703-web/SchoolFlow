@@ -1,4 +1,6 @@
-# SchoolFlow Gate 0.1 — attended test build
+# SchoolFlow Gate 0.2 — attended test build
+
+This APK connects to the isolated fictional Gate trial server; the original SchoolFlow service is unchanged. Its separate trial package can coexist with the previous app. Connection details are delivered privately. Free trial storage can reset after sleep/restart; use fictional identities only.
 
 Camera-based local face enrollment and native YuNet/SFace recognition for the existing SchoolFlow gate API. Device lock protects enrollment/settings; local vectors/credentials are encrypted with Android Keystore. No camera photos or face vectors are sent to the server.
 

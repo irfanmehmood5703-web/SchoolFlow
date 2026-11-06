@@ -1,15 +1,17 @@
-# SchoolFlow Gate — Android attended test app
+# SchoolFlow Gate — Android attended trial app
 
 Native face-attendance companion for SchoolFlow's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
 
 ## Test installation
 
-Download **SchoolFlow-Gate-test.apk** from a successful **SchoolFlow Gate Android** Actions run's **SchoolFlow-Gate-test** artifact (extract the ZIP first), or from a published **SchoolFlow Gate test** prerelease when available. Check SOURCE-COMMIT.txt and SHA256SUMS.txt against that build. Feature-branch builds do not automatically publish a prerelease or deploy the website. It is a debug-signed test build for fictional identities, not a Play Store or production-signed app. Supported build targets are ARM64 Android 8.0+ and x86_64 for automated emulator tests. Actual camera/device compatibility is still subject to physical testing.
+Download **SchoolFlow-Gate-Trial.apk** from a successful **SchoolFlow Gate Android** Actions run's **SchoolFlow-Gate-test** artifact (extract the ZIP first), or use the directly supplied APK. Check SOURCE-COMMIT.txt and SHA256SUMS.txt. This 0.2 build has a separate package ID (`com.schoolflow.gate.trial`) and can coexist with the older test app. It is debug-signed for fictional trials, not production-signed. Targets are ARM64 Android 8+ and emulator x86_64.
 
-**Server prerequisite:** the native enrollment/scope endpoints in this feature branch must be reviewed, deployed and explicitly schema-upgraded before this APK can connect. The v31 server on main does not yet provide that native enrollment contract. Building/downloading the APK does not deploy those endpoints. Until the server is upgraded, the app pauses connection/attendance rather than using an unverified identity. Existing QR-scanner/device workflows remain separate. Do not restart the current ephemeral test deployment solely to install the APK.
+**The debug trial APK is pinned to https://schoolflow-gate-trial-irfan.onrender.com**, a separate free server with a fictional private institute. It does not contact or update the original SchoolFlow service. Credentials are delivered privately, never in the APK or source. The release build retains the original fixed SchoolFlow host; a future production rollout still requires protected storage and schema upgrades.
+
+Use only fictional identities. Free trial storage may reset after sleep/restart; the server then recreates a new fictional institute incarnation and the app invalidates old enrollment/pending data after scope verification. Do not use this service for operational school attendance or real student data. See ../../docs/GATE_TRIAL.md.
 
 1. Set a PIN, password or pattern on the school device. Install the test APK and grant camera permission.
-2. In the SchoolFlow web portal, register a face gate for the correct private school/campus, then use Connect to issue its connection key. In the Android app choose Connection, unlock the device, and enter the private institute code, numeric gate ID and key. DEMO cannot connect. The server address is fixed to https://schoolflow-phase1.onrender.com in this test release.
+2. In the SchoolFlow web portal, register a face gate for the correct private school/campus, then use Connect to issue its connection key. In the Android app choose Connection, unlock the device, and enter the private institute code, numeric gate ID and key. DEMO cannot connect. Use the separately provided trial connection details; the trial server address is fixed in this APK.
 3. Choose Enroll face and unlock the device. Scan or paste a fictional person's SchoolFlow identity-card QR, then press Verify card. The app retrieves that exact active person's name/ID from its gate's campus; no bulk roster is downloaded. Attest that this actual person and enrollment permission are verified. Capture three samples of the same person.
 4. Start the camera, select IN or OUT, and show one enrolled person. Matching must be stable and unambiguous. The operator verifies the person and explicitly confirms the mark. Check the web scan history for the actual server result.
 5. Test suspension, foreign-campus refusal, repeated IN/OUT, loss of connectivity and key rotation before considering any operational use.
