@@ -15,8 +15,12 @@ CAMPUS = 'Fictional Gate Campus'
 
 
 def bootstrap(app, db, Student, Employee, environ):
-    if environ.get('SCHOOLFLOW_GATE_TRIAL') != '1' or app.config['PUBLIC_DEMO_ENABLED']:
-        raise RuntimeError('Trial startup requires explicit opt-in and disabled public demo.')
+    if environ.get('SCHOOLFLOW_GATE_TRIAL') != '1':
+        raise RuntimeError('Trial startup requires explicit opt-in.')
+    # The public demo uses its own fictional database through identity.demo;
+    # enabling it never signs a visitor into the private GATE-TRIAL institute.
+    if app.config['PUBLIC_DEMO_ENABLED'] and environ.get('GATE_TRIAL_ALLOW_PUBLIC_DEMO') != '1':
+        raise RuntimeError('Public demo on the trial service requires explicit opt-in.')
     password = environ.get('GATE_TRIAL_PASSWORD', '')
     key = environ.get('GATE_TRIAL_KEY', '')
     if not 20 <= len(password) <= 128 or not re.fullmatch(r'[A-Za-z0-9_-]{43}', key):

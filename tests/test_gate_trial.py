@@ -39,6 +39,25 @@ class GateTrialTests(unittest.TestCase):
             self.assertEqual(app.extensions['school_settings_models']['setting'].query.filter_by(key='attendance-devices').one().data['student_channel'], 'none')
             db.session.remove()
 
+    def test_explicit_public_demo_keeps_private_gate_records_separate(self):
+        app.config['PUBLIC_DEMO_ENABLED'] = True
+        self.env['GATE_TRIAL_ALLOW_PUBLIC_DEMO'] = '1'
+        self.seed()
+        client = app.test_client()
+        landing = client.get('/')
+        self.assertIn(b'Explore the test demo', landing.data)
+        with client.session_transaction() as session:
+            token = session['record_csrf']
+        self.assertEqual(client.post('/auth/demo', data={'_csrf': token}).status_code, 302)
+        with client.session_transaction() as session:
+            self.assertTrue(session['demo'])
+            self.assertNotIn('institute_id', session)
+        page = client.get('/records/student')
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn(b'Fictional Gate Trial Person', page.data)
+        self.assertIn(b'SchoolFlow Demo', page.data)
+        self.assertEqual(client.get('/workspace/core/institute').status_code, 200)
+
     def test_refuses_store_belonging_to_other_school(self):
         app.extensions['identity_helpers']['provision']('OTHER-SCHOOL', 'Other fictional school', 'owner@example.invalid', self.env['GATE_TRIAL_PASSWORD'])
         with self.assertRaises(RuntimeError): self.seed()
