@@ -1,3 +1,19 @@
+> **Current user decision (6 November 2026): FREE testing until launch.**
+> The paid Render proposal below is historical and is not approved. Do not apply
+> or upgrade paid resources. Neon Free is selected for testing, pending account
+> installation/connection. `render.persistence.yaml` now describes only the
+> existing free web service with a privately supplied PostgreSQL URL and no paid
+> database resource. Scheduled host workers are disabled in this testing plan
+> to avoid continually waking free serverless compute. Manual/on-demand actions
+> remain available; unattended scheduled work is not promised on sleeping hosts.
+>
+> Verified official Neon pricing on this date: $0, no fixed trial time limit,
+> no card required, 1 GB database and 100 CU-hours per project/month; free compute
+> scales to zero after inactivity. See https://neon.com/pricing and
+> https://neon.com/docs/introduction/plans. These are current allowances, not a
+> guarantee that limits or provider terms will never change. No Neon project or
+> connection is claimed created until its account connection is confirmed.
+
 # Persistence and mobile/PDF completion
 
 ## Completed code and verification
