@@ -78,3 +78,25 @@ claimed complete by these checks.
 PDF content verification additionally confirmed all 200 pupil/challan rows,
 all 200 intact `40.00` payment values, and repeated headings on every student
 ledger and General Ledger page. Reports were rerendered after the layout fixes.
+
+## Rollout and provider block
+
+The code/layout revision `88b1d5cca4bdbcb23358d2f5dcaa3611617d4055`
+is live on the isolated trial through deploy `dep-dbn1l0bncjis73ca89kg`, live at
+2026-11-06T18:22:07Z. **11 live rollout checks passed**: private sign-in,
+request/approval after session routing changes, posting/report pages and updated
+responsive/landscape stylesheet. The initial post-deploy error-log query was
+empty; a later recheck returned provider 503 (log retrieval unavailable).
+These live checks are on temporary SQLite, not activated PostgreSQL.
+
+Render Blueprint `exs-dbn1km6k1f9s738rd25g` was created with auto-sync disabled and
+existing-resource adoption, but planning returned **failed / need_payment_info**
+at `databases[0]`. There is no successful sync to approve. Do not call approval on
+this failed plan. No paid upgrade, DATABASE_URL switch or main change was made.
+The free database ID is `dpg-dbn1bi2fngtc738h5djg-a`.
+
+Required user step: approve the quoted recurring database cost and add a payment
+method directly in Render Billing. Then re-plan the same file, review its actual
+resource changes, and apply only the authorized trial/database changes. Preserve
+all existing secrets. Hosted save/redeploy verification remains mandatory after
+activation. Do not describe the remaining permanent storage task as complete yet.
