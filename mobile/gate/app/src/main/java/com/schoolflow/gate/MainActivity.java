@@ -212,6 +212,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject config=vault.config();if(config==null){show("Connect your private institute gate first.");return;}
     GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow Gate 0.1-test"));
     if(reply.code!=200){connected=false;clockOK=false;show("Connection refused ("+reply.code+"). Check the gate key/status.");return;}
+    if(!reply.json.optString("scope_id").matches("[a-f0-9]{64}")){connected=false;clockOK=false;resetFace();show("Server enrollment update is required before this app can connect. Attendance is paused; ask the software owner to review the gate backend update.");return;}
     boolean changed=vault.bindScope(reply.json.getString("scope_id"));if(changed){known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}
     String state=reply.json.getString("status");marks=reply.json.getString("marks");lastContact=SystemClock.elapsedRealtime();clockOK=Math.abs(Duration.between(Instant.now(),OffsetDateTime.parse(reply.json.getString("server_time")).toInstant()).toMillis())<=60000;
     connected=state.equals("Pending")||state.equals("Approved");
