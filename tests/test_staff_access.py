@@ -243,3 +243,23 @@ class StaffAccessTests(unittest.TestCase):
             data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.create']=['Campus A','Campus B'];data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
         with self.c.session_transaction() as sess:sess['staff_version']=version
         self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)
+
+    def test_finance_reports_require_distinct_view_print_update_delete_grants(self):
+        self.login()
+        for path in ('journals','general','daily'):
+            self.assertEqual(self.c.get('/workspace/finance/reports/'+path).status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/reports/journal/1/edit').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/reports/journal/void',data={'_csrf':self.token()}).status_code,403)
+        def grants(actions):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+                data=dict(person.data);data['permissions']={'finance.'+action:['Campus A','Campus B'] for action in actions};person.data=data;db.session.commit();version=person.version;db.session.remove()
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+        grants(['view'])
+        for path in ('journals','general','daily'):
+            self.assertEqual(self.c.get('/workspace/finance/reports/'+path).status_code,200)
+            self.assertEqual(self.c.get('/workspace/finance/reports/'+path+'?print=1').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/reports/journal/1/edit').status_code,403)
+        grants(['update'])
+        self.assertEqual(self.c.post('/workspace/finance/reports/journal/void',data={'_csrf':self.token()}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/reports/journal/1/edit',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)

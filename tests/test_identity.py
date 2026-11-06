@@ -482,10 +482,15 @@ class IdentityTests(unittest.TestCase):
             journal=J['journal'](token='private-test-token',fingerprint='private-fingerprint',day=date(2026,11,1),campus='Campus Only School A',kind='journal',period_id=period.id,actor='Owner A',actor_key='owner:1');db.session.add(journal);db.session.flush()
             db.session.add(J['line'](journal_id=journal.id,account_id=account.id,debit=10000,credit=0,memo='Private ledger memo',snapshot={'code':1000,'name':'Private ledger cash','group':'Private ledger group','group_id':group.id,'account_class':'Assets'}));db.session.commit();db.session.remove()
         self.assertIn(b'Private ledger memo',self.client.get('/workspace/finance/ledger/report/ledger?from=2026-11-01&to=2026-11-30').data)
+        for path in ('journals','general','daily?generate=1&'):
+            self.assertIn(b'Private ledger',self.client.get('/workspace/finance/reports/'+path+('&' if '?' in path else '?')+'from=2026-11-01&to=2026-11-30').data)
         self.login('TEST-B')
         self.assertNotIn(b'Private ledger cash',self.client.get('/workspace/finance/ledger/entry/journal').data)
         self.assertNotIn(b'Private ledger memo',self.client.get('/workspace/finance/ledger/report/ledger?from=2026-11-01&to=2026-11-30').data)
         self.assertEqual(self.client.get('/workspace/finance/ledger/voucher/1').status_code,404)
+        for path in ('journals','general','daily?generate=1&'):
+            self.assertNotIn(b'Private ledger',self.client.get('/workspace/finance/reports/'+path+('&' if '?' in path else '?')+'from=2026-11-01&to=2026-11-30').data)
+        self.assertEqual(self.client.get('/workspace/finance/reports/journal/1/edit').status_code,404)
 
 
 if __name__ == '__main__':

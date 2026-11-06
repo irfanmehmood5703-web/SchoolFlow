@@ -300,6 +300,8 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('finance_reports.'):
+            return 'finance.'+('delete' if ep=='finance_reports.void' else 'update' if ep=='finance_reports.correct' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('ledger.'):
             return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance.'):

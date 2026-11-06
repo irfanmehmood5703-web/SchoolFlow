@@ -206,6 +206,8 @@ def configure_operations(app, db, Student, Employee):
         if key.startswith('ledger-'):
             mode=key.removeprefix('ledger-')
             return url_for('ledger.entry',kind=mode) if mode in ('journal','expense','income') else url_for('ledger.report',mode='ledger' if mode=='home' else mode)
+        if key in ('finance-journal-inquiry','finance-general-ledger','finance-daily-profit'):
+            return url_for('finance_reports.'+{'finance-journal-inquiry':'journals','finance-general-ledger':'general','finance-daily-profit':'daily'}[key])
         if key.startswith('finance-'):
             return url_for('finance.chart') if key=='finance-chart' else url_for('finance.index',kind=key.removeprefix('finance-'))
         if key in ('students','employees'): return url_for('records.record_list',kind='student' if key=='students' else 'employee')

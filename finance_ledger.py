@@ -77,6 +77,42 @@ def configure_ledger(app,db):
     def conflict(error):
         db.session.rollback();return render_template('operation_error.html',title='Check journal entry',error='Another request changed this posting. Reload the saved journals before retrying.'),422
 
+    def prepare(kind,form):
+        try:day=date.fromisoformat(form.get('day',''))
+        except ValueError:raise ValueError('Choose a valid transaction date.')
+        campus=form.get('campus','')
+        if campus not in campuses():raise ValueError('Choose a configured campus.')
+        campus_row=db.session.get(app.extensions['institute_setup_models']['campus'],campus)
+        if campus_row and not campus_row.active:raise ValueError('Choose an active campus.')
+        periods=Period.query.filter(Period.begin<=day,Period.end>=day).all()
+        if len(periods)!=1 or periods[0].closed:raise ValueError('The transaction needs exactly one open Accounting Period covering its date.')
+        ids=form.getlist('account_id');memos=form.getlist('memo')
+        if not 1<=len(ids)<=100 or len(memos)!=len(ids):raise ValueError('Enter between 1 and 100 complete rows.')
+        lines=[]
+        if kind=='journal':
+            dr=form.getlist('debit');cr=form.getlist('credit')
+            if len(dr)!=len(ids) or len(cr)!=len(ids):raise ValueError('Debit and credit rows are incomplete.')
+            for raw,d,c,memo in zip(ids,dr,cr,memos):
+                if not raw and not d.strip() and not c.strip() and not memo.strip():continue
+                a=selected(raw);debit=amount(d);credit=amount(c)
+                if (debit>0)==(credit>0):raise ValueError('Each journal row must have either a positive debit or a positive credit.')
+                lines.append((a,debit,credit,memo.strip()))
+        else:
+            amounts=form.getlist('amount')
+            if len(amounts)!=len(ids):raise ValueError('Amount rows are incomplete.')
+            counter=selected(form.get('counter_account',''),'Assets')
+            for raw,value,memo in zip(ids,amounts,memos):
+                if not raw and not value.strip() and not memo.strip():continue
+                a=selected(raw,'Expense' if kind=='expense' else 'Income');n=amount(value)
+                if not n:raise ValueError('Enter a positive amount for every populated row.')
+                lines.append((a,n if kind=='expense' else 0,n if kind=='income' else 0,memo.strip()))
+            total=sum(d+c for _,d,c,_ in lines)
+            if total:lines.append((counter,total if kind=='income' else 0,total if kind=='expense' else 0,'Expense payment' if kind=='expense' else 'Income receipt'))
+        if len(lines)<2 or len({a.id for a,_,_,_ in lines})<2:raise ValueError('Use at least two distinct accounts in a balanced journal.')
+        if any(len(memo)>1000 for _,_,_,memo in lines):raise ValueError('Each memo must be at most 1,000 characters.')
+        if sum(d for _,d,_,_ in lines)!=sum(c for _,_,c,_ in lines):raise ValueError('Total debit must equal total credit.')
+        return day,campus,periods[0],lines
+
     @bp.route('/entry/<kind>',methods=['GET','POST'])
     def entry(kind):
         if kind not in ('journal','expense','income'):abort(404)
@@ -93,40 +129,8 @@ def configure_ledger(app,db):
         if prior:
             if prior.fingerprint!=digest:raise ValueError('This submission token was already used for a different entry. Reload the form.')
             return redirect(url_for('ledger.voucher',jid=prior.id,**({'print':'1'} if request.form.get('save_action')=='print' else {})))
-        try:day=date.fromisoformat(request.form.get('day',''))
-        except ValueError:raise ValueError('Choose a valid transaction date.')
-        campus=request.form.get('campus','')
-        if campus not in campuses():raise ValueError('Choose a configured campus.')
-        campus_row=db.session.get(app.extensions['institute_setup_models']['campus'],campus)
-        if campus_row and not campus_row.active:raise ValueError('Choose an active campus.')
-        periods=Period.query.filter(Period.begin<=day,Period.end>=day).all()
-        if len(periods)!=1 or periods[0].closed:raise ValueError('The transaction needs exactly one open Accounting Period covering its date.')
-        ids=request.form.getlist('account_id');memos=request.form.getlist('memo')
-        if not 1<=len(ids)<=100 or len(memos)!=len(ids):raise ValueError('Enter between 1 and 100 complete rows.')
-        lines=[]
-        if kind=='journal':
-            dr=request.form.getlist('debit');cr=request.form.getlist('credit')
-            if len(dr)!=len(ids) or len(cr)!=len(ids):raise ValueError('Debit and credit rows are incomplete.')
-            for raw,d,c,memo in zip(ids,dr,cr,memos):
-                if not raw and not d.strip() and not c.strip() and not memo.strip():continue
-                a=selected(raw);debit=amount(d);credit=amount(c)
-                if (debit>0)==(credit>0):raise ValueError('Each journal row must have either a positive debit or a positive credit.')
-                lines.append((a,debit,credit,memo.strip()))
-        else:
-            amounts=request.form.getlist('amount')
-            if len(amounts)!=len(ids):raise ValueError('Amount rows are incomplete.')
-            counter=selected(request.form.get('counter_account',''),'Assets')
-            for raw,value,memo in zip(ids,amounts,memos):
-                if not raw and not value.strip() and not memo.strip():continue
-                a=selected(raw,'Expense' if kind=='expense' else 'Income');n=amount(value)
-                if not n:raise ValueError('Enter a positive amount for every populated row.')
-                lines.append((a,n if kind=='expense' else 0,n if kind=='income' else 0,memo.strip()))
-            total=sum(d+c for _,d,c,_ in lines)
-            if total:lines.append((counter,total if kind=='income' else 0,total if kind=='expense' else 0,'Expense payment' if kind=='expense' else 'Income receipt'))
-        if len(lines)<2 or len({a.id for a,_,_,_ in lines})<2:raise ValueError('Use at least two distinct accounts in a balanced journal.')
-        if any(len(memo)>1000 for _,_,_,memo in lines):raise ValueError('Each memo must be at most 1,000 characters.')
-        if sum(d for _,d,_,_ in lines)!=sum(c for _,_,c,_ in lines):raise ValueError('Total debit must equal total credit.')
-        journal=Journal(token=token,fingerprint=digest,day=day,campus=campus,kind=kind,period_id=periods[0].id,actor=who,actor_key=who_key);db.session.add(journal);db.session.flush()
+        day,campus,period,lines=prepare(kind,request.form)
+        journal=Journal(token=token,fingerprint=digest,day=day,campus=campus,kind=kind,period_id=period.id,actor=who,actor_key=who_key);db.session.add(journal);db.session.flush()
         for a,d,c,m in lines:db.session.add(Line(journal_id=journal.id,account_id=a.id,debit=d,credit=c,memo=m,snapshot=account_snapshot(a)))
         db.session.add(Audit(action='Post Finance journal',data={'journal_id':journal.id,'kind':kind,'campus':campus,'day':day.isoformat(),'actor':who,'total':sum(d for _,d,_,_ in lines)}));db.session.commit()
         flash('Balanced journal saved. Posted entries retain their account names and amounts.','success')
@@ -136,7 +140,9 @@ def configure_ledger(app,db):
     def voucher(jid):
         if not 0<jid<10**18:abort(404)
         journal=db.get_or_404(Journal,jid);lines=Line.query.filter_by(journal_id=jid).order_by(Line.id).all()
-        return render('ledger_voucher.html',title='Journal Voucher',journal=journal,lines=lines,total=sum(x.debit for x in lines))
+        changes=app.extensions.get('journal_change_models',{});Change=changes.get('change')
+        change=Change.query.filter_by(journal_id=jid).first() if Change else None
+        return render('ledger_voucher.html',title='Journal Voucher',journal=journal,lines=lines,total=sum(x.debit for x in lines),change=change)
 
     def filters():
         try:start=date.fromisoformat(request.args.get('from',today().replace(day=1).isoformat()));end=date.fromisoformat(request.args.get('to',today().isoformat()))
@@ -225,4 +231,5 @@ def configure_ledger(app,db):
             args.pop('mode',None)
             return url_for('ledger.report',mode=mode,**args)
         return render('ledger_report.html',title=names[mode],mode=mode,start=start,end=end,scope=scope,users=users,user_options=db.session.query(Journal.actor_key,Journal.actor).distinct().order_by(Journal.actor).all(),accounts=Account.query.order_by(Account.code).all(),selected_account=selected_account,rows=rows,opening=opening,ending=ending,debit=debit,credit=credit,report_rows=report_rows,totals=totals,rollups=rollups,sections=sections,tab=tab,display=display,group_totals=group_totals,count=count,page=page,pages_count=pages,size=size,link=link)
+    app.extensions['ledger_helpers'].update(actor=actor,prepare=prepare,options=options,snapshot=account_snapshot,campuses=campuses,today=today,filters=filters,scoped=scoped,amount=amount,identity=identity)
     app.register_blueprint(bp)
