@@ -36,7 +36,12 @@ def configure_ledger(app,db):
         snapshot=db.Column(db.JSON,nullable=False)
         journal=db.relationship(Journal)
         __table_args__=(db.CheckConstraint('(debit > 0 AND credit = 0) OR (credit > 0 AND debit = 0)',name='finance_one_positive_side'),)
-    app.extensions['ledger_models']=dict(journal=Journal,line=Line)
+    class JournalNote(db.Model):
+        __tablename__='finance_journal_note'
+        journal_id=db.Column(db.Integer,db.ForeignKey('finance_journal.id',ondelete='RESTRICT'),primary_key=True)
+        narration=db.Column(db.String(1000),nullable=False)
+    Journal.note=db.relationship(JournalNote,uselist=False)
+    app.extensions['ledger_models']=dict(journal=Journal,line=Line,note=JournalNote)
     app.extensions['ledger_helpers']=dict(used_period=lambda rid:Journal.query.filter_by(period_id=rid).first() is not None,used_account=lambda rid:Line.query.filter_by(account_id=rid).first() is not None)
     def actor():
         p=getattr(g,'staff_principal',None)
@@ -78,6 +83,7 @@ def configure_ledger(app,db):
         db.session.rollback();return render_template('operation_error.html',title='Check journal entry',error='Another request changed this posting. Reload the saved journals before retrying.'),422
 
     def prepare(kind,form):
+        if len(form.get('narration','').strip())>1000:raise ValueError('Narration must be at most 1,000 characters.')
         try:day=date.fromisoformat(form.get('day',''))
         except ValueError:raise ValueError('Choose a valid transaction date.')
         campus=form.get('campus','')
@@ -113,6 +119,15 @@ def configure_ledger(app,db):
         if sum(d for _,d,_,_ in lines)!=sum(c for _,_,c,_ in lines):raise ValueError('Total debit must equal total credit.')
         return day,campus,periods[0],lines
 
+    @bp.get('/setup')
+    def setup():
+        orphan_lines=Line.query.outerjoin(Account,Account.id==Line.account_id).filter(Account.id==None).count()
+        orphan_groups=Account.query.outerjoin(Group,Group.id==Account.group_id).filter(Group.id==None).count()
+        totals=db.session.query(Line.journal_id,func.sum(Line.debit),func.sum(Line.credit)).group_by(Line.journal_id).all()
+        unbalanced=[jid for jid,d,c in totals if d!=c]
+        empty=Journal.query.filter(~Journal.id.in_([jid for jid,_,_ in totals])).count()
+        return render('ledger_setup.html',title='Ledger Setup',account_count=Account.query.count(),period_count=Period.query.count(),journal_count=Journal.query.count(),issues=orphan_lines+orphan_groups+len(unbalanced)+empty,unbalanced=unbalanced)
+
     @bp.route('/entry/<kind>',methods=['GET','POST'])
     def entry(kind):
         if kind not in ('journal','expense','income'):abort(404)
@@ -124,6 +139,7 @@ def configure_ledger(app,db):
         # Include actor and original row text in the retry fingerprint. A replay
         # can be returned even after its account/period is later retired/closed.
         payload={key:request.form.getlist(key) for key in ('day','campus','account_id','debit','credit','amount','memo','counter_account')}
+        if request.form.get('narration','').strip():payload['narration']=[request.form['narration'].strip()]
         digest=hashlib.sha256(json.dumps([kind,who_key,payload],sort_keys=True,separators=(',',':')).encode()).hexdigest()
         prior=Journal.query.filter_by(token=token).first()
         if prior:
@@ -131,6 +147,7 @@ def configure_ledger(app,db):
             return redirect(url_for('ledger.voucher',jid=prior.id,**({'print':'1'} if request.form.get('save_action')=='print' else {})))
         day,campus,period,lines=prepare(kind,request.form)
         journal=Journal(token=token,fingerprint=digest,day=day,campus=campus,kind=kind,period_id=period.id,actor=who,actor_key=who_key);db.session.add(journal);db.session.flush()
+        if request.form.get('narration','').strip():db.session.add(JournalNote(journal_id=journal.id,narration=request.form['narration'].strip()))
         for a,d,c,m in lines:db.session.add(Line(journal_id=journal.id,account_id=a.id,debit=d,credit=c,memo=m,snapshot=account_snapshot(a)))
         db.session.add(Audit(action='Post Finance journal',data={'journal_id':journal.id,'kind':kind,'campus':campus,'day':day.isoformat(),'actor':who,'total':sum(d for _,d,_,_ in lines)}));db.session.commit()
         flash('Balanced journal saved. Posted entries retain their account names and amounts.','success')
@@ -145,7 +162,7 @@ def configure_ledger(app,db):
         return render('ledger_voucher.html',title='Journal Voucher',journal=journal,lines=lines,total=sum(x.debit for x in lines),change=change)
 
     def filters():
-        try:start=date.fromisoformat(request.args.get('from',today().replace(day=1).isoformat()));end=date.fromisoformat(request.args.get('to',today().isoformat()))
+        try:start=date.fromisoformat(request.args.get('from') or today().replace(day=1).isoformat());end=date.fromisoformat(request.args.get('to') or today().isoformat())
         except ValueError:raise ValueError('Choose valid From and To dates.')
         if end<start:raise ValueError('To date must be on or after From date.')
         scope=list(dict.fromkeys(request.args.getlist('campus')))

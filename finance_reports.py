@@ -60,6 +60,7 @@ def configure_finance_reports(app,db):
         token=request.form.get('action_token','')
         if not re.fullmatch(r'[A-Za-z0-9_-]{32,64}',token):raise ValueError('Reload this action before saving.')
         payload={k:request.form.getlist(k) for k in ('day','campus','account_id','debit','credit','amount','memo','counter_account','confirm')}
+        if request.form.get('narration','').strip():payload['narration']=[request.form['narration'].strip()]
         digest=hashlib.sha256(json.dumps([action,ids,H['actor']()[1],payload],sort_keys=True,separators=(',',':')).encode()).hexdigest()
         prior=db.session.get(Action,token)
         if prior and prior.digest!=digest:raise ValueError('This action token has already been used for different data.')
@@ -79,6 +80,7 @@ def configure_finance_reports(app,db):
             check_original(source);day,campus,period,lines=H['prepare'](source.kind,request.form);who,key=H['actor']()
             reversal=reverse(source,who)
             replacement=Journal(token=secrets.token_urlsafe(32),fingerprint=digest,day=day,campus=campus,kind=source.kind,period_id=period.id,actor=who,actor_key=key);db.session.add(replacement);db.session.flush()
+            if request.form.get('narration','').strip():db.session.add(app.extensions['ledger_models']['note'](journal_id=replacement.id,narration=request.form['narration'].strip()))
             for a,d,c,m in lines:db.session.add(Line(journal_id=replacement.id,account_id=a.id,debit=d,credit=c,memo=m,snapshot=H['snapshot'](a)))
             db.session.add(Change(journal_id=jid,reversal_id=reversal.id,replacement_id=replacement.id,actor=who));db.session.add(Action(token=token,digest=digest,result={'replacement':replacement.id}))
             db.session.add(Audit(action='Correct Finance journal',data={'original':jid,'reversal':reversal.id,'replacement':replacement.id,'actor':who}));db.session.commit()
@@ -88,7 +90,7 @@ def configure_finance_reports(app,db):
         for line in lines:
             if source.kind!='journal' and line.snapshot['account_class']=='Assets':counter=line.account_id;continue
             rows.append(dict(account_id=line.account_id,debit=f'{Decimal(line.debit)/100:.2f}' if line.debit else '',credit=f'{Decimal(line.credit)/100:.2f}' if line.credit else '',amount=f'{Decimal(line.debit+line.credit)/100:.2f}',memo=line.memo))
-        return render('ledger_entry.html',title='Edit Transaction #'+str(jid),kind=source.kind,accounts=H['options'](),today=source.day.isoformat(),post_token=secrets.token_urlsafe(32),entry_campus=source.campus,entry_rows=rows,counter_account=counter,correction_source=source)
+        return render('ledger_entry.html',title='Edit Transaction #'+str(jid),kind=source.kind,accounts=H['options'](),today=source.day.isoformat(),post_token=secrets.token_urlsafe(32),entry_campus=source.campus,entry_rows=rows,counter_account=counter,correction_source=source,entry_narration=source.note.narration if source.note else '')
     @bp.post('/journal/void')
     def void():
         raw=request.form.getlist('journal_ids')
@@ -105,7 +107,11 @@ def configure_finance_reports(app,db):
         flash('Selected transactions voided using balanced reversals. Their original vouchers remain in audit history.','success')
         return redirect(url_for('finance_reports.journals'))
     def range_query():
-        start,end,scope,users=H['filters']();q=Journal.query.filter(Journal.day>=start,Journal.day<=end)
+        start,end,scope,users=H['filters']()
+        if request.path.endswith('/voided'):
+            if not request.args.get('from'):start=db.session.query(func.min(Journal.day)).scalar() or start
+            if not request.args.get('to'):end=max(end,db.session.query(func.max(Journal.day)).scalar() or end)
+        q=Journal.query.filter(Journal.day>=start,Journal.day<=end)
         if scope:q=q.filter(Journal.campus.in_(scope))
         if users:q=q.filter(Journal.actor_key.in_(users))
         raw=request.args.get('trans_id','')
@@ -156,9 +162,12 @@ def configure_finance_reports(app,db):
         if ids:
             for line in Line.query.filter(Line.journal_id.in_(ids)).order_by(Line.id).all():details.setdefault(line.journal_id,[]).append(line)
         return render('journal_inquiry.html',title='Journal Inquiry',rows=fetched,details=details,changes=changes,start=start,end=end,scope=scope,state=state,page=page,size=size,total=total,pages_count=pages,action_token=secrets.token_urlsafe(32),link=lambda **kw:link('finance_reports.journals',**kw))
+    @bp.get('/voided')
     @bp.get('/general')
     def general():
         start,end,scope,q=range_query();q=q.outerjoin(Change,Change.journal_id==Journal.id).join(Line,Line.journal_id==Journal.id)
+        voided=request.path.endswith('/voided')
+        if voided:q=q.filter(Change.id!=None,Change.replacement_id==None)
         for field in ('code','account_name','memo'):
             value=request.args.get(field,'')
             if value:
@@ -182,7 +191,7 @@ def configure_finance_reports(app,db):
         if request.args.get('print')!='1':query=query.offset((page-1)*size).limit(size)
         rows=query.all();ids=[j.id for _,j,_ in rows]
         changes={r.journal_id:r for r in Change.query.filter(Change.journal_id.in_(ids)).all()} if ids else {}
-        return render('general_ledger.html',title='General Ledger',rows=rows,changes=changes,start=start,end=end,scope=scope,page=page,size=size,total=total,pages_count=pages,link=lambda **kw:link('finance_reports.general',**kw))
+        return render('general_ledger.html',title='Voided Transactions' if voided else 'General Ledger',voided=voided,rows=rows,changes=changes,start=start,end=end,scope=scope,page=page,size=size,total=total,pages_count=pages,link=lambda **kw:(link('finance_reports.general',**kw).replace('/general','/voided') if voided else link('finance_reports.general',**kw)))
     @bp.get('/daily')
     def daily():
         start,end,scope,users=H['filters']();tab=request.args.get('tab','combine')

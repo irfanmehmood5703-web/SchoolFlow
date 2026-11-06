@@ -264,6 +264,19 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post('/workspace/finance/reports/journal/void',data={'_csrf':self.token()}).status_code,403)
         self.assertEqual(self.c.post('/workspace/finance/reports/journal/1/edit',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)
 
+    def test_fee_audit_and_void_reports_require_full_finance_scope(self):
+        self.login()
+        paths=('audit/fees','audit/challans/voided','reports/voided','ledger/setup')
+        for path in paths:self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,403)
+        for allowed in (['Campus A'],['Campus A','Campus B']):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+                person.data={**person.data,'permissions':{'finance.view':allowed}};db.session.commit();version=person.version;db.session.remove()
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+            for path in paths:self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,200 if len(allowed)==2 else 403)
+        self.assertEqual(self.c.get('/workspace/finance/audit/fees?export=csv').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/audit/fees?print=1').status_code,403)
+
     def test_cash_and_shareholders_use_finance_permissions(self):
         self.login()
         for path in ('cash-report','shareholders','shareholders/new','shareholders/1/edit','shareholders/1/transactions'):

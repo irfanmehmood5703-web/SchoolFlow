@@ -23,7 +23,7 @@ class FinanceSetupTests(unittest.TestCase):
             r=self.c.get('/workspace/finance/'+path);self.assertEqual(r.status_code,200,path)
         self.assertEqual(self.m['group'].query.count(),0)
         for key,endpoint in [('periods','periods'),('groups','groups'),('accounts','accounts')]:
-            self.assertIn(('/workspace/finance/'+endpoint).encode(),self.c.get('/workspace/dashboard').data)
+            self.assertIn(('/workspace/finance/'+endpoint).encode(),self.c.get('/workspace/finance/ledger/setup').data)
     def test_period_dates_overlap_stale_close_and_delete(self):
         self.assertEqual(self.post('periods/new',begin='2026-12-31',end='2026-01-01',closed='0',version='0').status_code,422)
         self.assertEqual(self.post('periods/new',begin='2026-01-01',end='2026-12-31',closed='0',version='0').status_code,302)

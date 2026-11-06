@@ -31,6 +31,11 @@ def configure_finance(app,db):
         begin=db.Column(db.Date,nullable=False)
         end=db.Column(db.Date,nullable=False)
         closed=db.Column(db.Boolean,nullable=False,default=False)
+    class PeriodInfo(db.Model):
+        __tablename__='finance_period_info'
+        period_id=db.Column(db.Integer,db.ForeignKey('finance_period.id',ondelete='CASCADE'),primary_key=True)
+        name=db.Column(db.String(160),nullable=False)
+    Period.info=db.relationship(PeriodInfo,uselist=False,cascade='all, delete-orphan')
     class Group(Stamp,db.Model):
         __tablename__='finance_group'
         id=db.Column(db.Integer,primary_key=True)
@@ -55,7 +60,10 @@ def configure_finance(app,db):
         now=datetime.now(timezone.utc);who=actor()
         if new:row.created_at=now;row.created_by=who
         row.updated_at=now;row.updated_by=who
-    def snapshot(row):return {c.name:(getattr(row,c.name).isoformat() if isinstance(getattr(row,c.name),(date,datetime)) else getattr(row,c.name)) for c in row.__table__.columns}
+    def snapshot(row):
+        data={c.name:(getattr(row,c.name).isoformat() if isinstance(getattr(row,c.name),(date,datetime)) else getattr(row,c.name)) for c in row.__table__.columns}
+        if isinstance(row,Period):data['name']=row.info.name if row.info else ''
+        return data
     def commit():
         try:db.session.commit()
         except (IntegrityError,StaleDataError):
@@ -176,6 +184,8 @@ def configure_finance(app,db):
                 if end<begin:raise ValueError('End must be on or after Begin.')
                 if Period.query.filter(Period.id!=(rid or 0),Period.begin<=end,Period.end>=begin).first():raise ValueError('Accounting periods cannot overlap, including closed periods.')
                 if row and (begin!=row.begin or end!=row.end) and app.extensions.get('ledger_helpers',{}).get('used_period',lambda rid:False)(row.id):raise ValueError('A period with posted journals cannot change its dates.')
+                period_name=request.form.get('name','').strip()
+                if len(period_name)>160:raise ValueError('Period name must be at most 160 characters.')
                 data=dict(begin=begin,end=end,closed=flag('closed'))
                 principal=getattr(g,'staff_principal',None)
                 if principal is not None and data['closed']!=(row.closed if row else False):
@@ -202,6 +212,9 @@ def configure_finance(app,db):
             new=row is None;row=row or Model(**data)
             for key,value in data.items():setattr(row,key,value)
             stamp(row,new);db.session.add(row);db.session.flush()
+            if kind=='periods' and 'name' in request.form:
+                row.info=row.info or PeriodInfo(period_id=row.id,name=period_name)
+                row.info.name=period_name
             db.session.add(Audit(action='Save Finance '+kind,data={'actor':actor(),'id':row.id,'before':before,'after':snapshot(row)}));commit()
             return redirect(url_for('finance.view',kind=kind,rid=row.id))
         previews={}

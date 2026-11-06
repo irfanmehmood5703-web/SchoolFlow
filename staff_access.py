@@ -311,6 +311,8 @@ def configure_staff_access(app,db,Student,Employee):
             return 'requisitions.'+('create' if ep=='requisitions.mine' and request.method=='POST' else 'update' if ep=='requisitions.cancel' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_partners.'):
             return 'finance.'+('create' if ep=='finance_partners.edit' and not args.get('rid') else 'update' if ep=='finance_partners.edit' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('finance_audit.'):
+            return 'finance.'+('export' if request.args.get('export') else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_reports.'):
             return 'finance.'+('delete' if ep=='finance_reports.void' else 'update' if ep=='finance_reports.correct' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('ledger.'):
