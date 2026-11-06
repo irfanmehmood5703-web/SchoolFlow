@@ -131,6 +131,8 @@ from finance_ledger import configure_ledger
 configure_ledger(app,db)
 from finance_reports import configure_finance_reports
 configure_finance_reports(app,db)
+from finance_partners import configure_finance_partners
+configure_finance_partners(app,db)
 
 @app.route('/')
 def home():

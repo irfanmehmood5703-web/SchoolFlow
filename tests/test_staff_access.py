@@ -263,3 +263,17 @@ class StaffAccessTests(unittest.TestCase):
         grants(['update'])
         self.assertEqual(self.c.post('/workspace/finance/reports/journal/void',data={'_csrf':self.token()}).status_code,403)
         self.assertEqual(self.c.post('/workspace/finance/reports/journal/1/edit',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)
+
+    def test_cash_and_shareholders_use_finance_permissions(self):
+        self.login()
+        for path in ('cash-report','shareholders','shareholders/new','shareholders/1/edit','shareholders/1/transactions'):
+            self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/shareholders/new',data={'_csrf':self.token()}).status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+            data=dict(person.data);data['permissions']={'finance.view':['Campus A','Campus B']};person.data=data;db.session.commit();version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=version
+        for path in ('cash-report','shareholders'):
+            self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,200)
+            self.assertEqual(self.c.get('/workspace/finance/'+path+'?print=1').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/shareholders/new').status_code,403)
