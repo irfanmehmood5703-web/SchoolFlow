@@ -303,10 +303,12 @@ def configure_staff_access(app,db,Student,Employee):
         ep=request.endpoint or '';args=request.view_args or {};area=None
         if ep.startswith('daily_snapshots.'):
             return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('req_posting.'):
+            return 'requisitions.'+('manage' if request.method=='GET' else 'pay' if args.get('kind') in ('issue','reimburse') else 'update')
         if ep.startswith('requisitions.'):
             if ep=='requisitions.settings':return 'core.'+('update' if request.method=='POST' else 'view')
             if ep in ('requisitions.approvals','requisitions.decide'):return 'requisitions.approve'
-            if ep in ('requisitions.issue','requisitions.settle','requisitions.reports'):return 'requisitions.manage'
+            if ep in ('requisitions.issue','requisitions.settle','requisitions.reports'):return 'requisitions.print' if request.args.get('print')=='1' else 'requisitions.manage'
             if ep=='requisitions.blocked_posting':return 'requisitions.'+('pay' if request.path.endswith('/issue') else 'update')
             return 'requisitions.'+('create' if ep=='requisitions.mine' and request.method=='POST' else 'update' if ep=='requisitions.cancel' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_partners.'):
@@ -384,7 +386,7 @@ def configure_staff_access(app,db,Student,Employee):
             for key in ('account','discount_account','credit','debit'):
                 value=request.form.get(key)
                 if value and value not in p.data.get('accounts',[]):abort(403,'This cash account is not granted.')
-            raw=request.form.get('paid_date','')
+            raw=request.form.get('day' if request.blueprint=='req_posting' else 'paid_date','')
             if code.endswith('.pay') and not raw:abort(422,'Choose the payment date explicitly.')
             if raw:
                 try:paid=date.fromisoformat(raw)

@@ -45,8 +45,9 @@ the isolated trial bootstrap creates them automatically.
 
 Limitations: physical browser/phone/PDF visual verification is pending. Trial
 SQLite storage is ephemeral and must not hold real school data. Durable storage
-is unresolved. Requisition issuance/settlement and daily snapshot accounting
-bridges remain blocked/unconnected as documented in REQUISITIONS_SNAPSHOTS.md.
+is unresolved. Requisition posting is now connected to the unified ledger; see
+`docs/REQUISITION_POSTING.md`. The daily snapshot accounting bridge remains
+unconnected.
 This change does not claim the complete Finance module is finished.
 
 ## Verification — 6 November 2026

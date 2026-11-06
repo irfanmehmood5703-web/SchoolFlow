@@ -1,3 +1,5 @@
+> Update: the original posting gate described below is superseded by [REQUISITION_POSTING.md](REQUISITION_POSTING.md). Issue, bills, returns, carry and reimbursement now use the unified ledger. Snapshot finance integration remains pending.
+
 # Daily Snapshot and Requisitions reference batch
 
 Reference: supplied Daily Snapshot history; My Requisitions list/new form/status and category dropdowns; empty Approval, Issue Payment, Settlement, Advance Ageing/Register; Requisition Settings. No vendor pupil records, dates, balances or personal identifiers are copied.

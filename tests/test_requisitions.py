@@ -50,12 +50,12 @@ class RequisitionTests(unittest.TestCase):
         self.assertEqual(self.decide(rid=1).status_code,422)
         self.assertEqual(self.decide(rid=2,decision='Rejected',remarks='Not needed').status_code,302)
         self.assertEqual(self.c.post('/workspace/finance/requisitions/2/cancel',data=data).status_code,422)
-    def test_original_ledger_accounts_cannot_enable_new_ledger_posting(self):
-        form=dict(_csrf=self.csrf,version='0',prefix='REQ',settle_days='15',overdue_days='30',advance_account=str(self.asset.id))
+    def test_wrong_account_class_and_obsolete_forms_cannot_post(self):
+        form=dict(_csrf=self.csrf,version='0',prefix='REQ',settle_days='15',overdue_days='30',advance_account=str(self.expense.id))
         self.assertEqual(self.c.post('/workspace/finance/requisitions/settings',data=form).status_code,422)
         self.submit();self.decide()
         for action in ['issue','settle']:
-            r=self.c.post('/workspace/finance/requisitions/1/'+action,data=dict(_csrf=self.csrf,amount='20',account_id=str(self.asset.id)));self.assertEqual(r.status_code,422);self.assertIn(b'New Ledger',r.data)
+            r=self.c.post('/workspace/finance/requisitions/1/'+action,data=dict(_csrf=self.csrf,amount='20',account_id=str(self.asset.id)));self.assertEqual(r.status_code,422);self.assertIn(b'current Issue Payment',r.data)
         self.assertEqual(self.j['journal'].query.count(),0)
     def test_rules_prefix_saved_with_version_and_invalid_days_rejected(self):
         form=dict(_csrf=self.csrf,version='0',prefix='isf',settle_days='10',overdue_days='20',block_open='1',carry_unspent='1',require_bill='1')

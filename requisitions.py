@@ -1,4 +1,4 @@
-"""Scoped requisition authorisation; New Ledger-dependent posting stays blocked."""
+"""Scoped requisition authorisation and unified-ledger posting workflows."""
 import hashlib,hmac,json,re,secrets
 from datetime import date,datetime,timezone
 from decimal import Decimal,InvalidOperation,ROUND_HALF_UP
@@ -73,6 +73,7 @@ def configure_requisitions(app,db):
         if not re.fullmatch(r'[A-Za-z0-9_-]{32,64}',value):raise ValueError('Reload this form before submitting.')
         return value
     def get_req(rid,owned=False):
+        if not 0<rid<10**18:abort(404)
         row=Req.query.filter_by(id=rid).first()
         if not row or row.campus not in scope() or (owned and row.actor_key!=H['actor']()[1]):abort(404)
         return row
@@ -115,6 +116,7 @@ def configure_requisitions(app,db):
             raw=request.form.get('needed','')
             try:needed=date.fromisoformat(raw) if raw else None
             except ValueError:raise ValueError('Choose a valid Needed by date.')
+            if cfg['block_open'] and app.extensions['requisition_posting']['open_for'](key):raise ValueError('Settle the existing held advance or staff payable before raising another requisition.')
             lines,total=items()
             # No advance can be issued before New Ledger exists. An approved,
             # unissued request is not falsely treated as staff holding money.
@@ -161,27 +163,41 @@ def configure_requisitions(app,db):
         row,cfg=config()
         if request.method=='POST':
             if request.form.get('version')!=str(row.version if row else 0):raise ValueError('These settings changed. Reload before saving.')
-            if any(request.form.get(k) for k in ('advance_account','pay_account','payable_account')):raise ValueError('These accounts must come from New Ledger. New Ledger Setup and its account reference are required first; original Ledger accounts cannot be used here.')
+            accounts=app.extensions['finance_models']['account'];mapping={}
+            for key,cls in [('advance_account','Assets'),('pay_account','Assets'),('payable_account','Liabilities')]:
+                raw=request.form.get(key,'')
+                try:aid=int(raw) if raw else None
+                except ValueError:raise ValueError('Choose a configured account.')
+                if aid is not None and not 0<aid<10**18:raise ValueError('Choose a valid account.')
+                a=db.session.get(accounts,aid) if aid else None
+                if aid and (not a or a.inactive or not a.group.active or a.group.account_class!=cls):raise ValueError('Choose an active '+cls+' account for '+key.replace('_',' ')+'.')
+                mapping[key]=aid
+            if mapping['advance_account'] and mapping['advance_account']==mapping['pay_account']:raise ValueError('Staff Advances must differ from the cash/bank account.')
+            balances=[app.extensions['requisition_posting']['balance'](r.id) for r in Req.query.all()]
+            if mapping['advance_account']!=cfg['advance_account'] and any(b['held'] for b in balances):raise ValueError('Settle held advances before changing the Staff Advances mapping.')
+            if mapping['payable_account']!=cfg['payable_account'] and any(b['owed'] for b in balances):raise ValueError('Reimburse outstanding staff payables before changing that mapping.')
             prefix=request.form.get('prefix','').strip().upper()
             if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{0,11}',prefix):raise ValueError('Use a requisition prefix of 1–12 letters, digits or hyphens.')
             try:settle=int(request.form.get('settle_days',''));overdue=int(request.form.get('overdue_days',''))
             except ValueError:raise ValueError('Enter whole numbers for the day rules.')
             if not 1<=settle<=overdue<=3650:raise ValueError('Settle within must be 1–3,650 days; overdue must be at least that many days.')
-            cfg=dict(DEFAULTS,prefix=prefix,settle_days=settle,overdue_days=overdue,**{k:request.form.get(k)=='1' for k in ('block_open','carry_unspent','require_bill')})
+            cfg=dict(DEFAULTS,**mapping,prefix=prefix,settle_days=settle,overdue_days=overdue,**{k:request.form.get(k)=='1' for k in ('block_open','carry_unspent','require_bill')})
             if not row:row=Config(id=1,data=cfg);db.session.add(row)
             else:row.data=cfg
-            db.session.add(Audit(action='Save requisition settings',data=dict(actor=H['actor']()[0],settings=cfg)));db.session.commit();flash('Rules saved. Issue/settlement stays blocked until New Ledger is configured.','success');return redirect(url_for('requisitions.settings'))
-        return render('requisition_settings.html',title='Requisition Settings',cfg=cfg,row=row)
+            db.session.add(Audit(action='Save requisition settings',data=dict(actor=H['actor']()[0],settings=cfg)));db.session.commit();flash('Requisition rules and ledger account mappings saved.','success');return redirect(url_for('requisitions.settings'))
+        return render('requisition_settings.html',title='Requisition Settings',cfg=cfg,row=row,accounts=app.extensions['ledger_helpers']['options']())
     @bp.get('/issue')
-    def issue():
-        rows=Req.query.filter(Req.campus.in_(scope()),Req.status=='Approved').order_by(Req.id).limit(500).all()
-        return render('requisition_posting.html',title='Issue Requisition Payment',mode='issue',rows=rows)
+    def issue():return posting_list('issue')
     @bp.get('/settle')
-    def settle():return render('requisition_posting.html',title='Settle Requisition',mode='settle',rows=[])
+    def settle():return posting_list('settle')
+    def posting_list(mode):
+        rows=Req.query.filter(Req.campus.in_(scope()),Req.status=='Approved').order_by(Req.id).all()
+        balances={r.id:app.extensions['requisition_posting']['balance'](r.id) for r in rows};_,cfg=config()
+        return render('requisition_posting.html',title='Issue Requisition Payment' if mode=='issue' else 'Settle Requisition',mode=mode,rows=rows,balances=balances,cfg=cfg,today=H['today']())
     @bp.post('/<int:rid>/issue')
     @bp.post('/<int:rid>/settle')
     def blocked_posting(rid):
-        get_req(rid);raise ValueError('Posting is unavailable until New Ledger Setup, Staff Advances and the issue/bill/return forms are confirmed. No money or expense was recorded.')
+        get_req(rid);raise ValueError('Open the current Issue Payment or Record Expense Bill form and submit its version and posting token. No posting was made from this old form.')
     @bp.get('/reports')
     def reports():
         tab=request.args.get('tab','ageing')
@@ -189,6 +205,25 @@ def configure_requisitions(app,db):
         raw=request.args.get('as_at',H['today']().isoformat())
         try:as_at=date.fromisoformat(raw)
         except ValueError:raise ValueError('Choose a valid As at date.')
-        rows=Req.query.filter(Req.campus.in_(scope())).order_by(Req.id.desc()).limit(1000).all()
-        return render('requisition_reports.html',title='Requisition Reports',tab=tab,as_at=as_at,rows=rows)
+        rows=Req.query.filter(Req.campus.in_(scope())).order_by(Req.id.desc()).all()
+        helper=app.extensions['requisition_posting']
+        rows=[r for r in rows if r.raised.date()<=as_at or helper['movements'](r.id,as_at)]
+        balances={r.id:helper['balance'](r.id,as_at) for r in rows}
+        buckets=[0,0,0,0];people={};open_rows=[]
+        for r in rows:
+            b=balances[r.id]
+            if not b['held']:continue
+            person=people.setdefault(r.actor_key,dict(name=r.raised_by,buckets=[0,0,0,0],total=0,oldest=None))
+            for lot_day,n in b['lots']:
+                days=max(0,(as_at-lot_day).days);i=0 if days<=7 else 1 if days<=15 else 2 if days<=30 else 3
+                buckets[i]+=n;person['buckets'][i]+=n;person['total']+=n
+                person['oldest']=min(person['oldest'] or lot_day,lot_day)
+                open_rows.append(dict(row=r,day=lot_day,days=days,held=n))
+        Line=app.extensions['ledger_models']['line'];Journal=app.extensions['ledger_models']['journal'];Movement=app.extensions['requisition_models']['movement'];_,cfg=config()
+        account_ids={m.data.get('advance_account') for m in Movement.query.all() if m.data.get('advance_account')}
+        if cfg['advance_account']:account_ids.add(cfg['advance_account'])
+        book=db.session.query(func.coalesce(func.sum(Line.debit-Line.credit),0)).join(Journal).filter(Line.account_id.in_(account_ids),Journal.campus.in_(scope()),Journal.day<=as_at).scalar() if account_ids else None
+        return render('requisition_reports.html',title='Requisition Reports',tab=tab,as_at=as_at,rows=rows,balances=balances,buckets=buckets,people=people,open_rows=open_rows,book=book,held=sum(b['held'] for b in balances.values()))
     app.register_blueprint(bp)
+    from requisition_posting import configure_requisition_posting
+    configure_requisition_posting(app,db,config,scope,get_req,check_version,token,digest)

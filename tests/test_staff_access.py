@@ -277,6 +277,38 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.get('/workspace/finance/audit/fees?export=csv').status_code,403)
         self.assertEqual(self.c.get('/workspace/finance/audit/fees?print=1').status_code,403)
 
+    def test_requisition_posting_requires_manage_action_campus_and_cash_grants(self):
+        from datetime import datetime,timezone
+        import secrets
+        now=datetime.now(timezone.utc);today=app.extensions['ledger_helpers']['today']()
+        def seed():
+            fm=app.extensions['finance_models'];rm=app.extensions['requisition_models'];stamp=dict(created_at=now,updated_at=now,created_by='QA',updated_by='QA')
+            group=fm['group'](name='QA assets',account_class='Assets',active=True,**stamp);db.session.add(group);db.session.flush()
+            for i,name in enumerate(('Cash in Hand','Staff Advances'),1000):db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
+            db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
+            from requisitions import DEFAULTS
+            db.session.flush();cash=fm['account'].query.filter_by(name='Cash in Hand').one();advance=fm['account'].query.filter_by(name='Staff Advances').one()
+            db.session.add(rm['config'](id=1,data={**DEFAULTS,'advance_account':advance.id,'pay_account':cash.id}))
+            for rid,campus in ((1,'Campus A'),(2,'Campus B')):db.session.add(rm['request'](id=rid,number='QA-'+str(rid),campus=campus,actor_key='staff:1',raised_by='QA',category='Procurement / Supplies',purpose='Fictional finance QA',items=[],estimated=2000,approved=2000,status='Approved',token=secrets.token_urlsafe(32),fingerprint='f'))
+            return cash.id
+        cash_id=self.tenant(seed);self.login()
+        path='/workspace/finance/requisitions/1/posting/issue'
+        self.assertEqual(self.c.get(path).status_code,403)
+        def grants(actions,account=True):
+            def save():
+                p=db.session.get(self.Staff,self.sid);p.data={**p.data,'permissions':{'requisitions.'+a:['Campus A'] for a in actions},'accounts':['Cash in Hand'] if account else []};db.session.flush();return p.version
+            version=self.tenant(save)
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+        grants(['manage']);self.assertEqual(self.c.get(path).status_code,200)
+        form=dict(_csrf=self.token(),post_token=secrets.token_urlsafe(32),version='1',day=today.isoformat(),amount='10',account_id=str(cash_id))
+        self.assertEqual(self.c.post(path,data=form).status_code,403)
+        grants(['manage','pay'],False);self.assertEqual(self.c.post(path,data=form).status_code,403)
+        grants(['manage','pay']);self.assertEqual(self.c.get('/workspace/finance/requisitions/2/posting/issue').status_code,404)
+        self.assertEqual(self.c.post(path,data=form).status_code,302)
+        self.assertEqual(self.tenant(lambda:app.extensions['requisition_models']['movement'].query.count()),1)
+        self.assertEqual(self.c.get('/workspace/finance/requisitions/reports?print=1').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/requisitions/1/posting/return',data={**form,'version':'2'}).status_code,403)
+
     def test_cash_and_shareholders_use_finance_permissions(self):
         self.login()
         for path in ('cash-report','shareholders','shareholders/new','shareholders/1/edit','shareholders/1/transactions'):
