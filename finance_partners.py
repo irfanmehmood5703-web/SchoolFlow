@@ -93,7 +93,7 @@ def configure_finance_partners(app,db):
         count=len(filtered);pages=max(1,(count+size-1)//size);page=min(page,pages)
         display=rows if request.args.get('print')=='1' else filtered[(page-1)*size:page*size]
         return render('cash_report.html',title='Cash Report',start=start,end=end,scope=scope,users=users,user_options=db.session.query(J.actor_key,J.actor).distinct().order_by(J.actor).all(),accounts=accounts,selected=selected,rows=rows,display=display,rollups=rollups,totals=totals,keys=keys,tab=tab,count=count,page=page,pages_count=pages,size=size,link=lambda **kw:link('finance_partners.cash',**kw))
-    def read_partner():
+    def read_partner(existing=None):
         values={}
         for key,maximum in [('name',160),('cnic',32),('contact',80),('email',254),('notes',5000)]:
             value=request.form.get(key,'').strip()
@@ -108,7 +108,7 @@ def configure_finance_partners(app,db):
         raw=request.form.get('account_id','');values['account_id']=H['identity'](raw) if raw else None
         if values['account_id']:
             account=db.session.get(Account,values['account_id'])
-            if not account or account.inactive or not account.group.active or account.group.account_class!='Equity':raise ValueError('Choose an active Equity account.')
+            if not account or account.group.account_class!='Equity' or ((account.inactive or not account.group.active) and (not existing or existing.account_id!=account.id)):raise ValueError('Choose an active Equity account.')
         raw=request.form.get('since','')
         try:values['since']=date.fromisoformat(raw) if raw else None
         except ValueError:raise ValueError('Choose a valid Partner Since date.')
@@ -133,9 +133,9 @@ def configure_finance_partners(app,db):
             if request.form.get('version')!=str(row.version if row else 0):raise ValueError('This shareholder changed. Reload before saving.')
             token=request.form.get('post_token','')
             if not re.fullmatch(r'[A-Za-z0-9_-]{32,64}',token):raise ValueError('Reload this shareholder form.')
-            values=read_partner()
+            prior=Partner.query.filter_by(token=token).first() if not row else None
+            values=read_partner(row or prior)
             if not row:
-                prior=Partner.query.filter_by(token=token).first()
                 if prior:
                     if prior.created_key!=H['actor']()[1] or any(getattr(prior,k)!=v for k,v in values.items()):raise ValueError('This submission token was already used with different details.')
                     return redirect(url_for('finance_partners.partners'))

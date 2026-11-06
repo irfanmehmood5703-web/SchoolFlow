@@ -84,3 +84,13 @@ class FinancePartnerTests(unittest.TestCase):
         data['account_id']=str(self.equity.id);data['campus']='Campus B';self.assertEqual(self.c.post(path,data=data).status_code,422)
         data['campus']='';self.assertEqual(self.c.post(path,data=data).status_code,302)
         self.assertEqual(P.query.one().equity_bp,4000)
+
+    def test_retired_link_allows_former_status_and_exact_create_retry(self):
+        token=secrets.token_urlsafe(32);self.partner(post_token=token)
+        self.equity.inactive=True;db.session.commit()
+        self.assertEqual(self.partner(post_token=token).status_code,302)
+        self.assertEqual(self.partner(name='New retired link',equity='1').status_code,422)
+        P=app.extensions['shareholder_model'];p=P.query.one()
+        data=dict(_csrf=self.csrf,post_token=secrets.token_urlsafe(32),version=str(p.version),name=p.name,equity='50',account_id=str(self.equity.id),active='0')
+        self.assertEqual(self.c.post('/workspace/finance/shareholders/1/edit',data=data).status_code,302)
+        self.assertFalse(P.query.one().active)
