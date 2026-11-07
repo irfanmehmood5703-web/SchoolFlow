@@ -196,7 +196,12 @@ def configure_library(app, db, resolve_institute, require_permission):
         borrower_id = str(data.get("borrower_id", "")).strip()
         if kind not in ("student", "employee") or not 1 <= len(borrower_id) <= 100 or not 1 <= days <= 90:
             return jsonify(error="Invalid borrower or loan duration"), 400
-        # Borrowers must exist in the current institute database.\n        from flask import current_app\n        model = current_app.extensions.get("schoolflow_library_borrower_models", {}).get(kind)\n        if model is None:\n            return jsonify(error="Borrower directory not configured"), 503\n        try:\n            borrower_pk = int(borrower_id)\n        except ValueError:\n            return jsonify(error="Borrower ID must be numeric"), 400\n        if db.session.get(model, borrower_pk) is None:\n            return jsonify(error="Borrower not found"), 404\n        copy = LibraryCopy.query.filter_by(id=copy_id, institute_id=tenant).first()
+        # Borrowers must exist in the current institute database.\n        from flask import current_app\n        model = current_app.extensions.get("schoolflow_library_borrower_models", {}).get(kind)\n        if model is None:\n            return jsonify(error="Borrower directory not configured"), 503\n        try:\n            borrower_pk = int(borrower_id)\n        except ValueError:\n            return jsonify(error="Borrower ID must be numeric"), 400\n        if db.session.get(model, borrower_pk) is None:\n            return jsonify(error="Borrower not found"), 404\n        lending = db.session.get(LibrarySettings, tenant)
+        maximum = (lending.max_student_loans if kind == "student" else lending.max_employee_loans) if lending else (3 if kind == "student" else 5)
+        if LibraryLoan.query.filter_by(institute_id=tenant, borrower_type=kind,
+                borrower_id=str(borrower_pk), returned_at=None).count() >= maximum:
+            return jsonify(error="Member has reached the active-loan limit"), 409
+        copy = LibraryCopy.query.filter_by(id=copy_id, institute_id=tenant).first()
         if not copy or copy.condition not in ("Good", "Fair"):
             return jsonify(error="Copy unavailable"), 404
         # Serialize competing issue requests on supported SQL backends.
