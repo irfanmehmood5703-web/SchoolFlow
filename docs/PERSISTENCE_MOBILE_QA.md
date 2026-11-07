@@ -91,6 +91,6 @@ The original main service and branch were not changed. Previous ephemeral
 fictional fixtures were not imported; records already lost from a prior
 SQLite store cannot be recovered by changing the database. This is a private
 fictional test deployment, not a production release or approval to import real
-school data. Backup/restore operations, the Daily Snapshot income/expense
-bridge, physical Android verification and the broader remaining app scope are
-not claimed complete by this storage check.
+school data. Backup/restore operations, physical Android verification and the broader
+remaining app scope are not claimed complete by this storage check. The later
+Daily Snapshot ledger connection is documented in SYSTEM_REVIEW.md.

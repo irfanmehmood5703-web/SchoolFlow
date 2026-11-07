@@ -40,14 +40,23 @@ def configure_daily_snapshots(app,db,Student):
         for s in students:
             campus=details.get(s.id,{}).get('campus') or 'Unassigned';f=fees.get(s.id,[0,0,0,0]);status=attendance.get(s.id)
             cohorts.setdefault(campus,[]).append(dict(id=s.id,name=s.name,class_name=s.class_name or 'Unassigned',status=s.status,active=s.status=='Active',expected=f[0],collected=f[1],discount=f[2],outstanding=f[3],marked=bool(status and status!='Off Day'),present=status in ('Present','Late')))
-        campuses=set(H['campuses']())|set(cohorts)|set(previous)
+        # Use the immutable class captured when each line was posted. Advances,
+        # returns and cash/equity transfers are not income or expense. Reversals
+        # naturally offset their originals without rewriting past snapshots.
+        J=app.extensions['ledger_models']['journal'];L=app.extensions['ledger_models']['line']
+        account_class=L.snapshot['account_class'].as_string()
+        ledger={}
+        for campus,cls,debit,credit in db.session.query(J.campus,account_class,func.sum(L.debit),func.sum(L.credit)).join(L,L.journal_id==J.id).filter(J.day==day,account_class.in_(('Income','Expense'))).group_by(J.campus,account_class).all():
+            values=ledger.setdefault(campus,dict(income=0,expense=0))
+            values['income' if cls=='Income' else 'expense']+=int(credit-debit if cls=='Income' else debit-credit)
+        campuses=set(H['campuses']())|set(cohorts)|set(previous)|set(ledger)
         if not campuses:raise ValueError('Configure a campus or student campus before recording snapshots.')
         for campus in sorted(campuses):
             people=cohorts.get(campus,[]);old_row=previous.get(campus);existing=Snapshot.query.filter_by(day=day,campus=campus).first()
             before=old_row.students if old_row else [];own_ids={i['id'] for i in people if i['active']};prior_own={i['id'] for i in before if i['active']}
             joined=len(own_ids-prior_ids) if previous_day else 0;left=len((prior_own-active_ids)) if previous_day else 0
             old_metrics=existing.metrics if existing else {}
-            metrics=dict(strength=len(own_ids),joined=old_metrics.get('joined',0)+joined,left=old_metrics.get('left',0)+left,marked=sum(p['marked'] for p in people),present=sum(p['present'] for p in people),expected=sum(p['expected'] for p in people),collected=sum(p['collected'] for p in people),discount=sum(p['discount'] for p in people),outstanding=sum(p['outstanding'] for p in people),income=None,expense=None,baseline=old_metrics.get('baseline',not bool(previous_day)))
+            metrics=dict(strength=len(own_ids),joined=old_metrics.get('joined',0)+joined,left=old_metrics.get('left',0)+left,marked=sum(p['marked'] for p in people),present=sum(p['present'] for p in people),expected=sum(p['expected'] for p in people),collected=sum(p['collected'] for p in people),discount=sum(p['discount'] for p in people),outstanding=sum(p['outstanding'] for p in people),income=ledger.get(campus,{}).get('income',0),expense=ledger.get(campus,{}).get('expense',0),baseline=old_metrics.get('baseline',not bool(previous_day)))
             if existing:existing.metrics=metrics;existing.students=people;existing.captured=now
             else:db.session.add(Snapshot(day=day,campus=campus,captured=now,metrics=metrics,students=people))
         db.session.commit()
@@ -81,6 +90,9 @@ def configure_daily_snapshots(app,db,Student):
         rows=q.order_by(Snapshot.day,Snapshot.campus).all();closing={}
         for r in rows:closing[r.campus]=r
         totals={k:sum(r.metrics[k] for r in closing.values()) for k in ('strength','expected','collected','discount','outstanding')}
+        for key in ('income','expense'):
+            totals[key]=sum(r.metrics[key] for r in rows) if rows and all(r.metrics.get(key) is not None for r in rows) else None
+        totals['net']=totals['income']-totals['expense'] if totals['income'] is not None and totals['expense'] is not None else None
         totals.update({k:sum(r.metrics[k] for r in rows) for k in ('joined','left','marked','present')});totals['attendance']=totals['present']*100/totals['marked'] if totals['marked'] else None
         return render('daily_snapshots.html',first=first,start=start_day,end=end_day,campuses=campuses,campus=campus,rows=rows,totals=totals,closing_day=max((r.day for r in rows),default=None),enabled=bool(db.session.get(Control,1)),snapshot_today=today().isoformat())
     @bp.get('/<int:sid>/<mode>')
@@ -94,7 +106,7 @@ def configure_daily_snapshots(app,db,Student):
         return render('snapshot_detail.html',row=row,mode=mode,classes=classes)
     @app.after_request
     def update_after_source(response):
-        prefixes=('records.','ops.','student_plans.','fee_setup.','yearly_fees.','fine_automation.','attendance_fines.','late_fees.')
+        prefixes=('records.','ops.','student_plans.','fee_setup.','yearly_fees.','fine_automation.','attendance_fines.','late_fees.','ledger.','finance_reports.','req_posting.')
         if request.method=='POST' and response.status_code<400 and (request.endpoint or '').startswith(prefixes):
             try:
                 control=db.session.get(Control,1)

@@ -98,3 +98,11 @@ class RequisitionPostingTests(unittest.TestCase):
         from tests.test_finance_ledger import FinanceLedgerTests
         FinanceLedgerTests.post(self,account_id=[str(self.advance.id),str(self.income.id)],debit=['1',''],credit=['','1'],memo=['Manual mismatch','Income'])
         self.assertIn(b'Reconciliation difference',self.c.get('/workspace/finance/requisitions/reports').data)
+
+    def test_snapshot_refreshes_bill_expense_but_advance_and_return_are_not_expenses(self):
+        self.prepare();today=app.extensions['ledger_helpers']['today']().isoformat()
+        self.assertEqual(self.c.post('/workspace/finance/snapshots/capture',data={'_csrf':self.csrf}).status_code,302)
+        def metrics():return app.extensions['snapshot_models']['snapshot'].query.filter_by(campus='Campus A').one().metrics
+        self.assertEqual(self.post('issue',day=today).status_code,302);self.assertEqual(metrics()['expense'],0)
+        self.assertEqual(self.bill(day=today).status_code,302);self.assertEqual(metrics()['expense'],1500)
+        self.assertEqual(self.post('return',amount='5',day=today).status_code,302);self.assertEqual(metrics()['expense'],1500)

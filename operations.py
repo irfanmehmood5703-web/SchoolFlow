@@ -937,7 +937,7 @@ def configure_operations(app, db, Student, Employee):
         return render('legacy_data.html',title='Starter Attendance / Exam Records',attendance=Attendance.query.order_by(Attendance.id.desc()).all(),results=ExamResult.query.order_by(ExamResult.id.desc()).all())
 
     @bp.route('/readiness')
-    def readiness(): return render('readiness.html',title='Pre-test Build Status')
+    def readiness(): return render('readiness.html',title='Pre-test Build Status',storage_backend=db.engine.dialect.name)
 
     def dashboard_data():
         # Keep request work independent of pupil/score count: no per-row ORM

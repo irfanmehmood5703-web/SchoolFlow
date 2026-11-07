@@ -58,6 +58,8 @@ class PerformanceTests(unittest.TestCase):
     def test_main_menu_targets_skip_alias_redirects(self):
         page=self.c.get('/records/student')
         nav=page.data.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
+        self.assertNotIn(b'Student 360',nav)
+        self.assertNotIn(b'/workspace/student-360',nav)
         for href in re.findall(rb'href="([^"]+)"',nav):
             path=href.decode().replace('&amp;','&')
             self.assertEqual(self.c.get(path).status_code,200,path)
