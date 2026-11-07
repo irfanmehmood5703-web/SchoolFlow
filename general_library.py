@@ -162,6 +162,41 @@ def configure_library(app, db, resolve_institute, require_permission):
             raise
         return jsonify(id=loan.id, status="Issued", due_at=loan.due_at.isoformat()), 201
 
+    @bp.post("/renew/<int:loan_id>")
+    def renew_book(loan_id):
+        tenant = guard("library.issue_return")
+        loan = LibraryLoan.query.filter_by(id=loan_id, institute_id=tenant).first_or_404()
+        if loan.returned_at is not None:
+            return jsonify(error="Returned loans cannot be renewed"), 409
+        data = request.get_json(silent=True) or {}
+        try:
+            days = int(data.get("days", 7))
+        except (TypeError, ValueError):
+            return jsonify(error="Invalid renewal days"), 400
+        if not 1 <= days <= 30:
+            return jsonify(error="Renewal must be 1–30 days"), 400
+        now = datetime.now(timezone.utc)
+        due = loan.due_at
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+        loan.due_at = max(now, due) + timedelta(days=days)
+        db.session.commit()
+        return jsonify(id=loan.id, status=loan.status, due_at=loan.due_at.isoformat())
+
+    @bp.get("/reports/overdue")
+    def overdue_report():
+        tenant = guard("library.view")
+        now = datetime.now(timezone.utc)
+        rows = LibraryLoan.query.filter(
+            LibraryLoan.institute_id == tenant,
+            LibraryLoan.returned_at.is_(None),
+            LibraryLoan.due_at < now
+        ).order_by(LibraryLoan.due_at.asc()).limit(200).all()
+        return jsonify(items=[dict(id=x.id, copy_id=x.copy_id,
+                                   borrower_type=x.borrower_type,
+                                   borrower_id=x.borrower_id,
+                                   due_at=x.due_at.isoformat()) for x in rows])
+
     @bp.get("/copies")
     def list_copies():
         tenant = guard("library.view")
