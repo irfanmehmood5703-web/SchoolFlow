@@ -88,3 +88,21 @@ baseline selected to complete the workflow, not a claim of exact unseen parity.
   then verified by all 16 targeted parent/PTM tests, including the new test
   proving that Allow removes a higher rule while a lower restriction persists.
   Hosted verification is recorded after deployment below.
+
+## Hosted verification
+
+Testing service https://schoolflow-gate-trial-irfan.onrender.com/ is live on
+commit `2f13ce937cbed4aea85200d51f9350c52bab53a2`, deploy
+`dep-dbnee7bm8hqs73c044gg` (live 7 November 2026, 08:55 UTC).
+All 12 hosted checks passed, including all 13 page/tab GETs, a new fictional
+family/student through the normal validated record form, first-use parent link
+binding, fee access, session persistence, replay rejection, OTP request/audited
+reveal/sign-in on PostgreSQL, session revoke, event/meeting/attendance/feedback,
+filtered Excel and PTM report persistence across a fresh owner session.
+A read-only database diagnostic independently confirmed the fictional family,
+parent account and two redeemed credentials during verification. No credentials
+or raw codes were added to source, reports or logs. Only fictional trial data
+and demo dropdown choices were added to the isolated testing institute; no
+external messages were sent and no paid resources or main-branch rollout
+were used. Native clients, actual message delivery and the wider widget/release
+registry work remain separate from this web milestone.
