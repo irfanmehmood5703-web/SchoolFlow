@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>General · SchoolFlow</title>
+<style>
+:root{font-family:system-ui,Arial,sans-serif;color:#26342f;background:#f5f7f6}*{box-sizing:border-box}
+body{margin:0}header{background:#176b48;color:white;padding:17px 4%;display:flex;justify-content:space-between;align-items:center;gap:16px}
+header a{color:white}main{max-width:1300px;margin:24px auto;padding:0 18px}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+button,.tab{border:1px solid #cbd8d0;background:white;color:#18543a;border-radius:8px;padding:10px 14px;cursor:pointer}
+button.active,.primary{background:#176b48;color:white}button:disabled{opacity:.5;cursor:not-allowed}
+section{background:white;border:1px solid #dfe7e2;border-radius:12px;padding:20px;margin:12px 0}
+h1{font-size:24px}h2{font-size:19px;margin:0 0 16px}h3{font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600}
+input,select,textarea{font:inherit;width:100%;border:1px solid #cbd8d0;border-radius:7px;padding:10px;background:white}
+textarea{min-height:78px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:11px;border-bottom:1px solid #e5ebe7;text-align:left;vertical-align:top}
+.scroll{overflow-x:auto}th{background:#f3f8f5}.muted{color:#64746b}.hidden{display:none}
+#message{min-height:22px;color:#176b48;font-weight:600}#message.error{color:#a32727}
+</style></head><body>
+<header><strong>SchoolFlow · General</strong><span>{{ school | e }} · <a href="/">Home</a></span></header>
+<main><h1>General Management</h1><p class="muted">Library desk, Student Extras and school communication. Owner access only during initial rollout.</p>
+<nav aria-label="General sections">
+<button class="active" data-view="library">Library</button>
+<button data-view="leaves">Student Leave Approval</button>
+<button data-view="feedback">Complaints & Suggestions</button>
+</nav><p id="message" role="status" aria-live="polite"></p>
+<div id="library">
+<section><h2>Library · Catalogue</h2><div class="grid">
+<label>Book title<input id="bookTitle" maxlength="240"></label>
+<label>Author<input id="bookAuthor" maxlength="160"></label>
+<label>ISBN<input id="bookIsbn" maxlength="32"></label>
+<label>Category<input id="bookCategory" maxlength="100"></label></div>
+<div class="actions"><button class="primary" id="addBook">Add Book</button><button id="refreshBooks">Refresh Catalogue</button></div>
+<div class="scroll"><table><thead><tr><th>ID</th><th>Title</th><th>Author</th><th>ISBN</th><th>Category</th></tr></thead><tbody id="books"></tbody></table></div></section>
+<section><h2>Copies · Accession Register</h2><div class="grid">
+<label>Book ID<input id="copyBook" type="number" min="1"></label>
+<label>Accession / Barcode<input id="accession" maxlength="100"></label></div>
+<div class="actions"><button class="primary" id="addCopy">Register Copy</button><button id="refreshCopies">Refresh Copies</button></div>
+<div class="scroll"><table><thead><tr><th>Copy ID</th><th>Book ID</th><th>Accession</th><th>Condition</th></tr></thead><tbody id="copies"></tbody></table></div></section>
+<section><h2>Issue & Return</h2><div class="grid">
+<label>Copy ID<input id="issueCopy" type="number" min="1"></label>
+<label>Member Type<select id="borrowerType"><option value="student">Student</option><option value="employee">Employee</option></select></label>
+<label>Member ID<input id="borrowerId" type="number" min="1"></label>
+<label>Loan Days<input id="loanDays" type="number" min="1" max="90" value="14"></label></div>
+<div class="actions"><button class="primary" id="issue">Issue Book</button><button id="refreshLoans">Refresh Loans</button></div>
+<div class="scroll"><table><thead><tr><th>Loan</th><th>Copy</th><th>Member</th><th>Due</th><th>Status</th><th>Action</th></tr></thead><tbody id="loans"></tbody></table></div></section>
+</div>
+<div id="leaves" class="hidden">
+<section><h2>Student Leave Approval</h2><div class="grid">
+<label>Student ID<input id="leaveStudent" type="number" min="1"></label>
+<label>From<input id="leaveFrom" type="date"></label>
+<label>To<input id="leaveTo" type="date"></label>
+<label>Leave Type<select id="leaveType"><option>Sick</option><option>Personal</option><option>Other</option></select></label>
+<label>Reason<textarea id="leaveReason" maxlength="2000"></textarea></label></div>
+<div class="actions"><button class="primary" id="submitLeave">Submit Leave</button>
+<select id="leaveStatus" aria-label="Leave status"><option>Pending</option><option>Approved</option><option>Rejected</option><option>All</option></select>
+<button id="refreshLeaves">Refresh</button></div>
+<div class="scroll"><table><thead><tr><th>Student</th><th>From</th><th>To</th><th>Days</th><th>Type</th><th>Reason</th><th>Status</th><th>Decision</th></tr></thead><tbody id="leaveRows"></tbody></table></div></section></div>
+<div id="feedback" class="hidden"><section><h2>Complaints & Suggestions</h2>
+<div class="grid">
+<label>Type<select id="feedbackKind"><option value="complaint">Complaint</option><option value="suggestion">Suggestion</option></select></label>
+<label>Category<select id="feedbackCategory"><option>Academic</option><option>Non Academic</option></select></label>
+<label>Submitted By<input id="feedbackBy" maxlength="120"></label>
+<label>Campus<input id="feedbackCampus" maxlength="120"></label>
+<label>Message<textarea id="feedbackMessage" maxlength="5000"></textarea></label></div>
+<div class="actions"><button class="primary" id="submitFeedback">Submit</button>
+<select id="filterKind" aria-label="Feedback type"><option value="complaint">Complaints</option><option value="suggestion">Suggestions</option></select>
+<select id="filterStatus" aria-label="Feedback status"><option>Open</option><option>Resolved</option><option>Addressed</option></select>
+<select id="filterCategory" aria-label="Category"><option>All</option><option>Academic</option><option>Non Academic</option></select>
+<button id="refreshFeedback">Refresh</button></div>
+<div class="scroll"><table><thead><tr><th>Date</th><th>From</th><th>Category</th><th>Message</th><th>Response</th><th>Status</th><th>Action</th></tr></thead><tbody id="feedbackRows"></tbody></table></div></section></div>
+</main>
+<script>
+'use strict';
+const csrf={{ csrf|tojson }};
+const $=id=>document.getElementById(id);
+const value=id=>$(id).value.trim();
+const node=(tag,text)=>{const el=document.createElement(tag);el.textContent=text==null?'':String(text);return el};
+const notify=(message,error=false)=>{const e=$('message');e.textContent=message;e.className=error?'error':''};
+async function api(path,method='GET',body){
+ const r=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:body===undefined?undefined:JSON.stringify(body)});
+ const data=await r.json().catch(()=>({error:'Unexpected server response'}));
+ if(!r.ok)throw Error(data.error||'Request failed ('+r.status+')');
+ return data;
+}
+async function run(fn){try{await fn();notify('Saved / loaded successfully')}catch(e){notify(e.message,true)}}
+function table(id,rows,cols,action){
+ const target=$(id);target.replaceChildren();
+ for(const r of rows){const tr=node('tr');for(const col of cols)tr.appendChild(node('td',r[col]));if(action){const td=node('td');action(td,r);tr.appendChild(td)}target.appendChild(tr)}
+}
+function actionButton(td,label,callback){const b=node('button',label);b.addEventListener('click',()=>run(callback));td.appendChild(b)}
+async function books(){const rows=await api('/api/general/library/catalogue');table('books',rows,['id','title','author','isbn','category'])}
+async function copies(){const rows=await api('/api/general/library/copies');table('copies',rows,['id','book_id','accession','condition'])}
+async function loans(){const rows=await api('/api/general/library/loans');table('loans',rows,['id','copy_id','borrower_id','due_at','status'],(td,r)=>{if(r.status==='Issued')actionButton(td,'Return',async()=>{await api('/api/general/library/return/'+r.id,'POST',{});await loans()})})}
+async function leaves(){const rows=(await api('/api/general/leaves/?status='+encodeURIComponent(value('leaveStatus')))).items;table('leaveRows',rows,['student_id','from_date','to_date','total_days','leave_type','reason','status'],(td,r)=>{if(r.status==='Pending')for(const status of ['Approved','Rejected'])actionButton(td,status,async()=>{await api('/api/general/leaves/'+r.id,'PATCH',{status,comment:''});await leaves()})})}
+async function feedback(){const query=new URLSearchParams({kind:value('filterKind'),status:value('filterStatus'),category:value('filterCategory')});const rows=(await api('/api/general/feedback/?'+query)).items;table('feedbackRows',rows,['created_at','submitted_by','category','message','response','status'],(td,r)=>{if(r.status==='Open')actionButton(td,r.kind==='complaint'?'Resolve':'Address',async()=>{const response=prompt('Response to submit');if(response===null)return;await api('/api/general/feedback/'+r.id,'PATCH',{status:r.kind==='complaint'?'Resolved':'Addressed',response});await feedback()})})}
+$('addBook').onclick=()=>run(async()=>{await api('/api/general/library/catalogue','POST',{title:value('bookTitle'),author:value('bookAuthor'),isbn:value('bookIsbn'),category:value('bookCategory')});await books()});
+$('addCopy').onclick=()=>run(async()=>{await api('/api/general/library/copies','POST',{book_id:value('copyBook'),accession:value('accession')});await copies()});
+$('issue').onclick=()=>run(async()=>{await api('/api/general/library/issue','POST',{copy_id:value('issueCopy'),borrower_type:value('borrowerType'),borrower_id:value('borrowerId'),days:value('loanDays')});await loans()});
+$('submitLeave').onclick=()=>run(async()=>{await api('/api/general/leaves/','POST',{student_id:value('leaveStudent'),from_date:value('leaveFrom'),to_date:value('leaveTo'),leave_type:value('leaveType'),reason:value('leaveReason')});await leaves()});
+$('submitFeedback').onclick=()=>run(async()=>{await api('/api/general/feedback/','POST',{kind:value('feedbackKind'),category:value('feedbackCategory'),submitted_by:value('feedbackBy'),campus:value('feedbackCampus'),message:value('feedbackMessage')});await feedback()});
+for(const [id,fn] of Object.entries({refreshBooks:books,refreshCopies:copies,refreshLoans:loans,refreshLeaves:leaves,refreshFeedback:feedback}))$(id).onclick=()=>run(fn);
+$('leaveStatus').onchange=()=>run(leaves);for(const id of ['filterKind','filterStatus','filterCategory'])$(id).onchange=()=>run(feedback);
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['library','leaves','feedback'])$(id).classList.toggle('hidden',id!==b.dataset.view);run(({library:async()=>{await Promise.all([books(),copies(),loans()])},leaves,feedback})[b.dataset.view])});
+run(async()=>{await Promise.all([books(),copies(),loans()])});
+</script></body></html>
