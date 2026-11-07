@@ -76,3 +76,26 @@ no existing bill/receipt column or value is rewritten.
 
 Hosted rollout verification is recorded after deploying this revision to the
 isolated free trial. Main and its live service are not changed by this work.
+
+
+## Hosted result
+
+Revision `644084afb25e53fca2bfe09eec313742d77a0e7e` is live on the isolated free
+trial via deploy `dep-dbnc84nf3r2c73886b10` (live 2026-11-07T06:25:26Z).
+**29 hosted workflow checks passed**, using only the private fictional school:
+fee-head → scoped schedule → student plan → challan → mapped payment50 and
+discount10 → GL income60/cash50/discount10 → remaining40 → reversal; duplicate
+payment was refused. Fee Sheet Excel and Lecture Delivery creation/approval/
+CSV were also exercised through actual web requests.
+
+Independent Neon reads confirmed three balanced original lines (6000 debit /
+6000 credit paisa), three balanced reversal lines, a voided receipt, zero bill
+paid/discount after reversal, and zero net Asset/Income/Expense test balances.
+The initial error-level server log query returned no entries. The new additive
+posting tables exist in the private school schema.
+
+The test mapping was explicitly disabled afterward. Real school accounts must
+be selected before enabling this optional connection; no fictional chart was
+silently enabled for real use. Earlier receipts were not backfilled. Trial and
+main remain separate; this is not a main merge or production release. No bank
+transfer, external message or paid plan was activated.
