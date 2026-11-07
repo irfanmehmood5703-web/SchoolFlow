@@ -4,7 +4,9 @@ Opt-in registration only. Do not expose routes without a verified institute cont
 and a role/permission check supplied by the host application.
 """
 from datetime import datetime, timezone
-from flask import Blueprint, jsonify, request, abort
+from flask import Blueprint, jsonify, request, abort, session
+import hmac
+from datetime import timedelta
 from sqlalchemy import UniqueConstraint
 
 def configure_library(app, db, resolve_institute, require_permission):
@@ -51,6 +53,11 @@ def configure_library(app, db, resolve_institute, require_permission):
         if not tenant:
             abort(401)
         require_permission(permission)
+        if request.method not in ("GET", "HEAD"):
+            expected = session.get("record_csrf", "")
+            supplied = request.headers.get("X-CSRF-Token", "")
+            if not expected or not hmac.compare_digest(expected, supplied):
+                abort(400, "CSRF validation failed")
         return str(tenant)
 
     @bp.get("/catalogue")
@@ -98,6 +105,60 @@ def configure_library(app, db, resolve_institute, require_permission):
         loan.status = "Returned"
         db.session.commit()
         return jsonify(id=loan.id, status=loan.status)
+
+
+    @bp.post("/copies")
+    def add_copy():
+        tenant = guard("library.manage")
+        data = request.get_json(silent=True) or {}
+        try:
+            book_id = int(data.get("book_id"))
+        except (ValueError, TypeError):
+            return jsonify(error="Valid book_id required"), 400
+        book = LibraryBook.query.filter_by(id=book_id, institute_id=tenant).first()
+        accession = str(data.get("accession", "")).strip()
+        if not book or not 1 <= len(accession) <= 100:
+            return jsonify(error="Book or accession invalid"), 400
+        if LibraryCopy.query.filter_by(institute_id=tenant, accession=accession).first():
+            return jsonify(error="Accession already exists"), 409
+        copy = LibraryCopy(institute_id=tenant, book_id=book.id, accession=accession)
+        db.session.add(copy)
+        db.session.commit()
+        return jsonify(id=copy.id, accession=copy.accession), 201
+
+    @bp.post("/issue")
+    def issue_book():
+        tenant = guard("library.issue_return")
+        data = request.get_json(silent=True) or {}
+        try:
+            copy_id = int(data.get("copy_id"))
+            days = int(data.get("days", 14))
+        except (ValueError, TypeError):
+            return jsonify(error="Invalid copy or loan duration"), 400
+        kind = data.get("borrower_type")
+        borrower_id = str(data.get("borrower_id", "")).strip()
+        if kind not in ("student", "employee") or not 1 <= len(borrower_id) <= 100 or not 1 <= days <= 90:
+            return jsonify(error="Invalid borrower or loan duration"), 400
+        copy = LibraryCopy.query.filter_by(id=copy_id, institute_id=tenant).first()
+        if not copy or copy.condition not in ("Good", "Fair"):
+            return jsonify(error="Copy unavailable"), 404
+        # Serialize competing issue requests on supported SQL backends.
+        active = LibraryLoan.query.filter_by(institute_id=tenant, copy_id=copy_id, returned_at=None).first()
+        if active:
+            return jsonify(error="Copy is already issued"), 409
+        now = datetime.now(timezone.utc)
+        loan = LibraryLoan(institute_id=tenant, copy_id=copy_id, borrower_type=kind,
+                           borrower_id=borrower_id, issued_at=now,
+                           due_at=now + timedelta(days=days), status="Issued")
+        db.session.add(loan)
+        db.session.commit()
+        return jsonify(id=loan.id, status="Issued", due_at=loan.due_at.isoformat()), 201
+
+    @bp.get("/copies")
+    def list_copies():
+        tenant = guard("library.view")
+        rows = LibraryCopy.query.filter_by(institute_id=tenant).order_by(LibraryCopy.id.desc()).limit(100).all()
+        return jsonify([dict(id=x.id, book_id=x.book_id, accession=x.accession, condition=x.condition) for x in rows])
 
     app.register_blueprint(bp)
     return {"Book": LibraryBook, "Copy": LibraryCopy, "Loan": LibraryLoan}
