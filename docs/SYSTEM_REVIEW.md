@@ -48,3 +48,18 @@ external messaging were enabled. Existing unrelated dirty checkout was preserved
 - General Settings reference screenshots are requested next; no unseen fields
   or workflows are claimed implemented. Current web tests are not a completed
   reference-parity audit or a security certification.
+
+## Hosted rollout
+
+Code revision `5ab9cf046e9af7cefd83218463743b1127acbb84` is live on
+`schoolflow-gate-trial-irfan` through deploy `dep-dbnbkiajnfac73bu46s0`, live at
+`2026-11-07T05:43:50Z`. Private owner login, absence of the excluded main-menu
+entry and **95 live navigation/settings URLs passed** with no unexpected status
+failures. The two explicitly incomplete workflows still show their limitation
+pages; a 200 response is not a claim that those workflows are finished.
+
+A current snapshot was captured via the authenticated web form on PostgreSQL;
+an independent Neon read confirmed stored income/expense fields. The prior
+persistence-check student was still present after this deployment. The initial
+post-rollout error-level log query returned no entries. No real messages were
+sent, no paid resource was activated, and main was not changed.
