@@ -11,10 +11,11 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
 PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
+PERMISSIONS['widgets.manage']='Widgets · Manage role visibility'
 PERMISSIONS['parents.codes']='Parents App · View sensitive login codes'
 PERMISSIONS['attendance.self']='My Geo Attendance · self only'
 ACCOUNTS=('Cash in Hand','Cash at Bank','Petty Cash','Accounts Receivable','Fee Receivable','Discounts','Bad Debts')
@@ -38,8 +39,14 @@ def configure_staff_access(app,db,Student,Employee):
     app.extensions['staff_account_model']=Staff
     dummy=generate_password_hash(secrets.token_urlsafe(32))
     def campuses():
+        # GET-only, request-local cache: all grant/source checks share one
+        # campus catalogue read. Mutations always re-read inside their lock.
+        if has_request_context() and request.method=='GET' and hasattr(request,'staff_campus_catalog'):
+            return list(request.staff_campus_catalog)
         table=rm['settings'].__table__
-        return sorted({r[0] for r in db.session.execute(select(table.c.value).where(table.c.category=='campus')).all()})
+        values=sorted({r[0] for r in db.session.execute(select(table.c.value).where(table.c.category=='campus')).all()})
+        if has_request_context() and request.method=='GET':request.staff_campus_catalog=values
+        return values
     def accounts():return sorted(set(ACCOUNTS)|{x[0] for x in db.session.query(ops['receipt'].account).distinct().all()})
     def resolve(sid,version):
         try:row=db.session.get(Staff,sid)
@@ -302,6 +309,10 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('general_tools.'):
+            if ep=='general_tools.app_links':return 'apps.'+('update' if request.method=='POST' else 'view')
+            if ep=='general_tools.permissions':return 'widgets.manage'
+            return 'widgets.'+('export' if request.args.get('export') else 'view')
         if ep.startswith('parents.'):
             if ep in ('parents.reveal','parents.qr','parents.link_action'):return 'parents.codes'
             return 'parents.'+('export' if request.args.get('export') else 'create' if ep=='parents.invitation' else 'update' if request.method=='POST' else 'view')

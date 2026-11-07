@@ -1,5 +1,9 @@
 # Parents App and PTM web checkpoint — 7 November 2026
 
+Later milestone: [APP_LINKS_WIDGETS_STATUS.md](APP_LINKS_WIDGETS_STATUS.md)
+records the App Links registry and full 37-card widget workspace. References
+below to those items remaining apply to this earlier checkpoint only.
+
 This completes the next web implementation milestone after Notice Board and
 Student Diary. It is not a claim that four native Android apps, SIM delivery,
 every EDUBase module, or production security certification are complete.

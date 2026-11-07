@@ -30,6 +30,31 @@ class StaffAccessTests(unittest.TestCase):
         return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
     def token(self):
         with self.c.session_transaction() as s:return s['record_csrf']
+    def test_widget_sources_and_legacy_visibility_follow_role_and_campus(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'dashboard.view':['Campus A'],'widgets.view':['Campus A'],'admissions.view':['Campus A'],'fees.view':['Campus A'],'finance.view':['Campus A']}}
+        self.tenant(allow);self.login()
+        page=self.c.get('/workspace/general/widgets/report/active-students')
+        self.assertEqual(page.status_code,200);self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        page=self.c.get('/workspace/general/widgets/report/unpaid-amount')
+        self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        self.assertEqual(self.c.get('/workspace/general/widgets/report/income-expenses').status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/widgets/report/active-students?export=xlsx').status_code,403)
+        def hide():
+            Policy=app.extensions['general_tools_models']['policy']
+            db.session.add(Policy(id=1,data={'roles':{'active-students':[]}}))
+        self.tenant(hide)
+        self.assertEqual(self.c.get('/workspace/general/widgets/report/active-students').status_code,403)
+        self.assertNotIn(b'data-general-widget="active-students"',self.c.get('/workspace/general/widgets').data)
+        self.assertNotIn(b'data-dashboard-widget="active"',self.c.get('/workspace/dashboard').data)
+    def test_widget_and_release_configuration_need_distinct_full_scope_grants(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'widgets.view':['Campus A'],'widgets.manage':['Campus A'],'apps.view':['Campus A'],'apps.update':['Campus A']}}
+        self.tenant(allow);self.login()
+        self.assertEqual(self.c.get('/workspace/general/widgets/permissions').status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/app-links').status_code,200)
+        self.assertEqual(self.c.post('/workspace/general/app-links',data={'_csrf':self.token(),'app':'teacher','version_token':'0','url':'','version':'','size':'','notes':''}).status_code,403)
+
     def test_parent_administration_requires_full_scope_and_sensitive_grant(self):
         self.login()
         self.assertEqual(self.c.get('/workspace/general/parents').status_code,403)

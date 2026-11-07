@@ -204,6 +204,7 @@ def configure_operations(app, db, Student, Employee):
         return render('operation_error.html',title='Please check this operation',error=str(exc)),422
 
     def menu_url(key):
+        if key in ('app-links','widgets'):return url_for('general_tools.app_links' if key=='app-links' else 'general_tools.widgets')
         if key=='parents-app':return url_for('parents.analytics')
         if key=='ptm-events':return url_for('ptm.events')
         if key in ('student-notices','student-diary'):return url_for('student_extras.index',kind='notices' if key=='student-notices' else 'diary')
@@ -985,7 +986,10 @@ def configure_operations(app, db, Student, Employee):
                     pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months)
 
     @bp.route('/dashboard')
-    def dashboard(): return app.extensions['dashboard_render']()
+    def dashboard():
+        target=app.extensions.get('general_tools_helpers',{}).get('default_url',lambda:None)()
+        if target:return redirect(target)
+        return app.extensions['dashboard_render']()
 
     @app.route('/healthz')
     def health():

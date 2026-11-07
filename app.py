@@ -152,6 +152,8 @@ from ptm import configure_ptm
 configure_ptm(app,db,Student,Employee)
 from parents import configure_parents
 configure_parents(app,db,Student)
+from general_tools import configure_general_tools
+configure_general_tools(app,db,Student,Employee)
 
 @app.route('/')
 def home():
