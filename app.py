@@ -138,6 +138,8 @@ from general_library import configure_library
 configure_library(app, db, _general_tenant, _general_permission)
 from general_feedback import configure_general_feedback
 configure_general_feedback(app, db)
+from general_leaves import configure_general_leaves
+configure_general_leaves(app, db, Student)
 
 
 @app.route('/')
