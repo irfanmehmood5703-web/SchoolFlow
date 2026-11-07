@@ -140,6 +140,8 @@ from general_feedback import configure_general_feedback
 configure_general_feedback(app, db)
 from general_leaves import configure_general_leaves
 configure_general_leaves(app, db, Student)
+from general_portal import configure_general_portal
+configure_general_portal(app)
 
 
 @app.route('/')
