@@ -27,7 +27,10 @@ or unavailable functionality are possible explanations, not verified diagnoses.
 | Staff Loans | — | Staff Loans; Loan Approvals; Loan Reports; Loan Settings |
 
 The user asked to note this inventory and explain the disabled appearance.
-They have not yet supplied the inner forms/tabs for these General workflows.
+Subsequent inner screenshots are recorded in GENERAL_SCREENSHOTS.md. The user
+confirmed the current collection reaches Student Diary, with Student Extras
+as a section heading. See STUDENT_EXTRAS_STATUS.md for actual implementation
+and remaining work.
 Do not treat the reference's grey appearance as a request to build permanent
 inactive placeholders, nor claim that listing an item makes it functional.
 Implementation and permissions must be verified separately for SchoolFlow.

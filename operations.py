@@ -204,6 +204,7 @@ def configure_operations(app, db, Student, Employee):
         return render('operation_error.html',title='Please check this operation',error=str(exc)),422
 
     def menu_url(key):
+        if key in ('student-notices','student-diary'):return url_for('student_extras.index',kind='notices' if key=='student-notices' else 'diary')
         if key=='finance-fee-audit':return url_for('finance_audit.fees')
         if key=='finance-voided-challans':return url_for('finance_audit.challans')
         if key=='finance-voided':return url_for('finance_reports.general').replace('/general','/voided')

@@ -30,6 +30,32 @@ class StaffAccessTests(unittest.TestCase):
         return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
     def token(self):
         with self.c.session_transaction() as s:return s['record_csrf']
+    def test_student_extras_require_grant_and_restrict_all_campus_posts(self):
+        self.login()
+        self.assertEqual(self.c.get('/workspace/general/notices').status_code,403)
+        def allow():
+            row=db.session.get(self.Staff,self.sid)
+            row.data={**row.data,'permissions':{**row.data['permissions'],'student_extras.view':['Campus A'],'student_extras.create':['Campus A']}}
+            db.session.add(self.rm['settings'](category='class_name',value='One',class_name=''))
+        self.tenant(allow);self.login()
+        self.assertEqual(self.c.get('/workspace/general/notices').status_code,200)
+        data=dict(_csrf=self.token(),submission='a'*43,campus='',title='All school',description='Fictional',starts='2026-11-07',ends='2026-11-07',all_students='1')
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,403)
+        data['campus']='Campus B'
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,403)
+        data['campus']='Campus A'
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,302)
+        def seed():
+            M=app.extensions['student_extras_models'];entry=M['entry'](kind='notices',campus='Campus B',title='Private other campus',body='Hidden',starts=date(2026,11,7),ends=date(2026,11,7),data={'all_students':True},token='b'*43)
+            db.session.add(entry);db.session.flush()
+            f=M['attachment'](entry_id=entry.id,filename='hidden.pdf',mime='application/pdf',content=b'%PDF-1.4');db.session.add(f);db.session.flush();return f.id
+        aid=self.tenant(seed)
+        self.assertNotIn(b'Private other campus',self.c.get('/workspace/general/notices').data)
+        self.assertEqual(self.c.get('/workspace/general/attachments/'+str(aid)).status_code,404)
+        self.login('owner@example.invalid')
+        self.assertIn(b'Private other campus',self.c.get('/workspace/general/notices').data)
+        self.assertEqual(self.c.get('/workspace/general/attachments/'+str(aid)).status_code,200)
+
     def test_staff_username_and_email_login_and_wrong_password(self):
         self.assertEqual(self.login(password='wrong').status_code,200);self.assertEqual(self.login().status_code,302)
         with self.c.session_transaction() as s:self.assertEqual(s['staff_id'],self.sid);self.assertNotIn('owner_id',s)

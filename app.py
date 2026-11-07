@@ -146,6 +146,9 @@ configure_fee_ledger(app,db,Student)
 from daily_snapshots import configure_daily_snapshots
 configure_daily_snapshots(app,db,Student)
 
+from student_extras import configure_student_extras
+configure_student_extras(app,db,Student)
+
 @app.route('/')
 def home():
     from flask import render_template
