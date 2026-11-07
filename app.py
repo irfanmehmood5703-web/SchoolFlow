@@ -119,6 +119,31 @@ configure_staff_access(app,db,Student,Employee)
 from attendance_devices import configure_attendance_devices
 configure_attendance_devices(app,db,Student,Employee)
 
+# General module API: tenant isolation is provided by identity.py; staff access
+# remains default-deny until the General permissions UI is implemented.
+from flask import g, abort
+app.extensions['schoolflow_library_borrower_models'] = {'student': Student, 'employee': Employee}
+
+def _general_tenant():
+    identity = getattr(g, 'school_identity', None) or {}
+    return identity.get('scope') if not identity.get('demo') else None
+
+def _general_permission(permission):
+    if getattr(g, 'staff_principal', None) is not None:
+        abort(403, 'General permissions are not configured for staff')
+    if not _general_tenant():
+        abort(403, 'Authenticated institute owner required')
+
+from general_library import configure_library
+configure_library(app, db, _general_tenant, _general_permission)
+from general_feedback import configure_general_feedback
+configure_general_feedback(app, db)
+from general_leaves import configure_general_leaves
+configure_general_leaves(app, db, Student)
+from general_portal import configure_general_portal
+configure_general_portal(app)
+
+
 @app.route('/')
 def home():
     from flask import render_template
