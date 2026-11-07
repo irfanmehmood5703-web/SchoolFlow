@@ -30,6 +30,7 @@ def differences(before,after,path=''):
 def configure_user_logging(app,db,Student,Employee):
     bp=Blueprint('user_logging',__name__,url_prefix='/workspace/core/user-logging');Audit=app.extensions['ops_models']['audit']
     def actor():
+        if getattr(g,'parent_actor',None):return dict(g.parent_actor)
         device=getattr(g,'attendance_device_actor',None)
         if device:return dict(device)
         identity=getattr(g,'school_identity',None) or {}

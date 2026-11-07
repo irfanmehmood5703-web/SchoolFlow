@@ -30,6 +30,34 @@ class StaffAccessTests(unittest.TestCase):
         return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
     def token(self):
         with self.c.session_transaction() as s:return s['record_csrf']
+    def test_parent_administration_requires_full_scope_and_sensitive_grant(self):
+        self.login()
+        self.assertEqual(self.c.get('/workspace/general/parents').status_code,403)
+        def partial():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'parents.view':['Campus A']}}
+        self.tenant(partial);self.login()
+        self.assertEqual(self.c.get('/workspace/general/parents').status_code,403)
+        def full():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'parents.view':['Campus A','Campus B']}}
+        self.tenant(full);self.login()
+        self.assertEqual(self.c.get('/workspace/general/parents').status_code,200)
+        self.assertIn(b'needs Parents App',self.c.get('/workspace/general/parents/otp').data)
+        self.assertEqual(self.c.post('/workspace/general/parents/links/1',data={'_csrf':self.token(),'action':'issue'}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/general/parents/otp/unknown/reveal',data={'_csrf':self.token()}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/parents?export=xlsx').status_code,403)
+    def test_ptm_campus_grants_and_event_scope(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'ptm.view':['Campus A'],'ptm.create':['Campus A']}}
+            Event=app.extensions['ptm_models']['event']
+            db.session.add(Event(campus='Campus B',title='Other campus event',starts=date(2026,11,7),ends=date(2026,11,8),notes='',token='q'*43))
+        self.tenant(allow);self.login()
+        self.assertNotIn(b'Other campus event',self.c.get('/workspace/general/ptm/events').data)
+        data=dict(_csrf=self.token(),title='Staff event',starts='2026-11-07',ends='2026-11-08',submission='r'*43,campus='')
+        self.assertEqual(self.c.post('/workspace/general/ptm/events',data=data).status_code,403)
+        data['campus']='Campus A'
+        self.assertEqual(self.c.post('/workspace/general/ptm/events',data=data).status_code,302)
+        self.assertEqual(self.c.get('/workspace/general/ptm/reports?export=xlsx').status_code,403)
+
     def test_student_extras_require_grant_and_restrict_all_campus_posts(self):
         self.login()
         self.assertEqual(self.c.get('/workspace/general/notices').status_code,403)

@@ -148,6 +148,10 @@ configure_daily_snapshots(app,db,Student)
 
 from student_extras import configure_student_extras
 configure_student_extras(app,db,Student)
+from ptm import configure_ptm
+configure_ptm(app,db,Student,Employee)
+from parents import configure_parents
+configure_parents(app,db,Student)
 
 @app.route('/')
 def home():

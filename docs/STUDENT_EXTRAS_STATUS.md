@@ -1,5 +1,9 @@
 # Student Extras implementation checkpoint — 7 November 2026
 
+Later milestone: see [PARENTS_PTM_STATUS.md](PARENTS_PTM_STATUS.md) for Parents
+App, PTM and the completed four-item Student Extras menu. The sections below
+retain the earlier Notice/Diary checkpoint and its validation history.
+
 ## Implemented in this change
 
 General top navigation now has the Student Extras section heading. The two

@@ -184,10 +184,14 @@ def configure_student_extras(app, db, Student):
         except ValueError: raise ValueError('Choose a valid page.')
         total=query.count(); rows=query.order_by(Entry.starts.desc(),Entry.id.desc()).offset((page-1)*25).limit(25).all()
         attachments={r.id:Attachment.query.filter_by(entry_id=r.id).all() for r in rows} if kind=='notices' else {}
+        seen_counts={}
+        Seen=app.extensions.get('parent_models',{}).get('seen')
+        if Seen is not None and rows:
+            seen_counts=dict(db.session.query(Seen.entry_id,db.func.count(Seen.id)).filter(Seen.entry_id.in_([r.id for r in rows])).group_by(Seen.entry_id).all())
         section_rows=rm['settings'].query.filter_by(category='section').all()
         return render_template('student_extras.html',title='Student Notice Board' if kind=='notices' else 'Student Diary',kind=kind,creating=creating,rows=rows,attachments=attachments,
             choices={k:choices(k) for k in ('campus','class_name','section','subject')},section_rows=section_rows,
-            submission=secrets.token_urlsafe(32),today=today(),page=page,total=total)
+            submission=secrets.token_urlsafe(32),today=today(),page=page,total=total,seen_counts=seen_counts)
 
     @bp.get('/attachments/<int:aid>')
     def attachment(aid):

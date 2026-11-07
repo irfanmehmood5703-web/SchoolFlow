@@ -11,10 +11,11 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
 PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
+PERMISSIONS['parents.codes']='Parents App · View sensitive login codes'
 PERMISSIONS['attendance.self']='My Geo Attendance · self only'
 ACCOUNTS=('Cash in Hand','Cash at Bank','Petty Cash','Accounts Receivable','Fee Receivable','Discounts','Bad Debts')
 ROLES=('Super Admin','Admin','User','Teacher')
@@ -301,6 +302,11 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('parents.'):
+            if ep in ('parents.reveal','parents.qr','parents.link_action'):return 'parents.codes'
+            return 'parents.'+('export' if request.args.get('export') else 'create' if ep=='parents.invitation' else 'update' if request.method=='POST' else 'view')
+        if ep.startswith('ptm.'):
+            return 'ptm.'+('export' if request.args.get('export') else 'update' if ep=='ptm.update' else 'create' if request.method=='POST' else 'view')
         if ep.startswith('student_extras.'):
             return 'student_extras.'+('create' if request.method=='POST' else 'view')
         if ep.startswith('fee_ledger.'):

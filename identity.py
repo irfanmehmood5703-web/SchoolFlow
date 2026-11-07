@@ -189,7 +189,7 @@ def configure_identity(app, db):
         db.session.remove()
         if request.url_rule is None:
             return
-        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card') or request.blueprint == 'identity':
+        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card') or request.blueprint in ('identity','parent_portal'):
             return
         if session.get('demo') and app.config.get('PUBLIC_DEMO_ENABLED', True):
             # Demo always uses the original fictional-data database, never a
