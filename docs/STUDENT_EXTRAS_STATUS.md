@@ -53,3 +53,16 @@ This checkpoint is not a claim that General or the four native apps are complete
   JavaScript errors or body overflow; populated mobile diary and notice form
   screenshots visually inspected.
 - No production/main merge, paid resource or external message send performed.
+
+## Hosted verification
+
+Testing service https://schoolflow-gate-trial-irfan.onrender.com/ is live on
+commit 1603b54d33d2b099945e6e093308e2997adf6f67, deploy
+`dep-dbndtftg1s2s73cef270` (live 7 November 2026, 08:19 UTC).
+All 10 authenticated HTTP checks passed: four page/form GETs, notice plus binary
+attachment save on the hosted PostgreSQL database, duplicate suppression,
+authorized download, persistence across a fresh authenticated session and
+anonymous attachment redirect to login. Only fictional QA data was added;
+no external messages were sent. Initial post-live application error-log query
+returned no errors; a subsequent request-log query was unavailable (503), so
+that query is not treated as a clean log result.
