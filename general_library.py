@@ -47,6 +47,14 @@ def configure_library(app, db, resolve_institute, require_permission):
         status = db.Column(db.String(20), nullable=False, default="Issued")
         __table_args__ = (Index("ix_sf_library_one_open_loan", "institute_id", "copy_id", unique=True, sqlite_where=text("returned_at IS NULL"), postgresql_where=text("returned_at IS NULL")),)
 
+    class LibrarySettings(db.Model):
+        __tablename__ = "sf_library_settings"
+        institute_id = db.Column(db.String(100), primary_key=True)
+        max_student_loans = db.Column(db.Integer, nullable=False, default=3)
+        max_employee_loans = db.Column(db.Integer, nullable=False, default=5)
+        default_loan_days = db.Column(db.Integer, nullable=False, default=14)
+        fine_per_day = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+
     bp = Blueprint("sf_library", __name__, url_prefix="/api/general/library")
 
     def guard(permission):
@@ -60,6 +68,54 @@ def configure_library(app, db, resolve_institute, require_permission):
             if not expected or not hmac.compare_digest(expected, supplied):
                 abort(400, "CSRF validation failed")
         return str(tenant)
+
+    @bp.get("/settings")
+    def settings():
+        tenant = guard("library.view")
+        row = db.session.get(LibrarySettings, tenant)
+        return jsonify(max_student_loans=row.max_student_loans if row else 3,
+                       max_employee_loans=row.max_employee_loans if row else 5,
+                       default_loan_days=row.default_loan_days if row else 14,
+                       fine_per_day=str(row.fine_per_day) if row else "0.00")
+
+    @bp.put("/settings")
+    def save_settings():
+        tenant = guard("library.manage")
+        data = request.get_json(silent=True) or {}
+        from decimal import Decimal, InvalidOperation
+        try:
+            student = int(data["max_student_loans"])
+            employee = int(data["max_employee_loans"])
+            days = int(data["default_loan_days"])
+            fine = Decimal(str(data["fine_per_day"]))
+        except (KeyError, ValueError, TypeError, InvalidOperation):
+            return jsonify(error="Invalid lending settings"), 400
+        if not (1 <= student <= 50 and 1 <= employee <= 50 and 1 <= days <= 90 and
+                fine.is_finite() and Decimal("0") <= fine <= Decimal("10000") and
+                fine.as_tuple().exponent >= -2):
+            return jsonify(error="Settings outside permitted limits"), 400
+        row = db.session.get(LibrarySettings, tenant)
+        if row is None:
+            row = LibrarySettings(institute_id=tenant)
+            db.session.add(row)
+        row.max_student_loans = student
+        row.max_employee_loans = employee
+        row.default_loan_days = days
+        row.fine_per_day = fine
+        db.session.commit()
+        return jsonify(saved=True)
+
+    @bp.get("/reports/summary")
+    def summary():
+        tenant = guard("library.view")
+        from sqlalchemy import func
+        books = db.session.query(func.count(LibraryBook.id)).filter_by(institute_id=tenant).scalar()
+        copies = db.session.query(func.count(LibraryCopy.id)).filter_by(institute_id=tenant).scalar()
+        active = db.session.query(func.count(LibraryLoan.id)).filter_by(institute_id=tenant, returned_at=None).scalar()
+        overdue = db.session.query(func.count(LibraryLoan.id)).filter(
+            LibraryLoan.institute_id == tenant, LibraryLoan.returned_at.is_(None),
+            LibraryLoan.due_at < datetime.now(timezone.utc)).scalar()
+        return jsonify(titles=books, copies=copies, issued=active, overdue=overdue)
 
     @bp.get("/catalogue")
     def catalogue():
@@ -204,4 +260,4 @@ def configure_library(app, db, resolve_institute, require_permission):
         return jsonify([dict(id=x.id, book_id=x.book_id, accession=x.accession, condition=x.condition) for x in rows])
 
     app.register_blueprint(bp)
-    return {"Book": LibraryBook, "Copy": LibraryCopy, "Loan": LibraryLoan}
+    return {"Book": LibraryBook, "Copy": LibraryCopy, "Loan": LibraryLoan, "Settings": LibrarySettings}
