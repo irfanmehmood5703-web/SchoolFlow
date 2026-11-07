@@ -101,7 +101,7 @@ $('issue').onclick=()=>run(async()=>{await api('/api/general/library/issue','POS
 $('submitLeave').onclick=()=>run(async()=>{await api('/api/general/leaves/','POST',{student_id:value('leaveStudent'),from_date:value('leaveFrom'),to_date:value('leaveTo'),leave_type:value('leaveType'),reason:value('leaveReason')});await leaves()});
 $('submitFeedback').onclick=()=>run(async()=>{await api('/api/general/feedback/','POST',{kind:value('feedbackKind'),category:value('feedbackCategory'),submitted_by:value('feedbackBy'),campus:value('feedbackCampus'),message:value('feedbackMessage')});await feedback()});
 for(const [id,fn] of Object.entries({refreshBooks:books,refreshCopies:copies,refreshLoans:loans,refreshLeaves:leaves,refreshFeedback:feedback}))$(id).onclick=()=>run(fn);
-$('leaveStatus').onchange=()=>run(leaves);for(const id of ['filterKind','filterStatus','filterCategory'])$(id).onchange=()=>run(feedback);
+$('leaveStatus').onchange=()=>run(leaves);$('filterKind').onchange=()=>{const suggestion=value('filterKind')==='suggestion';$('filterStatus').replaceChildren(...(suggestion?['Open','Addressed']:['Open','Resolved']).map(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;return o}));run(feedback)};for(const id of ['filterStatus','filterCategory'])$(id).onchange=()=>run(feedback);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['library','leaves','feedback'])$(id).classList.toggle('hidden',id!==b.dataset.view);run(({library:async()=>{await Promise.all([books(),copies(),loans()])},leaves,feedback})[b.dataset.view])});
 run(async()=>{await Promise.all([books(),copies(),loans()])});
 </script></body></html>
