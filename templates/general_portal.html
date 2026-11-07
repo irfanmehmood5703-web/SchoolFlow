@@ -107,5 +107,8 @@ $('submitFeedback').onclick=()=>run(async()=>{await api('/api/general/feedback/'
 for(const [id,fn] of Object.entries({refreshSummary:summary,loadLibrarySettings:loadSettings,refreshBooks:books,refreshCopies:copies,refreshLoans:loans,refreshOverdue:overdue,refreshLeaves:leaves,refreshFeedback:feedback}))$(id).onclick=()=>run(fn);
 $('leaveStatus').onchange=()=>run(leaves);$('filterKind').onchange=()=>{const suggestion=value('filterKind')==='suggestion';$('filterStatus').replaceChildren(...(suggestion?['Open','Addressed']:['Open','Resolved']).map(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;return o}));run(feedback)};for(const id of ['filterStatus','filterCategory'])$(id).onchange=()=>run(feedback);
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['library','leaves','feedback'])$(id).classList.toggle('hidden',id!==b.dataset.view);run(({library:async()=>{await Promise.all([books(),copies(),loans(),overdue(),summary(),loadSettings()])},leaves,feedback})[b.dataset.view])});
-run(async()=>{await Promise.all([books(),copies(),loans()])});
+const initialSection=new URLSearchParams(location.search).get('section');
+const initialButton=document.querySelector('nav button[data-view="'+(initialSection||'library')+'"]');
+if(initialButton)initialButton.click();
+else run(async()=>{await Promise.all([books(),copies(),loans(),overdue(),summary(),loadSettings()])});
 </script></body></html>
