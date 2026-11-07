@@ -141,6 +141,8 @@ from finance_partners import configure_finance_partners
 configure_finance_partners(app,db)
 from requisitions import configure_requisitions
 configure_requisitions(app,db)
+from fee_ledger import configure_fee_ledger
+configure_fee_ledger(app,db,Student)
 from daily_snapshots import configure_daily_snapshots
 configure_daily_snapshots(app,db,Student)
 

@@ -10,6 +10,7 @@
 <li>Institute, Exam and HRM settings; campus/class maps, subjects, shifts, roll series, certificates and branding.</li>
 <li>Fee heads and charging timings, scoped fee schedules, student fee plans, discounts, net-fee increments and challan generation.</li>
 <li>Fee payments, reversals, installments, history, defaulter reports and fee audit with historical billing cohorts.</li>
+<li>Student Fee Sheet provides a twelve-month student grid with Paid/Payable/Discount/Remaining choices, CSV/Excel and print. Lecture Delivery provides dated register filters, approvals, attendance import links and saved-salary linkage.</li>
 <li>Attendance, assessment marks/results, date sheets, hall assignments, roll slips and teacher-performance reports.</li>
 <li>Payroll plans, working-day joining proration, manual approved increments, salary generation/pay/unpay and lecture registers/rates.</li>
 <li>Balanced journal, income and expense posting, chart of accounts, trial balance, profit/loss, General Ledger, cash and shareholder reports.</li>
@@ -18,8 +19,8 @@
 <li>Web QR/gate and geo-attendance endpoints and permission checks are implemented; physical devices and connected mobile apps require separate verification.</li>
 </ul></section>
 <section class="form-card"><h2>Partial or incomplete workflows</h2><ul>
-<li>Student Fee Sheet and Lecture Delivery are labelled inactive and open an explicit incomplete-workflow page.</li>
-<li>Automatic fee/payroll receipt-to-General-Ledger posting is not configured. Fee collections and journal income remain separate sources; manually posting the same transaction twice can duplicate accounting.</li>
+
+<li>Automatic fee receipt posting is available under Ledger Setup → Automatic Fee Ledger Posting. Enable it only after mapping accounts. New receipts post cash-basis gross income and discounts atomically; reversals post on the current date. Earlier receipts are not backfilled. Payroll-to-General-Ledger automatic posting remains separate work.</li>
 <li>Report/filter/print parity and remaining template tag values still need reference-specific checks. The complete reference dashboard widget set is not implemented.</li>
 <li>Consecutive lecture carry-forward, remaining fee proration/advance rules and recurring automatic annual payroll increments need further work. Approved manual increments are available; sandwich leave remains disabled.</li>
 <li>Daily history cannot backfill unobserved dates. Old saved snapshots remain frozen, including after backdated journals; current captures refresh enabled history.</li>

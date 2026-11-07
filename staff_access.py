@@ -301,6 +301,8 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('fee_ledger.'):
+            return 'core.'+('update' if request.method=='POST' else 'view')
         if ep.startswith('daily_snapshots.'):
             return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('req_posting.'):

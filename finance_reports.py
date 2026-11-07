@@ -177,7 +177,11 @@ def configure_finance_reports(app,db):
             if request.args['side'] not in ('dr','cr'):raise ValueError('Choose Dr or Cr.')
             q=q.filter(Line.debit>0 if request.args['side']=='dr' else Line.credit>0)
         if request.args.get('amount'):q=q.filter(Line.debit+Line.credit==H['amount'](request.args['amount']))
-        if request.args.get('payment_id'):q=q.filter(False) # No source-payment bridge is configured.
+        if request.args.get('payment_id'):
+            raw=request.args['payment_id']
+            if not raw.isdigit():raise ValueError('Payment ID must be a receipt number.')
+            P=app.extensions['fee_ledger_models']['posting'];links=P.query.filter_by(receipt_id=int(raw)).all()
+            q=q.filter(Journal.id.in_([jid for r in links for jid in (r.journal_id,r.reversal_id) if jid]))
         line_number=func.row_number().over(partition_by=Line.journal_id,order_by=Line.id)
         numbered=db.session.query(Line.id.label('id'),line_number.label('number')).subquery()
         q=q.join(numbered,numbered.c.id==Line.id)

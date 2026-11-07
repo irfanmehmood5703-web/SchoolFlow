@@ -45,6 +45,8 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post('/records/student/new',data={'_csrf':token,'name':'Forged'}).status_code,403)
         self.assertEqual(self.c.get('/workspace/core/users').status_code,403)
         self.assertEqual(self.c.get('/workspace/core/institute').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/fee-posting').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/fee-posting',data={'_csrf':token,'enabled':'1','version':'0'}).status_code,403)
         self.assertEqual(self.c.get('/api/v1/summary').status_code,403)
     def test_cash_account_and_payment_date_rules_are_checked_before_payment(self):
         self.login();token=self.token()

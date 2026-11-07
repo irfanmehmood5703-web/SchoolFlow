@@ -1,3 +1,5 @@
+> Update: the web Fee Sheet, Lecture Delivery and optional fee-receipt ledger connection listed below were subsequently implemented. See REMAINING_WEB.md for current behaviour and limits. The review below records the earlier checkpoint.
+
 # SchoolFlow system review — 7 November 2026
 
 Scope: current feature branch and isolated fictional Render trial. Original
