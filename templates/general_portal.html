@@ -26,7 +26,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:11px;bord
 <button data-view="feedback">Complaints & Suggestions</button>
 </nav><p id="message" role="status" aria-live="polite"></p>
 <div id="library">
-<section><h2>Library · Catalogue</h2><div class="grid">
+<section><h2>Library · Summary</h2><div class="grid"><div><strong>Titles</strong><p id="statTitles">—</p></div><div><strong>Copies</strong><p id="statCopies">—</p></div><div><strong>Issued</strong><p id="statIssued">—</p></div><div><strong>Overdue</strong><p id="statOverdue">—</p></div></div><div class="actions"><button id="refreshSummary">Refresh Summary</button></div></section><section><h2>Library · Catalogue</h2><div class="grid">
 <label>Book title<input id="bookTitle" maxlength="240"></label>
 <label>Author<input id="bookAuthor" maxlength="160"></label>
 <label>ISBN<input id="bookIsbn" maxlength="32"></label>
@@ -45,7 +45,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:11px;bord
 <label>Loan Days<input id="loanDays" type="number" min="1" max="90" value="14"></label></div>
 <div class="actions"><button class="primary" id="issue">Issue Book</button><button id="refreshLoans">Refresh Loans</button><button id="refreshOverdue">Overdue Report</button></div>
 <div class="scroll"><table><thead><tr><th>Loan</th><th>Copy</th><th>Member</th><th>Due</th><th>Status</th><th>Action</th></tr></thead><tbody id="loans"></tbody></table></div><h3>Overdue Books</h3><div class="scroll"><table><thead><tr><th>Loan</th><th>Copy</th><th>Member Type</th><th>Member ID</th><th>Due Date</th></tr></thead><tbody id="overdue"></tbody></table></div></section>
-</div>
+<section><h2>Library · Lending Settings</h2><div class="grid"><label>Student loan limit<input id="limitStudents" type="number" min="1" max="50"></label><label>Employee loan limit<input id="limitEmployees" type="number" min="1" max="50"></label><label>Default loan days<input id="defaultDays" type="number" min="1" max="90"></label><label>Fine per overdue day (PKR)<input id="fineDaily" type="number" min="0" max="10000" step="0.01"></label></div><div class="actions"><button id="saveLibrarySettings" class="primary">Save Settings</button><button id="loadLibrarySettings">Reload Settings</button></div></section></div>
 <div id="leaves" class="hidden">
 <section><h2>Student Leave Approval</h2><div class="grid">
 <label>Student ID<input id="leaveStudent" type="number" min="1"></label>
@@ -90,19 +90,22 @@ function table(id,rows,cols,action){
  for(const r of rows){const tr=node('tr');for(const col of cols)tr.appendChild(node('td',r[col]));if(action){const td=node('td');action(td,r);tr.appendChild(td)}target.appendChild(tr)}
 }
 function actionButton(td,label,callback){const b=node('button',label);b.addEventListener('click',()=>run(callback));td.appendChild(b)}
+async function summary(){const d=await api("/api/general/library/reports/summary");for(const [id,key] of [["statTitles","titles"],["statCopies","copies"],["statIssued","issued"],["statOverdue","overdue"]])$(id).textContent=d[key]}
+async function loadSettings(){const d=await api("/api/general/library/settings");for(const [id,key] of [["limitStudents","max_student_loans"],["limitEmployees","max_employee_loans"],["defaultDays","default_loan_days"],["fineDaily","fine_per_day"]])$(id).value=d[key]}
 async function books(){const rows=await api('/api/general/library/catalogue');table('books',rows,['id','title','author','isbn','category'])}
 async function copies(){const rows=await api('/api/general/library/copies');table('copies',rows,['id','book_id','accession','condition'])}
 async function loans(){const rows=await api('/api/general/library/loans');table('loans',rows,['id','copy_id','borrower_id','due_at','status'],(td,r)=>{if(r.status==='Issued'){actionButton(td,'Return',async()=>{await api('/api/general/library/return/'+r.id,'POST',{});await loans();await overdue()});actionButton(td,'Renew +7 days',async()=>{await api('/api/general/library/renew/'+r.id,'POST',{days:7});await loans();await overdue()})}})}
 async function overdue(){const rows=(await api("/api/general/library/reports/overdue")).items;table("overdue",rows,["id","copy_id","borrower_type","borrower_id","due_at"])}
 async function leaves(){const rows=(await api('/api/general/leaves/?status='+encodeURIComponent(value('leaveStatus')))).items;table('leaveRows',rows,['student_id','from_date','to_date','total_days','leave_type','reason','status'],(td,r)=>{if(r.status==='Pending')for(const status of ['Approved','Rejected'])actionButton(td,status,async()=>{await api('/api/general/leaves/'+r.id,'PATCH',{status,comment:''});await leaves()})})}
 async function feedback(){const query=new URLSearchParams({kind:value('filterKind'),status:value('filterStatus'),category:value('filterCategory')});const rows=(await api('/api/general/feedback/?'+query)).items;table('feedbackRows',rows,['created_at','submitted_by','category','message','response','status'],(td,r)=>{if(r.status==='Open')actionButton(td,r.kind==='complaint'?'Resolve':'Address',async()=>{const response=prompt('Response to submit');if(response===null)return;await api('/api/general/feedback/'+r.id,'PATCH',{status:r.kind==='complaint'?'Resolved':'Addressed',response});await feedback()})})}
+$('saveLibrarySettings').onclick=()=>run(async()=>{await api('/api/general/library/settings','PUT',{max_student_loans:value('limitStudents'),max_employee_loans:value('limitEmployees'),default_loan_days:value('defaultDays'),fine_per_day:value('fineDaily')});await loadSettings()});
 $('addBook').onclick=()=>run(async()=>{await api('/api/general/library/catalogue','POST',{title:value('bookTitle'),author:value('bookAuthor'),isbn:value('bookIsbn'),category:value('bookCategory')});await books()});
 $('addCopy').onclick=()=>run(async()=>{await api('/api/general/library/copies','POST',{book_id:value('copyBook'),accession:value('accession')});await copies()});
 $('issue').onclick=()=>run(async()=>{await api('/api/general/library/issue','POST',{copy_id:value('issueCopy'),borrower_type:value('borrowerType'),borrower_id:value('borrowerId'),days:value('loanDays')});await loans()});
 $('submitLeave').onclick=()=>run(async()=>{await api('/api/general/leaves/','POST',{student_id:value('leaveStudent'),from_date:value('leaveFrom'),to_date:value('leaveTo'),leave_type:value('leaveType'),reason:value('leaveReason')});await leaves()});
 $('submitFeedback').onclick=()=>run(async()=>{await api('/api/general/feedback/','POST',{kind:value('feedbackKind'),category:value('feedbackCategory'),submitted_by:value('feedbackBy'),campus:value('feedbackCampus'),message:value('feedbackMessage')});await feedback()});
-for(const [id,fn] of Object.entries({refreshBooks:books,refreshCopies:copies,refreshLoans:loans,refreshOverdue:overdue,refreshLeaves:leaves,refreshFeedback:feedback}))$(id).onclick=()=>run(fn);
+for(const [id,fn] of Object.entries({refreshSummary:summary,loadLibrarySettings:loadSettings,refreshBooks:books,refreshCopies:copies,refreshLoans:loans,refreshOverdue:overdue,refreshLeaves:leaves,refreshFeedback:feedback}))$(id).onclick=()=>run(fn);
 $('leaveStatus').onchange=()=>run(leaves);$('filterKind').onchange=()=>{const suggestion=value('filterKind')==='suggestion';$('filterStatus').replaceChildren(...(suggestion?['Open','Addressed']:['Open','Resolved']).map(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;return o}));run(feedback)};for(const id of ['filterStatus','filterCategory'])$(id).onchange=()=>run(feedback);
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['library','leaves','feedback'])$(id).classList.toggle('hidden',id!==b.dataset.view);run(({library:async()=>{await Promise.all([books(),copies(),loans(),overdue()])},leaves,feedback})[b.dataset.view])});
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['library','leaves','feedback'])$(id).classList.toggle('hidden',id!==b.dataset.view);run(({library:async()=>{await Promise.all([books(),copies(),loans(),overdue(),summary(),loadSettings()])},leaves,feedback})[b.dataset.view])});
 run(async()=>{await Promise.all([books(),copies(),loans()])});
 </script></body></html>
