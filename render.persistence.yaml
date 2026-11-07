@@ -1,5 +1,5 @@
 # Free testing only. User deferred all paid hosting until launch.
-# Connect a Neon Free project first; supply its URL privately via Render env.
+# Neon Free is connected; its secret URL is supplied privately via Render env.
 # This file never creates/upgrades a paid database or changes main.
 services:
   - type: web

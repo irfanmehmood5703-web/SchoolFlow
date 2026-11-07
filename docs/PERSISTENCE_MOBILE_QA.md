@@ -1,19 +1,3 @@
-> **Current user decision (6 November 2026): FREE testing until launch.**
-> The paid Render proposal below is historical and is not approved. Do not apply
-> or upgrade paid resources. Neon Free is selected for testing, pending account
-> installation/connection. `render.persistence.yaml` now describes only the
-> existing free web service with a privately supplied PostgreSQL URL and no paid
-> database resource. Scheduled host workers are disabled in this testing plan
-> to avoid continually waking free serverless compute. Manual/on-demand actions
-> remain available; unattended scheduled work is not promised on sleeping hosts.
->
-> Verified official Neon pricing on this date: $0, no fixed trial time limit,
-> no card required, 1 GB database and 100 CU-hours per project/month; free compute
-> scales to zero after inactivity. See https://neon.com/pricing and
-> https://neon.com/docs/introduction/plans. These are current allowances, not a
-> guarantee that limits or provider terms will never change. No Neon project or
-> connection is claimed created until its account connection is confirmed.
-
 # Persistence and mobile/PDF completion
 
 ## Completed code and verification
@@ -59,60 +43,54 @@ The browser check is viewport emulation, not a physical Android device test.
 PGlite is used only for development verification, not the hosted database.
 The scripts require only fictional/local fixtures and do not point at school data.
 
-## Hosting plan awaiting explicit approval
+## Free hosted storage — 7 November 2026
 
-A free `schoolflow-storage-trial` PostgreSQL 16 instance was created in the
-existing Singapore workspace with no paid upgrade applied. It expires on
-**6 December 2026** and is not a permanent storage solution. The current trial
-continues to use temporary SQLite until the reviewed plan is applied.
+The user approved free hosting until launch and explicitly authorized storing
+this Neon project's private connection credential on the existing isolated
+Render trial service. No paid resource was activated.
 
-`render.persistence.yaml` adopts only that database and the existing isolated
-`schoolflow-gate-trial-irfan` web service. It leaves main out of the plan. It
-upgrades the database to `0.1c-256mb`, requests 1 GB, disables external database
-access and injects the internal connection string via `fromDatabase`; no database
-credential is copied into source code or chat. Existing service secrets are
-preserved. Web compute remains free and auto-deploy remains off.
+- Neon organization `org-flat-cell-41119063` reports plan `free`.
+- Project `delicate-block-71773937`, branch `br-soft-breeze-azdm3xgu`, database
+  `schoolflow`, PostgreSQL 16, AWS Singapore. Compute is fixed at 0.25 CU with
+  the Free plan default idle suspension policy. No Auth, Data API, Functions,
+  or additional paid backend was provisioned.
+- Render trial `srv-dbmkmfutlv9c73ba1eog` remains plan `free`, auto-deploy off.
+  Secret `DATABASE_URL` was merged privately through the Render API; unrelated
+  environment keys were preserved. `SCHOOLFLOW_REQUIRE_POSTGRES=1` prevents
+  silent SQLite fallback. `SCHOOLFLOW_FINE_WORKER=0` avoids continual idle wakeups;
+  on-demand actions remain available, unattended schedules are not promised.
+- First deployment `dep-dbn8r1rl550s73egh3ag` became live at
+  `2026-11-07T02:32:43Z`. Bootstrap used a direct PostgreSQL connection. Neon
+  independently showed 79 public/control/demo tables and 72 private school
+  tables after provisioning. The web app authenticated its private owner and
+  saved a new fictional student through the actual admission form. A fresh
+  request and an independent Neon SQL read both found that same record.
+- Application traffic subsequently switched to the pooled connection. Second
+  deployment `dep-dbn8t1jrjlhs7382que0` became live at
+  `2026-11-07T02:36:55Z`, with a new running instance. A new cookie jar and owner
+  sign-in found the same student in the listing and detail page. An independent
+  Neon SQL read also found it after redeployment. Requisition creation, settings,
+  ageing/report and Ledger Setup pages returned 200 over the pooled connection.
+- **19 live web checks passed** (10 save/setup, 9 after deployment). This verifies
+  actual admission-save persistence across a hosted Render redeployment, not
+  just a browser refresh or a local database restart. The post-deploy error-level
+  log query returned no entries. Neon organization still reported plan `free`.
+  The broader prior regression/browser suite was not rerun for these deployment
+  configuration and documentation changes; there were no runtime code edits.
 
-Published compute is $6/month; expandable storage is listed at $0.30/GB/month
-and the current pricing page also lists an included 1 GB. Allow an estimate up to
-$6.30/month for this 1 GB plan, before tax and any other account usage. The actual
-Render billing/plan should be reviewed before approval. No paid spend is enabled
-by merely committing or planning this file.
+## Historical paid proposal — superseded
 
-After approval: apply the reviewed sync, wait for the exact deploy to become live,
-then save a fictional sentinel, issue/bill and attachment, redeploy/restart the
-web app, sign in again and verify all persisted values. Only after that can the
-hosted persistence issue be marked resolved. Existing temporary test records may
-reset at the storage switch; do not import real records yet. Recovering records
-already lost from an earlier ephemeral database is not possible from this code.
+The earlier paid Render Blueprint `exs-dbn1km6k1f9s738rd25g` failed planning
+with `need_payment_info` and was never approved or applied. The unused free
+Render database `dpg-dbn1bi2fngtc738h5djg-a` was not linked to the app; its
+6 December 2026 expiry does not govern the separate Neon project. Do not apply
+or upgrade that paid proposal. `render.persistence.yaml` now contains only the
+existing free web service and a secret placeholder, with no database resource.
 
-Native PostgreSQL backups/PITR and restore verification are operational follow-ups
-once a non-expiring hosted database is activated. The separate Daily Snapshot
-income/expense bridge and the broader unfinished SchoolFlow/app scope are not
-claimed complete by these checks.
-
-PDF content verification additionally confirmed all 200 pupil/challan rows,
-all 200 intact `40.00` payment values, and repeated headings on every student
-ledger and General Ledger page. Reports were rerendered after the layout fixes.
-
-## Rollout and provider block
-
-The code/layout revision `88b1d5cca4bdbcb23358d2f5dcaa3611617d4055`
-is live on the isolated trial through deploy `dep-dbn1l0bncjis73ca89kg`, live at
-2026-11-06T18:22:07Z. **11 live rollout checks passed**: private sign-in,
-request/approval after session routing changes, posting/report pages and updated
-responsive/landscape stylesheet. The initial post-deploy error-log query was
-empty; a later recheck returned provider 503 (log retrieval unavailable).
-These live checks are on temporary SQLite, not activated PostgreSQL.
-
-Render Blueprint `exs-dbn1km6k1f9s738rd25g` was created with auto-sync disabled and
-existing-resource adoption, but planning returned **failed / need_payment_info**
-at `databases[0]`. There is no successful sync to approve. Do not call approval on
-this failed plan. No paid upgrade, DATABASE_URL switch or main change was made.
-The free database ID is `dpg-dbn1bi2fngtc738h5djg-a`.
-
-Required user step: approve the quoted recurring database cost and add a payment
-method directly in Render Billing. Then re-plan the same file, review its actual
-resource changes, and apply only the authorized trial/database changes. Preserve
-all existing secrets. Hosted save/redeploy verification remains mandatory after
-activation. Do not describe the remaining permanent storage task as complete yet.
+The original main service and branch were not changed. Previous ephemeral
+fictional fixtures were not imported; records already lost from a prior
+SQLite store cannot be recovered by changing the database. This is a private
+fictional test deployment, not a production release or approval to import real
+school data. Backup/restore operations, the Daily Snapshot income/expense
+bridge, physical Android verification and the broader remaining app scope are
+not claimed complete by this storage check.
