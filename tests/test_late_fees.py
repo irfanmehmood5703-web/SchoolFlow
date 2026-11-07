@@ -192,13 +192,13 @@ class LateFeeTests(unittest.TestCase):
         finally:event.remove(db.engine,'before_cursor_execute',tally)
         self.token(preview);self.assertLessEqual(len(queries),12,queries);self.assertFalse(any('record_file' in q for q in queries))
 
-    def test_configuration_has_only_the_eleven_implemented_entries_and_nested_fee_tools(self):
+    def test_configuration_has_only_the_seventeen_implemented_entries_and_nested_fee_tools(self):
         page=self.c.get('/workspace/dashboard').data
         menu=page.split(b'<div class="workspace-utility"',1)[1].split(b'<div class="brand-row"',1)[0]
         keys=re.findall(rb'data-core-key="([^"]+)"',menu)
-        self.assertEqual(keys,[x.encode() for x in ['institute','exam','hrm','roll-series','late-automation','yearly-increment','users','certificates','user-logging','qr-attendance','face-gates']])
+        self.assertEqual(keys,[x.encode() for x in ['institute','exam','hrm','roll-series','late-automation','yearly-increment','users','certificates','user-logging','qr-attendance','face-gates','attendance-alerts','geo-attendance','attendance-acronyms','whatsapp-service','manage-whatsapp','subscription']])
         self.assertNotIn(b'>Fee Settings</a>',menu);self.assertNotIn(b'>Challan Branding</a>',menu)
-        self.assertNotIn(b'aria-disabled="true"',menu);self.assertIn(b'Late Fee Automation',menu);self.assertNotIn(b'Subscription',menu)
+        self.assertNotIn(b'aria-disabled="true"',menu);self.assertIn(b'Late Fee Automation',menu);self.assertIn(b'SchoolFlow Subscription',menu)
         setup=self.c.get('/workspace/core/institute').data
         for path in (b'/workspace/core/fees/heads',b'/workspace/core/fees/schedules',b'/workspace/core/fees/challan-branding'):self.assertIn(path,setup)
 

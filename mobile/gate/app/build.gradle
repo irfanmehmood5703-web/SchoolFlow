@@ -1,0 +1,34 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.schoolflow.gate'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.schoolflow.gate'
+        minSdk 26
+        targetSdk 35
+        versionCode 2
+        versionName '0.2-trial'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        ndk { abiFilters 'arm64-v8a', 'x86_64' }
+    }
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-phase1.onrender.com"'
+        resValue 'string', 'app_name', 'SchoolFlow Gate'
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix '.trial'
+            buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-gate-trial-irfan.onrender.com"'
+            resValue 'string', 'app_name', 'SchoolFlow Gate (Trial)'
+        }
+        release { minifyEnabled false }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies {
+    implementation 'org.opencv:opencv:4.12.0'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}

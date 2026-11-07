@@ -1,0 +1,37 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}
+{% macro select_field(key,label,required=false,blank='All') %}<div class="field"><label for="{{key}}">{{label}}</label><select id="{{key}}" name="{{key}}" {{'required' if required else ''}}><option value="">{{'Select' if required else blank}} {{label}}</option>{% for v in choices[key] %}<option value="{{v}}" {{'selected' if request.args.get(key)==v else ''}}>{{v}}</option>{% endfor %}</select></div>{% endmacro %}
+{% block content %}
+{{m.heading(title,'General / Student Extras')}}
+<nav class="tab-strip"><a href="{{url_for('student_extras.index',kind='notices')}}">Notice Board</a><a href="{{url_for('student_extras.index',kind='diary')}}">Student Diary</a></nav>
+{% if creating %}
+<form method="post" enctype="multipart/form-data" class="form-card" id="extras-form">
+{{m.csrf()}}<input type="hidden" name="submission" value="{{submission}}">
+<h2>{{'Add Notice' if kind=='notices' else 'Create Student Diary'}}</h2>
+{% if kind=='notices' %}
+{{m.input('title','Title',required=true)}}{{m.input('description','Description','textarea',required=true)}}
+<div class="fields-grid">{{m.input('starts','From','date',today,true)}}{{m.input('ends','To','date',today,true)}}</div>
+<div class="field"><label for="attachments">Attachments (JPG, PDF, MP3, MP4)</label><input type="file" name="attachments" id="attachments" multiple accept=".jpg,.jpeg,.pdf,.mp3,.mp4"><small>Up to five files, 5 MB each; 15 MB combined.</small></div>
+<label><input type="checkbox" name="all_students" value="1" id="all-students"> All Students</label>
+<button type="button" class="button secondary" id="clear-classes">Clear Selection</button>
+{{select_field('campus','Campus')}}
+<div class="field"><label for="class-search">Classes</label><input type="search" id="class-search" placeholder="Search classes…"></div>
+<div class="check-grid" id="class-checks">{% for c in choices.class_name %}<label><input type="checkbox" name="classes" value="{{c}}"> {{c}}</label>{% else %}<p>No classes configured. Add classes in Core Settings first.</p>{% endfor %}</div>
+{% else %}
+{{m.input('starts','Date','date',today,true)}}
+<div class="field"><label for="diary-class-search">Search classes</label><input type="search" id="diary-class-search" placeholder="Find a class…"></div>
+<div class="fields-grid">{{select_field('campus','Campus',true)}}{{select_field('class_name','Class',true)}}{{select_field('section','Section',true)}}{{select_field('subject','Subject',true)}}</div>
+{{m.input('description','Diary / homework','textarea',required=true)}}
+<fieldset><legend>Message channel</legend>{% for key,label in [('branded','Branded SMS'),('app','App SMS'),('whatsapp','WhatsApp SMS')] %}<label><input type="radio" name="channel" value="{{key}}" {{'checked' if key=='app' else ''}}> {{label}}</label>{% endfor %}</fieldset>
+<div class="check-grid"><label><input type="checkbox" name="parent_notification" value="1" checked> Parents App Notification</label>{% for key,label in [('father','Father Contact'),('mother','Mother Contact'),('student','Student Contact')] %}<label><input type="checkbox" name="{{key}}" value="1" {{'checked' if key=='father' else ''}}> {{label}}</label>{% endfor %}</div>
+<p class="muted">Delivery provider is not connected. A message request can be recorded; it will not be marked as sent.</p>
+{% endif %}
+<div class="toolbar"><a class="button secondary" href="{{url_for('student_extras.index',kind=kind)}}">Cancel</a><button name="action" value="save">{{'Save Notice' if kind=='notices' else 'Save Student Diary'}}</button>{% if kind=='diary' %}<button name="action" value="save-send">Save and Send SMS</button>{% endif %}</div>
+</form>
+{% else %}
+<a class="button" href="{{url_for('student_extras.index',kind=kind,new='1')}}">+ {{'Add Notice' if kind=='notices' else 'Create Diary'}}</a>
+<form class="form-card"><div class="fields-grid">{{select_field('campus','Campus')}}{% if kind=='diary' %}{{select_field('class_name','Class')}}{{select_field('section','Section')}}{{select_field('subject','Subject')}}{% endif %}{{m.input('from','From','date',request.args.get('from',''))}}{{m.input('to','To','date',request.args.get('to',''))}}{{m.input('q','Search',value=request.args.get('q',''))}}</div><button>Submit</button><a href="{{url_for('student_extras.index',kind=kind)}}">Clear filters</a></form>
+<section class="form-card"><h2>{{total}} {{'notices' if kind=='notices' else 'diary records'}}</h2><div class="table"><table><thead><tr><th>#</th><th>{{'Title' if kind=='notices' else 'Date / Subject'}}</th><th>{{'Event / News Description' if kind=='notices' else 'Diary / homework'}}</th><th>{{'Display Duration' if kind=='notices' else 'Class / Section'}}</th><th>Targeted Audience</th>{% if kind=='notices' %}<th>Delivered to</th><th>Viewed By</th><th>Attachment</th>{% else %}<th>Message request</th><th>App notification</th>{% endif %}<th>Created At</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{r.id}}</td><td>{{r.title}}{% if kind=='diary' %}<br>{{r.starts}}{% endif %}</td><td style="white-space:pre-wrap;overflow-wrap:anywhere">{{r.body}}</td><td>{% if kind=='notices' %}{{r.starts}} – {{r.ends}}{% else %}{{r.data.class_name}} / {{r.data.section}}{% endif %}</td><td>{{r.campus or 'All campuses'}}{% if kind=='notices' %}<br>{{'All students' if r.data.all_students else r.data.classes|join(', ')}}{% endif %}</td>{% if kind=='notices' %}<td>Not connected</td><td>{{seen_counts.get(r.id,0)}} profiles</td><td>{% for a in attachments[r.id] %}<a href="{{url_for('student_extras.attachment',aid=a.id)}}">{{a.filename}}</a><br>{% endfor %}</td>{% else %}<td>{{r.data.message_status}}</td><td>{{r.data.notification_status}}</td>{% endif %}<td>{{r.created.strftime('%Y-%m-%d %H:%M')}} UTC</td></tr>{% else %}<tr><td colspan="9">{{'No notices yet.' if kind=='notices' else 'No diary records match these filters.'}}</td></tr>{% endfor %}</tbody></table></div>
+<div class="toolbar">{% if page>1 %}<a href="{{url_for('student_extras.index',kind=kind,**dict(request.args,page=page-1))}}">Previous</a>{% endif %}<span>Page {{page}} · 25 per page</span>{% if page*25<total %}<a href="{{url_for('student_extras.index',kind=kind,**dict(request.args,page=page+1))}}">Next</a>{% endif %}</div></section>
+{% endif %}
+<script src="{{asset_url('student-extras.js')}}" defer></script>
+{% endblock %}

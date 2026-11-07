@@ -22,6 +22,25 @@ def configure_hrm_reports(app,db,Employee):
         response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv')
         response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"'
         return response
+    @bp.get('/lecture-delivery')
+    def lecture_delivery():
+        try:
+            start=date.fromisoformat(request.args.get('from',date.today().replace(day=1).isoformat()));end=date.fromisoformat(request.args.get('to',date.today().isoformat()))
+        except ValueError:abort(422,'Choose valid lecture dates.')
+        if start>end or (end-start).days>366:abort(422,'Choose an ordered lecture range of up to 367 days.')
+        state=request.args.get('status','')
+        if state not in ('','Pending','Approved','Rejected'):abort(422,'Choose a lecture approval status.')
+        employees={e.id:e for e in Employee.query.order_by(Employee.name).all()}
+        eid=request.args.get('employee_id','');campus=request.args.get('campus','')
+        if eid and (not eid.isdigit() or int(eid) not in employees):abort(422,'Choose an employee from this scope.')
+        W=models['workflow'];rows=W.query.filter(W.kind=='lecture-register',W.status!='Voided',W.data['date'].as_string()>=start.isoformat(),W.data['date'].as_string()<=end.isoformat()).order_by(W.id.desc()).all()
+        rows=[r for r in rows if int(r.data['employee_id']) in employees and (not eid or r.data['employee_id']==eid) and (not campus or details(employees[int(r.data['employee_id'])],'employee').get('campus','')==campus) and (not state or r.status==state) and all(not request.args.get(k) or r.data.get(k,'')==request.args[k] for k in ('class_name','section','subject'))]
+        captured={line['id']:salary.id for salary in Salary.query.all() for line in salary.detail.get('lecture_details',[])}
+        totals={s:sum(int(r.data['lectures']) for r in rows if r.status==s) for s in ('Pending','Approved','Rejected')}
+        if request.args.get('export')=='csv':
+            return csv_response(['ID','Date','Employee','Campus','Class','Section','Subject','Lectures','Minutes','Status','Captured salary'],[[r.id,r.data['date'],employees[int(r.data['employee_id'])].name,details(employees[int(r.data['employee_id'])],'employee').get('campus',''),*[r.data.get(k,'') for k in ('class_name','section','subject','lectures','minutes')],r.status,captured.get(r.id,'')] for r in rows],'lecture-delivery')
+        return render_template('lecture_delivery.html',title='Lecture Delivery',rows=rows,employees=employees,details=details,start=start,end=end,campuses=sorted({details(e,'employee').get('campus','') for e in employees.values()}-{''}),totals=totals,captured=captured,employee_options=[(e.id,e.name) for e in employees.values()])
+
     @bp.get('/<view>')
     def report(view):
         if view not in ('salary-report','lecture-report'):abort(404)

@@ -664,7 +664,7 @@ def configure_school_settings(app,db,Student,Employee):
         first=date.fromisoformat(month+'-01');dates=[first+timedelta(days=i) for i in range(calendar.monthrange(first.year,first.month)[1])]
         employee_id=request.values.get('employee_id','');employees=Employee.query.order_by(Employee.name).all();person=next((e for e in employees if str(e.id)==employee_id),None)
         if employee_id and not person:abort(404)
-        statuses=['Present','Absent','Late','Leave','Short Leave','Off Day','Death Leave','Paper Leave']
+        statuses=app.extensions['attendance_control_helpers']['statuses']('staff')
         if request.method=='POST':
             if not person:raise ValueError('Choose an employee.')
             attendance_guard('staff',first,monthly=True)
@@ -673,7 +673,7 @@ def configure_school_settings(app,db,Student,Employee):
                 old=ops['daily'].query.filter_by(kind='staff',person_id=person.id,day=d).first()
                 if status==(old.status if old else ''):continue
                 attendance_guard('staff',d)
-                if status and status not in statuses:raise ValueError('Choose a valid attendance status.')
+                if status and not app.extensions['attendance_control_helpers']['allowed']('staff',status,old.status if old else None):raise ValueError('Choose an active attendance status.')
                 if not status:
                     if old:db.session.delete(old)
                 elif old:old.status=status

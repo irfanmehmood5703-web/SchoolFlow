@@ -1,0 +1,121 @@
+name: SchoolFlow Gate Android
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/gate/**', '.github/workflows/gate-android.yml']
+  pull_request:
+    paths: ['mobile/gate/**', '.github/workflows/gate-android.yml']
+permissions:
+  contents: read
+concurrency:
+  group: gate-android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Download and verify pinned recognition models
+        working-directory: mobile/gate
+        run: python3 download_models.py
+      - name: Compile, unit test and lint Android
+        working-directory: mobile/gate
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+      - name: Test native models and encrypted storage in Android emulator
+        working-directory: mobile/gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64' >/dev/null
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/schoolflow-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n schoolflow-test --path "$ANDROID_AVD_HOME/schoolflow-test.avd" -k 'system-images;android-35;google_apis;x86_64' --force >/dev/null
+          printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-35\n' "$ANDROID_AVD_HOME/schoolflow-test.avd" >"$ANDROID_AVD_HOME/schoolflow-test.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          "$ANDROID_HOME/emulator/emulator" -avd schoolflow-test -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader -camera-front none -camera-back none >/tmp/schoolflow-emulator.log 2>&1 &
+          gate_emulator_pid=$!
+          trap 'gate_exit=$?; if [ "$gate_exit" -ne 0 ]; then tail -n 60 /tmp/schoolflow-emulator.log; fi; kill "$gate_emulator_pid" 2>/dev/null || true; exit "$gate_exit"' EXIT
+          timeout 180 adb wait-for-device
+          for gate_attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = '1' ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          gradle --no-daemon :app:connectedDebugAndroidTest
+      - name: Package test APK and provenance
+        working-directory: mobile/gate
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-Trial.apk
+          (cd dist && sha256sum SchoolFlow-Gate-Trial.apk) >dist/SHA256SUMS.txt
+          printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
+          cp app/src/main/assets/models.json dist/MODELS.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: SchoolFlow-Gate-test
+          path: mobile/gate/dist/
+          retention-days: 14
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: SchoolFlow-Gate-test-reports
+          path: |
+            mobile/gate/app/build/reports/
+            mobile/gate/app/build/outputs/androidTest-results/
+          retention-days: 14
+  publish-test-apk:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [android, backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: SchoolFlow-Gate-test
+          path: gate-apk/
+      - name: Verify artifact and publish test APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate_expected_sha="$(cat gate-apk/SOURCE-COMMIT.txt)"
+          test "$gate_expected_sha" = "$GITHUB_SHA"
+          (cd gate-apk && sed 's@dist/@@' SHA256SUMS.txt | sha256sum -c -)
+          gate_tag="gate-test-${{ github.run_number }}"
+          gh release create "$gate_tag" gate-apk/SchoolFlow-Gate-Trial.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Gate 0.2 — trial APK" --notes "Installable attended trial build for ARM64 Android 8+ devices, pinned to the separate fictional Gate trial server. Local YuNet/SFace enrollment and recognition, encrypted device storage, explicit operator confirmation, and private-institute gate delivery. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install existing server dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify server and native-enrollment contract
+        run: python -m unittest discover -s tests -q

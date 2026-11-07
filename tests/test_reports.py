@@ -77,3 +77,15 @@ class ReportTests(unittest.TestCase):
         db.session.add(Item(kind='exam-branding',scope='Campus A',name='Individual Attendance Report',data=dict(header='[studentName]|[fatherName]|[rollNo]|[sectionName]|[attendance]',body='',footer='')))
         db.session.add(self.m['daily'](kind='student',person_id=self.s.id,day=date(2026,9,1),status='Absent'));db.session.commit()
         page=self.get('attendance/individual-attendance?from=2026-09&to=2026-09&person_id='+str(self.s.id));self.assertEqual(page.status_code,200);self.assertIn(b'Fictional Pupil|Fictional Father|0007|A|Absent: 1',page.data)
+
+    def test_student_fee_sheet_month_grid_and_exports_use_saved_challan_totals(self):
+        import csv,io
+        suffix='?from=2026-09&to=2026-10'
+        page=self.get('fees/fee-sheet'+suffix);self.assertEqual(page.status_code,200);self.assertIn(b'Sep 2026',page.data);self.assertIn(b'700.00',page.data)
+        rows=list(csv.reader(io.StringIO(self.get('fees/fee-sheet'+suffix+'&export=csv').data.decode('utf-8-sig'))))
+        pupil=next(r for r in rows if 'Fictional Pupil' in r);self.assertEqual(pupil[-3:],['700.00','—','700.00'])
+        rows=list(csv.reader(io.StringIO(self.get('fees/fee-sheet'+suffix+'&metric=paid&export=csv').data.decode('utf-8-sig'))));self.assertEqual(next(r for r in rows if 'Fictional Pupil' in r)[-3:],['250.00','—','250.00'])
+        export=self.get('fees/fee-sheet'+suffix+'&export=xlsx');self.assertEqual(export.status_code,200);self.assertTrue(export.data.startswith(b'PK'))
+        only=self.get('fees/fee-sheet'+suffix+'&defaulters=1');self.assertNotIn(b'No Challan Pupil',only.data)
+        for q in ['from=2025-01&to=2026-10','from=2026-09&to=2026-10&metric=bad']:
+            self.assertEqual(self.get('fees/fee-sheet?'+q).status_code,422)
