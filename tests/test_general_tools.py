@@ -115,6 +115,14 @@ class GeneralToolsTests(unittest.TestCase):
         group.account_class='Equity';db.session.commit()
         page=self.c.get('/workspace/general/widgets/report/daily-profit');self.assertIn(b'100.00',page.data)
 
+    def test_demo_preferences_are_session_only_and_global_settings_cannot_change(self):
+        with self.c.session_transaction() as s:s['demo']=True
+        self.assertNotIn(b'Manage this release',self.c.get('/workspace/general/app-links').data)
+        self.assertEqual(self.post('/workspace/general/app-links',dict(app='teacher',version_token='0',url='',version='')).status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/widgets/permissions').status_code,403)
+        self.assertEqual(self.post('/workspace/general/widgets/layout',dict(version='0',action='default')).status_code,302)
+        self.assertEqual(self.M['preference'].query.count(),0)
+
     def test_unknown_widget_404(self):
         self.assertEqual(self.c.get('/workspace/general/widgets/report/unknown').status_code,404)
 

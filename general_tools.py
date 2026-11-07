@@ -50,6 +50,7 @@ def configure_general_tools(app,db,Student,Employee):
         all_campuses=set(helper['campuses']())
         return [key for key,_,_,permission in WIDGETS if scope and scope<=grant_cache[permission] and (not permission.startswith('finance.') or grant_cache[permission]==all_campuses) and (key not in rules or role in rules[key])]
     def full_scope():
+        if session.get('demo'):abort(403,'Use a private institute account to change shared settings.')
         p=getattr(g,'staff_principal',None)
         if p is not None and set(g.access_campuses)!=set(app.extensions['staff_access_helpers']['campuses']()):abort(403,'This setting requires access to every configured campus.')
     def releases():
@@ -85,7 +86,7 @@ def configure_general_tools(app,db,Student,Employee):
     @bp.context_processor
     def widget_context():
         p=getattr(g,'staff_principal',None);h=app.extensions['staff_access_helpers']
-        return dict(can_manage_widgets=p is None or h['grant'](p,'widgets.manage')==set(h['campuses']()))
+        return dict(can_manage_widgets=not session.get('demo') and (p is None or h['grant'](p,'widgets.manage')==set(h['campuses']())))
     @bp.before_request
     def protect():
         if request.method=='POST':
@@ -114,7 +115,7 @@ def configure_general_tools(app,db,Student,Employee):
             else:row=Item(kind='app-release',scope='',name=key,data=values);db.session.add(row)
             db.session.add(Audit(action='Update app release',data=dict(app=key,owner_id=session.get('owner_id'),staff_id=session.get('staff_id'))));db.session.commit();flash('Release registry saved. No app file was generated or message sent.','success');return redirect(url_for('general_tools.app_links'))
         p=getattr(g,'staff_principal',None);helper=app.extensions['staff_access_helpers']
-        can_edit=p is None or helper['grant'](p,'apps.update')==set(helper['campuses']())
+        can_edit=not session.get('demo') and (p is None or helper['grant'](p,'apps.update')==set(helper['campuses']()))
         return render_template('app_links.html',title='SchoolFlow App Links',apps=releases(),can_edit=can_edit)
     @bp.get('/widgets')
     def widgets():

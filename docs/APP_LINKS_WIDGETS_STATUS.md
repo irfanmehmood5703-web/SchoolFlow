@@ -21,7 +21,8 @@ be built/published before download links can be configured. Vendor APKs and
 reference contact/student data are not reused. Source contains only fictional
 test URLs, never a fake release published into the hosted registry.
 
-Read access and editing have separate Apps permissions. Changing the release
+Read access and editing have separate Apps permissions. Public demo visitors
+cannot change shared release or role settings. Changing the release
 registry needs every configured campus; stale writes and unsafe URL schemes,
 embedded login credentials and fragments are rejected. No external fetch,
 message send, new storage service or paid resource is performed by a save.
@@ -83,13 +84,15 @@ mutations re-read permissions inside their existing lock.
 ## Verification
 
 - Full regression: 644 tests passed.
-- Ten General tool tests verify all 37 cards/reports, release URL/version checks,
+- Eleven General tool tests verify all 37 cards/reports, release URL/version checks,
   account-isolated/default/reordered layouts, actual fee values, mixed-head
   limits, numeric result exclusions, discounted tuition and captured ledger
   classifications.
 - After the final GET-only campus cache change, 41 staff-access/performance
   tests passed. After tightening finance source access, all 12 General tool and
-  targeted staff tests passed.
+  targeted staff tests passed. A final public-demo check also passed: demo
+  preferences remain session-only and demo visitors cannot change global
+  releases or widget role policy.
 - Sixteen Chromium checks passed at 390 and 1366 widths: pages/reports, release
   save/Copy, selection/order persistence, Expand, saved default, role settings
   and Excel. No JavaScript errors or body overflow. Mobile/desktop layouts were
