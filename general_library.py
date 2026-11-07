@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request, abort, session
 import hmac
 from datetime import timedelta
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, Index, text
 
 def configure_library(app, db, resolve_institute, require_permission):
     """Wire with trusted callbacks from the existing identity/permissions layer.
@@ -45,6 +45,7 @@ def configure_library(app, db, resolve_institute, require_permission):
         due_at = db.Column(db.DateTime(timezone=True), nullable=False)
         returned_at = db.Column(db.DateTime(timezone=True))
         status = db.Column(db.String(20), nullable=False, default="Issued")
+        __table_args__ = (Index("ix_sf_library_one_open_loan", "institute_id", "copy_id", unique=True, sqlite_where=text("returned_at IS NULL"), postgresql_where=text("returned_at IS NULL")),)
 
     bp = Blueprint("sf_library", __name__, url_prefix="/api/general/library")
 
@@ -151,7 +152,14 @@ def configure_library(app, db, resolve_institute, require_permission):
                            borrower_id=borrower_id, issued_at=now,
                            due_at=now + timedelta(days=days), status="Issued")
         db.session.add(loan)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            from sqlalchemy.exc import IntegrityError
+            if isinstance(exc, IntegrityError):
+                return jsonify(error="Copy is already issued"), 409
+            raise
         return jsonify(id=loan.id, status="Issued", due_at=loan.due_at.isoformat()), 201
 
     @bp.get("/copies")
