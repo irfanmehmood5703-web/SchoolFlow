@@ -1,0 +1,7 @@
+SchoolFlow Gate uses OpenCV 4.12.0 (Apache License 2.0) and OpenCV Zoo models.
+OpenCV: https://opencv.org/
+Model source commit: 48b10fa505aeb51fbd127fc60a5c660040e823b7
+YuNet 2023mar: MIT License; see YUNET-LICENSE.txt.
+SFace 2021dec: Apache License 2.0; see SFACE-LICENSE.txt.
+The authors and publishers of these dependencies do not endorse SchoolFlow.
+No biometric accuracy, liveness certification or operational suitability is implied.

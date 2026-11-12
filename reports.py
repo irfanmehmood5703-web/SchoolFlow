@@ -7,7 +7,7 @@ from flask import Blueprint,abort,redirect,render_template,request,url_for
 from module_catalog import TITLES
 from report_exports import report_xlsx
 
-FEE_REPORTS={'fee-report','daily-fees','class-fees','student-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'}
+FEE_REPORTS={'fee-sheet','fee-report','daily-fees','class-fees','student-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'}
 ATTENDANCE_REPORTS={'combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'}
 
 def configure_reports(app,db,Student,Employee):
@@ -57,6 +57,28 @@ def configure_reports(app,db,Student,Employee):
         start,end=bounds();students={s.id:s for s in Student.query.all() if match(s)};all_bills=Bill.query.filter(Bill.student_id.in_(students)).order_by(Bill.month,Bill.id).all()
         billing=[b for b in all_bills if start.strftime('%Y-%m')<=b.month<=end.strftime('%Y-%m')]
         receipts=Receipt.query.filter(Receipt.student_id.in_(students),Receipt.voided==False).all()
+        if view=='fee-sheet':
+            distance=(end.year-start.year)*12+end.month-start.month
+            if distance>11:fail('Student Fee Sheet supports up to twelve months per sheet.')
+            metric=request.args.get('metric','remaining')
+            if metric not in ('payable','paid','discount','remaining'):fail('Choose a fee sheet amount type.')
+            months=[f'{(start.year*12+start.month-1+i)//12:04d}-{(start.year*12+start.month-1+i)%12+1:02d}' for i in range(distance+1)]
+            grid={};totals={k:0 for k in ('payable','paid','discount','remaining')}
+            for bill in billing:
+                cell=grid.setdefault((bill.student_id,bill.month),dict(payable=0,paid=0,discount=0,remaining=0))
+                for key,value in dict(payable=bill.total,paid=bill.paid,discount=bill.discount,remaining=bill.remaining).items():cell[key]+=value;totals[key]+=value
+            rows=[]
+            for sid,student in students.items():
+                cells=[grid.get((sid,m)) for m in months]
+                if request.args.get('defaulters')=='1' and not any(c and c['remaining']>0 for c in cells):continue
+                d=details(student)
+                rows.append([sid,d.get('roll_no',''),student.name,d.get('campus',''),student.class_name or '',d.get('section',''),*[cash(c[metric]) if c else '—' for c in cells],cash(sum(c[metric] for c in cells if c))])
+            natural=lambda value:(0,int(value)) if str(value).isdigit() else (1,str(value).casefold())
+            sort=request.args.get('sort','sid')
+            rows.sort(key=(lambda r:(natural(r[1]),r[0])) if sort=='roll' else (lambda r:(str(r[4]).casefold(),natural(r[1]),r[0])) if sort=='class' else (lambda r:r[0]))
+            if request.args.get('defaulters')=='1':
+                included={r[0] for r in rows};totals={k:sum(c[k] for (sid,m),c in grid.items() if sid in included) for k in totals}
+            return response(view,['SID','Roll No','Student','Campus','Class','Section',*[date.fromisoformat(m+'-01').strftime('%b %Y') for m in months],'Total '+metric.title()],rows,{k.title():cash(v) for k,v in totals.items()},note='One row per student, grouped by challan month. Choose Payable, Paid, Discount or Remaining. Payments are lifetime totals against those challans; a dash means no challan. Amounts include all fee heads without guessing line allocations.')
         if view=='daily-fees':
             rows=[];group=defaultdict(lambda:[0,0,0]);account=request.args.get('account','')
             for r in receipts:

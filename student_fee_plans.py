@@ -158,8 +158,17 @@ def configure_student_fee_plans(app, db, Student):
             lines=increment_lines(lines,pct,same_period)
             reason=request.form.get('reason','').strip(); notes=request.form.get('notes','').strip()
             if len(reason)>200 or len(notes)>5000: raise ValueError('Discount reason or notes are too long.')
+            prior=latest.data if latest else {}
+            old_type=str(prior.get('discount_type_id',''))
+            selected_type=request.form.get('discount_type',old_type)
+            discount_type={}
+            if selected_type:
+                if not selected_type.isdigit():raise ValueError('Choose a configured discount type.')
+                category=next((r for r in helper['discount_choices']() if str(r.id)==selected_type),None)
+                if not category or (not category.data.get('active',True) and selected_type!=old_type):raise ValueError('Choose an active discount type.')
+                discount_type=dict(discount_type_id=category.id,discount_type_name=prior.get('discount_type_name',category.name) if selected_type==old_type else category.name)
             metadata=helper['snapshot'](configured) if fresh and configured else ({key:latest.data[key] for key in ('schedule_id','schedule_version','due_day') if key in latest.data} if latest else {})
-            data=dict(schedule=name,lines=lines,percentage=str(pct),year=year,reason=reason,notes=notes,**metadata)
+            data=dict(schedule=name,lines=lines,percentage=str(pct),year=year,reason=reason,notes=notes,**metadata,**discount_type)
             old=dict(target.data) if target else None
             if target: target.data=data
             else: target=StudentFeePlan(student_id=sid,effective=effective,data=data);db.session.add(target)
@@ -173,7 +182,7 @@ def configure_student_fee_plans(app, db, Student):
             for line in lines:
                 old=previous.get(line['particular'],{})
                 line.update(discount=old.get('discount',0),arrears=old.get('arrears',0))
-        return render('student_fee_plan_edit.html',refresh=refresh,schedule_revision=f'{configured.id}:{configured.version}' if configured else '',title='Update Fee Plan' if latest else 'Create Fee Plan',s=s,d=details(s),plan=latest,lines=lines,names=names,name=name,origin=f'{latest.id}:{latest.version}' if latest else 'new',today=date.today().isoformat(),total=totals([dict(x,net=x['actual']-x['discount']) for x in lines]))
+        return render('student_fee_plan_edit.html',discount_types=helper['discount_choices'](),refresh=refresh,schedule_revision=f'{configured.id}:{configured.version}' if configured else '',title='Update Fee Plan' if latest else 'Create Fee Plan',s=s,d=details(s),plan=latest,lines=lines,names=names,name=name,origin=f'{latest.id}:{latest.version}' if latest else 'new',today=date.today().isoformat(),total=totals([dict(x,net=x['actual']-x['discount']) for x in lines]))
 
     @bp.get('/<int:sid>')
     def view(sid):

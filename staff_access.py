@@ -11,9 +11,13 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','communication':'Communication requests','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
+PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
+PERMISSIONS['widgets.manage']='Widgets · Manage role visibility'
+PERMISSIONS['parents.codes']='Parents App · View sensitive login codes'
+PERMISSIONS['attendance.self']='My Geo Attendance · self only'
 ACCOUNTS=('Cash in Hand','Cash at Bank','Petty Cash','Accounts Receivable','Fee Receivable','Discounts','Bad Debts')
 ROLES=('Super Admin','Admin','User','Teacher')
 
@@ -35,8 +39,14 @@ def configure_staff_access(app,db,Student,Employee):
     app.extensions['staff_account_model']=Staff
     dummy=generate_password_hash(secrets.token_urlsafe(32))
     def campuses():
+        # GET-only, request-local cache: all grant/source checks share one
+        # campus catalogue read. Mutations always re-read inside their lock.
+        if has_request_context() and request.method=='GET' and hasattr(request,'staff_campus_catalog'):
+            return list(request.staff_campus_catalog)
         table=rm['settings'].__table__
-        return sorted({r[0] for r in db.session.execute(select(table.c.value).where(table.c.category=='campus')).all()})
+        values=sorted({r[0] for r in db.session.execute(select(table.c.value).where(table.c.category=='campus')).all()})
+        if has_request_context() and request.method=='GET':request.staff_campus_catalog=values
+        return values
     def accounts():return sorted(set(ACCOUNTS)|{x[0] for x in db.session.query(ops['receipt'].account).distinct().all()})
     def resolve(sid,version):
         try:row=db.session.get(Staff,sid)
@@ -299,6 +309,45 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('general_tools.'):
+            if ep=='general_tools.app_links':return 'apps.'+('update' if request.method=='POST' else 'view')
+            if ep=='general_tools.permissions':return 'widgets.manage'
+            return 'widgets.'+('export' if request.args.get('export') else 'view')
+        if ep.startswith('parents.'):
+            if ep in ('parents.reveal','parents.qr','parents.link_action'):return 'parents.codes'
+            return 'parents.'+('export' if request.args.get('export') else 'create' if ep=='parents.invitation' else 'update' if request.method=='POST' else 'view')
+        if ep.startswith('ptm.'):
+            return 'ptm.'+('export' if request.args.get('export') else 'update' if ep=='ptm.update' else 'create' if request.method=='POST' else 'view')
+        if ep.startswith('student_extras.'):
+            return 'student_extras.'+('create' if request.method=='POST' else 'view')
+        if ep.startswith('fee_ledger.'):
+            return 'core.'+('update' if request.method=='POST' else 'view')
+        if ep.startswith('daily_snapshots.'):
+            return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('req_posting.'):
+            return 'requisitions.'+('manage' if request.method=='GET' else 'pay' if args.get('kind') in ('issue','reimburse') else 'update')
+        if ep.startswith('requisitions.'):
+            if ep=='requisitions.settings':return 'core.'+('update' if request.method=='POST' else 'view')
+            if ep in ('requisitions.approvals','requisitions.decide'):return 'requisitions.approve'
+            if ep in ('requisitions.issue','requisitions.settle','requisitions.reports'):return 'requisitions.print' if request.args.get('print')=='1' else 'requisitions.manage'
+            if ep=='requisitions.blocked_posting':return 'requisitions.'+('pay' if request.path.endswith('/issue') else 'update')
+            return 'requisitions.'+('create' if ep=='requisitions.mine' and request.method=='POST' else 'update' if ep=='requisitions.cancel' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('finance_partners.'):
+            return 'finance.'+('create' if ep=='finance_partners.edit' and not args.get('rid') else 'update' if ep=='finance_partners.edit' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('finance_audit.'):
+            return 'finance.'+('export' if request.args.get('export') else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('finance_reports.'):
+            return 'finance.'+('delete' if ep=='finance_reports.void' else 'update' if ep=='finance_reports.correct' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('ledger.'):
+            return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('finance.'):
+            return 'finance.'+('print' if ep=='finance.chart' and request.args.get('print')=='1' else 'view' if request.method=='GET' else 'delete' if request.form.get('action')=='delete' else 'create' if ep=='finance.initialize' or not args.get('rid') else 'update')
+        if ep=='attendance_controls.self_attendance':return 'attendance.self'
+        if ep=='whatsapp_settings.command' and request.form.get('operation')=='send':return 'communication.create'
+        if ep.startswith(('whatsapp_settings.','client_subscription.')):
+            return 'core.'+('delete' if request.form.get('action')=='delete-provider' or request.form.get('operation')=='account_remove' else 'update' if request.method=='POST' else 'view')
+        if ep.startswith('attendance_controls.'):
+            return 'core.'+('delete' if ep=='attendance_controls.devices' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
         if ep.startswith('attendance_devices.'):
             area='attendance' if ep in ('attendance_devices.scans','attendance_devices.scanner') else 'core'
             return area+'.'+('export' if request.args.get('export') else 'create' if ep=='attendance_devices.gates' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
@@ -352,13 +401,13 @@ def configure_staff_access(app,db,Student,Employee):
             db.session.refresh(p)
             if not resolve(p.id,session.get('staff_version')) or not grant(p,code):abort(403,'Your access changed. Sign in again.')
         allowed=grant(p,code);g.access_campuses=allowed
-        if (code.split('.')[0] in ('core','access') or (request.blueprint=='certificate_manager' and request.method=='POST')) and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
+        if (code.split('.')[0] in ('core','access','finance') or (request.blueprint=='certificate_manager' and request.method=='POST') or request.endpoint=='whatsapp_settings.command') and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
         if request.values.get('campus') and request.values['campus'] not in allowed:abort(403,'This campus is not granted for this action.')
         if code.endswith(('.pay','.reverse')):
             for key in ('account','discount_account','credit','debit'):
                 value=request.form.get(key)
                 if value and value not in p.data.get('accounts',[]):abort(403,'This cash account is not granted.')
-            raw=request.form.get('paid_date','')
+            raw=request.form.get('day' if request.blueprint=='req_posting' else 'paid_date','')
             if code.endswith('.pay') and not raw:abort(422,'Choose the payment date explicitly.')
             if raw:
                 try:paid=date.fromisoformat(raw)

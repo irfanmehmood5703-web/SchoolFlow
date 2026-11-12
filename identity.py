@@ -1,7 +1,7 @@
 """Institute authentication and per-institute SQLAlchemy database routing.
 
 The control database holds identities only. Workspace queries use a separate
-SQLite file for each institute. No public registration or shared demo credentials.
+database namespace for each institute (SQLite locally; PostgreSQL schemas when configured). No public registration or shared demo credentials.
 """
 import hashlib
 import hmac
@@ -18,6 +18,7 @@ from flask import (Blueprint, abort, g, has_request_context, jsonify, redirect,
                    render_template, request, session, url_for)
 from flask_sqlalchemy.session import Session
 from sqlalchemy import create_engine, event, case, delete
+from sqlalchemy.schema import CreateSchema
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -72,11 +73,17 @@ def configure_identity(app, db):
     app.config.update(PERMANENT_SESSION_LIFETIME=timedelta(hours=8), SESSION_REFRESH_EACH_REQUEST=False)
 
     def tenant_engine(institute_id):
-        root = Path(app.config.get('INSTITUTE_DATABASE_DIR') or Path(app.instance_path) / 'institutes').resolve()
-        root.mkdir(parents=True, exist_ok=True, mode=0o700)
         school = db.session.get(Institute, int(institute_id))
         if school is None or not re.fullmatch(r'[0-9a-f]{32}', school.storage_key):
             raise RuntimeError('Institute storage identity is unavailable.')
+        if db.engine.dialect.name=='postgresql':
+            schema='school_'+school.storage_key
+            key=(id(db.engine),schema)
+            if key not in engines:
+                engines[key]=db.engine.execution_options(schema_translate_map={None:schema})
+            return engines[key]
+        root = Path(app.config.get('INSTITUTE_DATABASE_DIR') or Path(app.instance_path) / 'institutes').resolve()
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Random immutable names prevent reconnecting an old file if control
         # rows are restored/reset and numeric IDs are reused.
         filename = root / f'institute-{school.storage_key}.db'
@@ -106,14 +113,33 @@ def configure_identity(app, db):
         engine = tenant_engine(institute.id)
         # create_all runs only at explicit provisioning / schema upgrade time,
         # never while a visitor chooses an arbitrary institute code.
-        db.metadata.create_all(engine, tables=workspace_tables())
+        # PostgreSQL can atomically create the private schema, profile and
+        # identity in one transaction. Do not leave orphan schemas on failure.
+        connection=db.session.connection() if engine.dialect.name=='postgresql' else None
+        create_workspace(engine,connection)
         Profile=app.extensions.get('institute_setup_models',{}).get('profile')
         if Profile is not None:
-            with engine.begin() as connection:
-                connection.execute(Profile.__table__.insert().values(id=1,data=dict(name=name.strip(),owner_email=email,ui_mode='light',ui_mode_revision=0)))
+            values=dict(id=1,data=dict(name=name.strip(),owner_email=email,ui_mode='light',ui_mode_revision=0))
+            if connection is not None:
+                schema=engine.get_execution_options()['schema_translate_map']
+                try:connection.execution_options(schema_translate_map=schema).execute(Profile.__table__.insert().values(**values))
+                finally:connection.execution_options(schema_translate_map=None)
+            else:
+                with engine.begin() as tenant_connection:tenant_connection.execute(Profile.__table__.insert().values(**values))
         db.session.add(Owner(institute_id=institute.id, email=email, password_hash=generate_password_hash(password)))
         db.session.commit()
         return institute
+
+    def create_workspace(engine,connection=None):
+        schema_map=engine.get_execution_options().get('schema_translate_map')
+        def create(conn):
+            if engine.dialect.name=='postgresql':conn.execute(CreateSchema(schema_map[None],if_not_exists=True))
+            db.metadata.create_all(conn,tables=workspace_tables())
+        if connection is not None:
+            try:create(connection.execution_options(schema_translate_map=schema_map))
+            finally:connection.execution_options(schema_translate_map=None)
+        else:
+            with engine.begin() as conn:create(conn)
 
     def workspace_tables():
         return [t for t in db.metadata.sorted_tables if not t.info.get('identity_control')]
@@ -163,7 +189,7 @@ def configure_identity(app, db):
         db.session.remove()
         if request.url_rule is None:
             return
-        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest') or request.blueprint == 'identity':
+        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card') or request.blueprint in ('identity','parent_portal'):
             return
         if session.get('demo') and app.config.get('PUBLIC_DEMO_ENABLED', True):
             # Demo always uses the original fictional-data database, never a
@@ -193,8 +219,11 @@ def configure_identity(app, db):
             if request.path.startswith('/api/'):
                 return jsonify(error='Institute sign-in required'), 401
             return redirect(url_for('identity.institute'))
-        g.institute_engine = tenant_engine(school.id)
-        g.school_identity = dict(name=school.name, code=school.code, scope=school.storage_key, demo=False, email=owner.email)
+        engine=tenant_engine(school.id)
+        identity=dict(name=school.name,code=school.code,scope=school.storage_key,demo=False,email=owner.email)
+        db.session.remove()
+        g.institute_engine=engine
+        g.school_identity=identity
 
     @app.context_processor
     def identity_context():
@@ -334,12 +363,18 @@ def configure_identity(app, db):
         db.session.commit()
         click.echo('Password updated. Previous sessions have been invalidated.')
 
+    def upgrade_missing_tables():
+        ids=[s.id for s in Institute.query.all()]
+        db.session.remove()
+        for sid in ids:
+            engine=tenant_engine(sid);db.session.remove();create_workspace(engine)
+        db.session.remove()
+
     @app.cli.command('institute-upgrade')
     def upgrade_institutes():
         """Create missing tables in all institute databases; no destructive DDL."""
-        for school in Institute.query.all():
-            db.metadata.create_all(tenant_engine(school.id), tables=workspace_tables())
+        upgrade_missing_tables()
         click.echo('Missing institute tables created. Existing columns require a versioned migration.')
 
-    app.extensions['identity_helpers'] = dict(provision=provision, engine=tenant_engine, workspace_tables=workspace_tables)
+    app.extensions['identity_helpers'] = dict(provision=provision, engine=tenant_engine, workspace_tables=workspace_tables,create_workspace=create_workspace,upgrade_missing_tables=upgrade_missing_tables)
     app.register_blueprint(bp)

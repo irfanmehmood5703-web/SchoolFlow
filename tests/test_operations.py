@@ -29,10 +29,13 @@ class OperationTests(unittest.TestCase):
         data=dict(employee_id=str(self.e.id),basic=1000000,security_return=0,security_payment=0,incentive_per_lecture=0,annual_increment=0,bonus_amount=0,rules=[dict(status='Absent',allowed=0,type='Abs',amount=10000,frequency='Recursive',jump=0,limit=0)])
         data.update(changes);p=self.m['workflow'](kind='salary-plans',status='Approved',data=data);db.session.add(p);db.session.commit();return p
     def test_all_menu_entries_render_and_keep_order(self):
-        self.assertEqual([len([x for _,items in g for x in items]) for g in MENUS.values()],[21,15,22])
+        self.assertEqual([len([x for _,items in g for x in items]) for g in MENUS.values()],[20,15,22,16,9])
         for groups in MENUS.values():
             for _,items in groups:
                 for _,key in items:
+                    # Owner-only Library/Leaves/Feedback use real institute auth
+                    # and are covered by test_general_api, not this demo fixture.
+                    if key.startswith('general-'):continue
                     r=self.client.get('/workspace/'+key,follow_redirects=True)
                     self.assertEqual(r.status_code,200,key)
         self.assertNotIn(b'<aside',self.client.get('/workspace/dashboard').data)

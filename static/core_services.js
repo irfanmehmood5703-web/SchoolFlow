@@ -1,0 +1,1 @@
+(()=>{'use strict';document.querySelectorAll('[data-copy-link]').forEach(button=>button.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(button.dataset.copyLink);button.textContent='Link copied';}catch(e){button.textContent='Copy unavailable; use the download link.';}}));})();

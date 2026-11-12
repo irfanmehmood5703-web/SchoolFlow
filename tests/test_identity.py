@@ -451,6 +451,70 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(self.login('TEST-A').status_code,302)
         self.assertIn(b'PRIVATE-A-',self.client.get(path).data);self.assertIn(b'Private School A closure',self.client.get('/workspace/core/holidays').data)
 
+    def test_discount_type_catalog_is_private_to_each_school(self):
+        self.login('TEST-A');token=self.csrf()
+        response=self.client.post('/workspace/core/fees/discount-types',data={'_csrf':token,'name':'Private School A concession','active':'1','version':'0'})
+        self.assertEqual(response.status_code,302)
+        self.assertIn(b'Private School A concession',self.client.get('/workspace/core/fees/discount-types').data)
+        self.login('TEST-B')
+        self.assertNotIn(b'Private School A concession',self.client.get('/workspace/core/fees/discount-types').data)
+        self.assertEqual(self.client.get('/workspace/core/fees/discount-types?edit=1').status_code,404)
+
+
+    def test_finance_master_records_are_private_to_each_institute(self):
+        self.login('TEST-A');token=self.csrf()
+        response=self.client.post('/workspace/finance/groups/new',data={'_csrf':token,'version':'0','name':'Only School A Finance','account_class':'Assets','active':'1'})
+        self.assertEqual(response.status_code,302)
+        self.assertIn(b'Only School A Finance',self.client.get('/workspace/finance/groups').data)
+        self.login('TEST-B')
+        self.assertNotIn(b'Only School A Finance',self.client.get('/workspace/finance/groups').data)
+        self.assertEqual(self.client.get('/workspace/finance/groups/1').status_code,404)
+
+
+    def test_ledger_entries_and_account_choices_are_school_private(self):
+        self.login('TEST-A');token=self.csrf()
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.a);db.session.remove()
+            M=app.extensions['finance_models'];J=app.extensions['ledger_models'];from datetime import datetime,timezone
+            now=datetime.now(timezone.utc);stamp=dict(created_at=now,updated_at=now,created_by='Owner A',updated_by='Owner A')
+            period=M['period'](begin=date(2026,1,1),end=date(2026,12,31),closed=False,**stamp);group=M['group'](name='Private ledger group',account_class='Assets',active=True,**stamp)
+            db.session.add_all([period,group]);db.session.flush();account=M['account'](code=1000,name='Private ledger cash',group_id=group.id,inactive=False,**stamp);db.session.add(account);db.session.flush()
+            journal=J['journal'](token='private-test-token',fingerprint='private-fingerprint',day=date(2026,11,1),campus='Campus Only School A',kind='journal',period_id=period.id,actor='Owner A',actor_key='owner:1');db.session.add(journal);db.session.flush()
+            db.session.add(J['line'](journal_id=journal.id,account_id=account.id,debit=10000,credit=0,memo='Private ledger memo',snapshot={'code':1000,'name':'Private ledger cash','group':'Private ledger group','group_id':group.id,'account_class':'Assets'}));P=app.extensions['shareholder_model'];db.session.add(P(name='Private partner A',equity_bp=5000,token='private-partner-token',created_key='owner:1',**stamp));db.session.commit();db.session.remove()
+        self.assertIn(b'Private ledger memo',self.client.get('/workspace/finance/ledger/report/ledger?from=2026-11-01&to=2026-11-30').data)
+        for path in ('journals','general','daily?generate=1&'):
+            self.assertIn(b'Private ledger',self.client.get('/workspace/finance/reports/'+path+('&' if '?' in path else '?')+'from=2026-11-01&to=2026-11-30').data)
+        self.assertIn(b'Private ledger cash',self.client.get('/workspace/finance/cash-report?from=2026-11-01&to=2026-11-30').data)
+        self.assertIn(b'Private partner A',self.client.get('/workspace/finance/shareholders').data)
+        self.login('TEST-B')
+        self.assertNotIn(b'Private partner A',self.client.get('/workspace/finance/shareholders').data)
+        self.assertNotIn(b'Private ledger cash',self.client.get('/workspace/finance/cash-report?from=2026-11-01&to=2026-11-30').data)
+        self.assertEqual(self.client.get('/workspace/finance/shareholders/1/edit').status_code,404)
+        self.assertEqual(self.client.get('/workspace/finance/shareholders/1/transactions').status_code,404)
+        self.assertNotIn(b'Private ledger cash',self.client.get('/workspace/finance/ledger/entry/journal').data)
+        self.assertNotIn(b'Private ledger memo',self.client.get('/workspace/finance/ledger/report/ledger?from=2026-11-01&to=2026-11-30').data)
+        self.assertEqual(self.client.get('/workspace/finance/ledger/voucher/1').status_code,404)
+        for path in ('journals','general','daily?generate=1&'):
+            self.assertNotIn(b'Private ledger',self.client.get('/workspace/finance/reports/'+path+('&' if '?' in path else '?')+'from=2026-11-01&to=2026-11-30').data)
+        self.assertEqual(self.client.get('/workspace/finance/reports/journal/1/edit').status_code,404)
+
+
+    def test_snapshot_history_and_requisition_requests_are_school_private(self):
+        import re
+        self.login('TEST-A');token=self.csrf()
+        r=self.client.post('/workspace/finance/requisitions/mine',data=dict(_csrf=token,post_token='FictionalTenantToken01234567890123456789',campus='Campus Only School A',category='Procurement / Supplies',purpose='Private School A request',item=['Private item A'],qty=['1'],unit_price=['10']))
+        self.assertEqual(r.status_code,302,r.data)
+        self.assertEqual(self.client.post('/workspace/finance/snapshots/capture',data={'_csrf':token}).status_code,302)
+        history=self.client.get('/workspace/finance/snapshots');self.assertEqual(history.status_code,200)
+        ids=re.findall(rb'/workspace/finance/snapshots/(\d+)/students',history.data)
+        details=b''.join(self.client.get('/workspace/finance/snapshots/'+i.decode()+'/students').data for i in ids)
+        self.assertIn(b'Only School A',details)
+        self.login('TEST-B')
+        self.assertNotIn(b'Private School A request',self.client.get('/workspace/finance/requisitions/mine').data)
+        self.assertEqual(self.client.get('/workspace/finance/requisitions/1').status_code,404)
+        for i in ids:self.assertEqual(self.client.get('/workspace/finance/snapshots/'+i.decode()+'/students').status_code,404)
+        self.assertNotIn(b'Only School A',self.client.get('/workspace/finance/snapshots').data)
+
 
 if __name__ == '__main__':
     unittest.main()

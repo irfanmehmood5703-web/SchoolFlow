@@ -30,6 +30,85 @@ class StaffAccessTests(unittest.TestCase):
         return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
     def token(self):
         with self.c.session_transaction() as s:return s['record_csrf']
+    def test_widget_sources_and_legacy_visibility_follow_role_and_campus(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'dashboard.view':['Campus A'],'widgets.view':['Campus A'],'admissions.view':['Campus A'],'fees.view':['Campus A'],'finance.view':['Campus A']}}
+        self.tenant(allow);self.login()
+        page=self.c.get('/workspace/general/widgets/report/active-students')
+        self.assertEqual(page.status_code,200);self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        page=self.c.get('/workspace/general/widgets/report/unpaid-amount')
+        self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        self.assertEqual(self.c.get('/workspace/general/widgets/report/income-expenses').status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/widgets/report/active-students?export=xlsx').status_code,403)
+        def hide():
+            Policy=app.extensions['general_tools_models']['policy']
+            db.session.add(Policy(id=1,data={'roles':{'active-students':[]}}))
+        self.tenant(hide)
+        self.assertEqual(self.c.get('/workspace/general/widgets/report/active-students').status_code,403)
+        self.assertNotIn(b'data-general-widget="active-students"',self.c.get('/workspace/general/widgets').data)
+        self.assertNotIn(b'data-dashboard-widget="active"',self.c.get('/workspace/dashboard').data)
+    def test_widget_and_release_configuration_need_distinct_full_scope_grants(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'widgets.view':['Campus A'],'widgets.manage':['Campus A'],'apps.view':['Campus A'],'apps.update':['Campus A']}}
+        self.tenant(allow);self.login()
+        self.assertEqual(self.c.get('/workspace/general/widgets/permissions').status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/app-links').status_code,200)
+        self.assertEqual(self.c.post('/workspace/general/app-links',data={'_csrf':self.token(),'app':'teacher','version_token':'0','url':'','version':'','size':'','notes':''}).status_code,403)
+
+    def test_parent_administration_requires_full_scope_and_sensitive_grant(self):
+        self.login()
+        self.assertEqual(self.c.get('/workspace/general/parents').status_code,403)
+        def partial():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'parents.view':['Campus A']}}
+        self.tenant(partial);self.login()
+        self.assertEqual(self.c.get('/workspace/general/parents').status_code,403)
+        def full():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'parents.view':['Campus A','Campus B']}}
+        self.tenant(full);self.login()
+        self.assertEqual(self.c.get('/workspace/general/parents').status_code,200)
+        self.assertIn(b'needs Parents App',self.c.get('/workspace/general/parents/otp').data)
+        self.assertEqual(self.c.post('/workspace/general/parents/links/1',data={'_csrf':self.token(),'action':'issue'}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/general/parents/otp/unknown/reveal',data={'_csrf':self.token()}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/general/parents?export=xlsx').status_code,403)
+    def test_ptm_campus_grants_and_event_scope(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'ptm.view':['Campus A'],'ptm.create':['Campus A']}}
+            Event=app.extensions['ptm_models']['event']
+            db.session.add(Event(campus='Campus B',title='Other campus event',starts=date(2026,11,7),ends=date(2026,11,8),notes='',token='q'*43))
+        self.tenant(allow);self.login()
+        self.assertNotIn(b'Other campus event',self.c.get('/workspace/general/ptm/events').data)
+        data=dict(_csrf=self.token(),title='Staff event',starts='2026-11-07',ends='2026-11-08',submission='r'*43,campus='')
+        self.assertEqual(self.c.post('/workspace/general/ptm/events',data=data).status_code,403)
+        data['campus']='Campus A'
+        self.assertEqual(self.c.post('/workspace/general/ptm/events',data=data).status_code,302)
+        self.assertEqual(self.c.get('/workspace/general/ptm/reports?export=xlsx').status_code,403)
+
+    def test_student_extras_require_grant_and_restrict_all_campus_posts(self):
+        self.login()
+        self.assertEqual(self.c.get('/workspace/general/notices').status_code,403)
+        def allow():
+            row=db.session.get(self.Staff,self.sid)
+            row.data={**row.data,'permissions':{**row.data['permissions'],'student_extras.view':['Campus A'],'student_extras.create':['Campus A']}}
+            db.session.add(self.rm['settings'](category='class_name',value='One',class_name=''))
+        self.tenant(allow);self.login()
+        self.assertEqual(self.c.get('/workspace/general/notices').status_code,200)
+        data=dict(_csrf=self.token(),submission='a'*43,campus='',title='All school',description='Fictional',starts='2026-11-07',ends='2026-11-07',all_students='1')
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,403)
+        data['campus']='Campus B'
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,403)
+        data['campus']='Campus A'
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,302)
+        def seed():
+            M=app.extensions['student_extras_models'];entry=M['entry'](kind='notices',campus='Campus B',title='Private other campus',body='Hidden',starts=date(2026,11,7),ends=date(2026,11,7),data={'all_students':True},token='b'*43)
+            db.session.add(entry);db.session.flush()
+            f=M['attachment'](entry_id=entry.id,filename='hidden.pdf',mime='application/pdf',content=b'%PDF-1.4');db.session.add(f);db.session.flush();return f.id
+        aid=self.tenant(seed)
+        self.assertNotIn(b'Private other campus',self.c.get('/workspace/general/notices').data)
+        self.assertEqual(self.c.get('/workspace/general/attachments/'+str(aid)).status_code,404)
+        self.login('owner@example.invalid')
+        self.assertIn(b'Private other campus',self.c.get('/workspace/general/notices').data)
+        self.assertEqual(self.c.get('/workspace/general/attachments/'+str(aid)).status_code,200)
+
     def test_staff_username_and_email_login_and_wrong_password(self):
         self.assertEqual(self.login(password='wrong').status_code,200);self.assertEqual(self.login().status_code,302)
         with self.c.session_transaction() as s:self.assertEqual(s['staff_id'],self.sid);self.assertNotIn('owner_id',s)
@@ -45,6 +124,8 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post('/records/student/new',data={'_csrf':token,'name':'Forged'}).status_code,403)
         self.assertEqual(self.c.get('/workspace/core/users').status_code,403)
         self.assertEqual(self.c.get('/workspace/core/institute').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/fee-posting').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/fee-posting',data={'_csrf':token,'enabled':'1','version':'0'}).status_code,403)
         self.assertEqual(self.c.get('/api/v1/summary').status_code,403)
     def test_cash_account_and_payment_date_rules_are_checked_before_payment(self):
         self.login();token=self.token()
@@ -200,3 +281,160 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'logs','size':'25','columns':['summary']}).status_code,302)
         response=self.c.get('/workspace/core/user-logging?export=csv');self.assertEqual(response.status_code,200);self.assertEqual(response.data.decode('utf-8-sig').splitlines()[0],'What happened')
         self.assertEqual(self.c.post('/workspace/core/users/my-grids',data={'_csrf':self.token(),'grid':'logs','size':'25','columns':['password_hash']}).status_code,422)
+
+    def test_finance_requires_separate_all_campus_permissions(self):
+        self.login();self.assertEqual(self.c.get('/workspace/finance/groups').status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+            person=db.session.get(self.Staff,self.sid);data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.view']=['Campus A'];data['permissions']=permissions;person.data=data;db.session.commit();self.version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=self.version
+        self.assertEqual(self.c.get('/workspace/finance/groups').status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+            person=db.session.get(self.Staff,self.sid);data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.view']=['Campus A','Campus B'];data['permissions']=permissions;person.data=data;db.session.commit();self.version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=self.version
+        self.assertEqual(self.c.get('/workspace/finance/groups').status_code,200)
+        self.assertEqual(self.c.post('/workspace/finance/groups/new',data={'_csrf':self.token(),'version':'0','name':'Forbidden','account_class':'Assets','active':'1'}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/chart-of-accounts?print=1').status_code,403)
+
+    def test_closing_or_reopening_finance_period_requires_approval(self):
+        def grant_finance(approval=False):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove()
+                person=db.session.get(self.Staff,self.sid);data=dict(person.data);permissions=dict(data['permissions'])
+                for action in ('view','create','update')+ (('approve',) if approval else ()):
+                    permissions['finance.'+action]=['Campus A','Campus B']
+                data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+        self.login();grant_finance()
+        form=dict(_csrf=self.token(),version='0',begin='2026-01-01',end='2026-12-31',closed='1')
+        self.assertEqual(self.c.post('/workspace/finance/periods/new',data=form).status_code,403)
+        form['closed']='0';response=self.c.post('/workspace/finance/periods/new',data=form);self.assertEqual(response.status_code,302)
+        self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,403)
+        grant_finance(True)
+        self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,302)
+
+    def test_ledger_posting_and_print_do_not_use_student_fee_permissions(self):
+        self.login()
+        self.assertEqual(self.c.get('/workspace/finance/ledger/entry/journal').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token()}).status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/ledger/report/profit?print=1').status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+            data=dict(person.data);permissions=dict(data['permissions']);permissions['finance.create']=['Campus A','Campus B'];data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=version
+        self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)
+
+    def test_finance_reports_require_distinct_view_print_update_delete_grants(self):
+        self.login()
+        for path in ('journals','general','daily'):
+            self.assertEqual(self.c.get('/workspace/finance/reports/'+path).status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/reports/journal/1/edit').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/reports/journal/void',data={'_csrf':self.token()}).status_code,403)
+        def grants(actions):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+                data=dict(person.data);data['permissions']={'finance.'+action:['Campus A','Campus B'] for action in actions};person.data=data;db.session.commit();version=person.version;db.session.remove()
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+        grants(['view'])
+        for path in ('journals','general','daily'):
+            self.assertEqual(self.c.get('/workspace/finance/reports/'+path).status_code,200)
+            self.assertEqual(self.c.get('/workspace/finance/reports/'+path+'?print=1').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/reports/journal/1/edit').status_code,403)
+        grants(['update'])
+        self.assertEqual(self.c.post('/workspace/finance/reports/journal/void',data={'_csrf':self.token()}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/reports/journal/1/edit',data={'_csrf':self.token(),'save_action':'print'}).status_code,403)
+
+    def test_fee_audit_and_void_reports_require_full_finance_scope(self):
+        self.login()
+        paths=('audit/fees','audit/challans/voided','reports/voided','ledger/setup')
+        for path in paths:self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,403)
+        for allowed in (['Campus A'],['Campus A','Campus B']):
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+                person.data={**person.data,'permissions':{'finance.view':allowed}};db.session.commit();version=person.version;db.session.remove()
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+            for path in paths:self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,200 if len(allowed)==2 else 403)
+        self.assertEqual(self.c.get('/workspace/finance/audit/fees?export=csv').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/audit/fees?print=1').status_code,403)
+
+    def test_requisition_posting_requires_manage_action_campus_and_cash_grants(self):
+        from datetime import datetime,timezone
+        import secrets
+        now=datetime.now(timezone.utc);today=app.extensions['ledger_helpers']['today']()
+        def seed():
+            fm=app.extensions['finance_models'];rm=app.extensions['requisition_models'];stamp=dict(created_at=now,updated_at=now,created_by='QA',updated_by='QA')
+            group=fm['group'](name='QA assets',account_class='Assets',active=True,**stamp);db.session.add(group);db.session.flush()
+            for i,name in enumerate(('Cash in Hand','Staff Advances'),1000):db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
+            db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
+            from requisitions import DEFAULTS
+            db.session.flush();cash=fm['account'].query.filter_by(name='Cash in Hand').one();advance=fm['account'].query.filter_by(name='Staff Advances').one()
+            db.session.add(rm['config'](id=1,data={**DEFAULTS,'advance_account':advance.id,'pay_account':cash.id}))
+            for rid,campus in ((1,'Campus A'),(2,'Campus B')):db.session.add(rm['request'](id=rid,number='QA-'+str(rid),campus=campus,actor_key='staff:1',raised_by='QA',category='Procurement / Supplies',purpose='Fictional finance QA',items=[],estimated=2000,approved=2000,status='Approved',token=secrets.token_urlsafe(32),fingerprint='f'))
+            return cash.id
+        cash_id=self.tenant(seed);self.login()
+        path='/workspace/finance/requisitions/1/posting/issue'
+        self.assertEqual(self.c.get(path).status_code,403)
+        def grants(actions,account=True):
+            def save():
+                p=db.session.get(self.Staff,self.sid);p.data={**p.data,'permissions':{'requisitions.'+a:['Campus A'] for a in actions},'accounts':['Cash in Hand'] if account else []};db.session.flush();return p.version
+            version=self.tenant(save)
+            with self.c.session_transaction() as sess:sess['staff_version']=version
+        grants(['manage']);self.assertEqual(self.c.get(path).status_code,200)
+        form=dict(_csrf=self.token(),post_token=secrets.token_urlsafe(32),version='1',day=today.isoformat(),amount='10',account_id=str(cash_id))
+        self.assertEqual(self.c.post(path,data=form).status_code,403)
+        grants(['manage','pay'],False);self.assertEqual(self.c.post(path,data=form).status_code,403)
+        grants(['manage','pay']);self.assertEqual(self.c.get('/workspace/finance/requisitions/2/posting/issue').status_code,404)
+        self.assertEqual(self.c.post(path,data=form).status_code,302)
+        self.assertEqual(self.tenant(lambda:app.extensions['requisition_models']['movement'].query.count()),1)
+        self.assertEqual(self.c.get('/workspace/finance/requisitions/reports?print=1').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/requisitions/1/posting/return',data={**form,'version':'2'}).status_code,403)
+
+    def test_cash_and_shareholders_use_finance_permissions(self):
+        self.login()
+        for path in ('cash-report','shareholders','shareholders/new','shareholders/1/edit','shareholders/1/transactions'):
+            self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/shareholders/new',data={'_csrf':self.token()}).status_code,403)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school);db.session.remove();person=db.session.get(self.Staff,self.sid)
+            data=dict(person.data);data['permissions']={'finance.view':['Campus A','Campus B']};person.data=data;db.session.commit();version=person.version;db.session.remove()
+        with self.c.session_transaction() as sess:sess['staff_version']=version
+        for path in ('cash-report','shareholders'):
+            self.assertEqual(self.c.get('/workspace/finance/'+path).status_code,200)
+            self.assertEqual(self.c.get('/workspace/finance/'+path+'?print=1').status_code,403)
+        self.assertEqual(self.c.get('/workspace/finance/shareholders/new').status_code,403)
+
+    def test_requisitions_my_rows_and_decisions_are_separately_scoped(self):
+        R=app.extensions['requisition_models']['request']
+        def seed():
+            for rid,campus,key,purpose in [(1,'Campus A','staff:'+str(self.sid),'Own A'),(2,'Campus B','staff:'+str(self.sid),'Own B'),(9,'Campus A','owner:1','Other A'),(99,'Campus B','owner:1','Other B')]:
+                db.session.add(R(id=rid,number='REQ-'+str(rid),campus=campus,actor_key=key,raised_by=key,category='Procurement / Supplies',purpose=purpose,items=[{'item':'Test','qty':'1','unit_price':1000,'amount':1000}],estimated=1000,token='fictional-token-'+str(rid),fingerprint='test'))
+            p=db.session.get(self.Staff,self.sid);p.data={**p.data,'permissions':{'requisitions.view':['Campus A'],'requisitions.create':['Campus A']}}
+            db.session.flush();return p.version
+        version=self.tenant(seed);self.login()
+        page=self.c.get('/workspace/finance/requisitions/mine');self.assertEqual(page.status_code,200);self.assertIn(b'Own A',page.data);self.assertNotIn(b'Own B',page.data);self.assertNotIn(b'Other A',page.data)
+        for rid in (2,9):self.assertEqual(self.c.get(f'/workspace/finance/requisitions/{rid}').status_code,404)
+        for endpoint in ('approvals','issue','settle','reports','settings'):
+            self.assertEqual(self.c.get('/workspace/finance/requisitions/'+endpoint).status_code,403)
+        token=self.token();form=dict(_csrf=token,post_token='FictionalToken012345678901234567890123',campus='Campus A',category='Procurement / Supplies',purpose='New A',item=['Paper'],qty=['1'],unit_price=['1'])
+        response=self.c.post('/workspace/finance/requisitions/mine',data=form);self.assertEqual(response.status_code,302);self.assertTrue(response.location.endswith('/100'))
+        form['campus']='Campus B';self.assertEqual(self.c.post('/workspace/finance/requisitions/mine',data=form).status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/requisitions/9/decide',data={'_csrf':token}).status_code,403)
+        def approve_permission():
+            p=db.session.get(self.Staff,self.sid);p.data={**p.data,'permissions':{'requisitions.approve':['Campus A']}};db.session.flush();return p.version
+        version=self.tenant(approve_permission)
+        with self.c.session_transaction() as sess:sess['staff_version']=version
+        page=self.c.get('/workspace/finance/requisitions/approvals');self.assertEqual(page.status_code,200);self.assertIn(b'Other A',page.data);self.assertNotIn(b'Own B',page.data)
+        r=self.c.post('/workspace/finance/requisitions/9/decide',data=dict(_csrf=self.token(),post_token='DecisionToken012345678901234567890123',version='1',decision='Approved',approved='10'));self.assertEqual(r.status_code,302)
+
+    def test_internal_snapshot_capture_is_whole_institute_and_restores_staff_scope(self):
+        def check():
+            p=db.session.get(self.Staff,self.sid);g.staff_principal=p;g.access_campuses={'Campus A'}
+            app.extensions['snapshot_helpers']['capture']()
+            self.assertIs(g.staff_principal,p);self.assertEqual(g.access_campuses,{'Campus A'})
+            g.staff_principal=None;g.access_campuses=None
+            row=app.extensions['snapshot_models']['snapshot'].query.filter_by(campus='Campus B').one()
+            self.assertEqual(row.metrics['strength'],1);self.assertEqual(row.metrics['expected'],10000)
+        self.tenant(check)
+        self.login();self.assertEqual(self.c.get('/workspace/finance/snapshots').status_code,403)
+        self.assertEqual(self.c.post('/workspace/finance/snapshots/capture',data={'_csrf':self.token()}).status_code,403)

@@ -1,5 +1,13 @@
 @page sf-report-table{size:A4 landscape;margin:12mm}
 @media print{
+ body{page:sf-report-table;height:auto;min-height:0}
+ main{min-height:0!important;height:auto!important}
+ .report-print-document .form-card:not(.report-table-output){break-inside:auto}
+ .report-print-document .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+ .report-table-output td,.report-table-output th{padding:4px}
+ .report-table-output td:first-child,.report-table-output td:last-child{white-space:nowrap}
+
+ .fee-sheet-document th:nth-child(-n+6){white-space:nowrap}
  .report-print-document{page:sf-report-table}
  .report-table-output{break-inside:auto!important;padding:0!important;border:0!important;overflow:visible!important}
  .report-table-output table{width:100%;border-collapse:collapse;table-layout:auto;font-size:9px}

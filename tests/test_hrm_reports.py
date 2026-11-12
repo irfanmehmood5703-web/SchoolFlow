@@ -60,3 +60,18 @@ class HrmReportTests(unittest.TestCase):
         self.assertEqual(self.c.get('/workspace/hrm-reports/salary-report?from=bad').status_code,422)
         self.assertEqual(self.c.get('/workspace/hrm-reports/salary-report?from=2026-10&to=2026-09').status_code,422)
         self.assertEqual(self.c.get('/workspace/hrm-reports/salary/9999').status_code,404)
+
+    def test_lecture_delivery_filters_approvals_and_captured_salary_guard(self):
+        self.lecture_setup();path='/workspace/hrm-reports/lecture-delivery?from=2026-09-01&to=2026-09-30'
+        page=self.c.get(path);self.assertEqual(page.status_code,200);self.assertIn(b'Fictional HRM Teacher',page.data);self.assertIn(b'Add lectures',page.data)
+        self.assertIn(b'3,,Approved',self.c.get(path+'&export=csv').data)
+        self.assertNotIn(b'Fictional HRM Teacher</td>',self.c.get(path+'&subject=Other').data)
+        self.assertEqual(self.c.post('/workspace/register/lecture-register',data={'_csrf':self.csrf,'action':'reject','ids':str(self.entry.id)}).status_code,302)
+        self.assertEqual(self.entry.status,'Rejected')
+        self.assertEqual(self.c.post('/workspace/register/lecture-register',data={'_csrf':self.csrf,'action':'approve','ids':str(self.entry.id)}).status_code,302)
+        self.assertEqual(self.generate().status_code,302)
+        for action in ['approve','reject','delete']:
+            self.assertEqual(self.c.post('/workspace/register/lecture-register',data={'_csrf':self.csrf,'action':action,'ids':str(self.entry.id)}).status_code,422)
+        self.assertEqual(self.entry.status,'Approved');self.assertIn(b'/workspace/hrm-reports/salary/',self.c.get(path).data)
+        for q in ['from=bad','from=2026-09-01&to=2026-09-30&status=Invalid','from=2026-09-01&to=2026-09-30&employee_id=999']:
+            self.assertEqual(self.c.get('/workspace/hrm-reports/lecture-delivery?'+q).status_code,422)

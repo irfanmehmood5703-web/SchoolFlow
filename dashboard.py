@@ -82,15 +82,20 @@ def configure_dashboard(app, db):
         today=date.today()
         catalog['attendance']['link']+=f'?from={today}&to={today}'
         catalog['staff']['link']+=f'?from={today.replace(day=1)}&to={today}'
+        access=app.extensions.get('general_tools_helpers')
+        visible=access['allowed']() if access else None
+        if visible is not None:
+            catalog={k:v for k,v in catalog.items() if access['legacy'].get(k) in visible}
+        quick=set(('active','collected','attendance','employees')) if visible is None else {k for k in ('active','collected','attendance','employees') if access['legacy'].get(k) in visible}
         selected = [catalog[k] for k in layout['widgets'] if k in catalog]
-        ordered = selected+[catalog[k] for k in KEYS if k not in layout['widgets']]
+        ordered = selected+[catalog[k] for k in KEYS if k in catalog and k not in layout['widgets']]
         scope = (getattr(g,'school_identity',None) or {}).get('scope','demo')
         scope += ':'+str(session.get('owner_id','demo'))
         stats=app.extensions['operation_helpers']['dashboard']()
         if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
         return render_template('dashboard.html',title='Dashboard',stats=stats,
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
-                               personal=owner_key() is not None,groups=list(dict.fromkeys(w[1] for w in WIDGETS)))
+                               personal=owner_key() is not None,legacy_quick=quick,groups=list(dict.fromkeys(w[1] for w in WIDGETS)))
 
     @bp.route('/pending')
     def pending():

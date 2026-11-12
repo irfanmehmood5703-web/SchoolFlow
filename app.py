@@ -10,7 +10,7 @@ from identity import InstituteSession, configure_identity
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.getenv('SECRET_KEY') or secrets.token_hex(32),
-    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL','sqlite:///schoolflow.db').replace('postgres://','postgresql://',1),
+    SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL','sqlite:///schoolflow.db').replace('postgres://','postgresql+psycopg2://',1).replace('postgresql://','postgresql+psycopg2://',1),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SCHOOLFLOW_API_TOKEN=os.getenv('SCHOOLFLOW_API_TOKEN'),
     SESSION_COOKIE_HTTPONLY=True,
@@ -19,6 +19,10 @@ app.config.update(
     PUBLIC_DEMO_ENABLED=os.getenv('PUBLIC_DEMO_ENABLED', '1') == '1',
     INSTITUTE_DATABASE_DIR=os.getenv('INSTITUTE_DATABASE_DIR'),
 )
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS']=dict(pool_pre_ping=True,pool_size=3,max_overflow=2,pool_recycle=300,connect_args={'connect_timeout':10})
+if os.getenv('SCHOOLFLOW_REQUIRE_POSTGRES')=='1' and not app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
+    raise RuntimeError('Persistent mode requires PostgreSQL; refusing an ephemeral SQLite fallback.')
 from performance import configure_performance
 configure_performance(app)
 db=SQLAlchemy(app, session_options={'class_': InstituteSession})
@@ -118,6 +122,38 @@ from staff_access import configure_staff_access
 configure_staff_access(app,db,Student,Employee)
 from attendance_devices import configure_attendance_devices
 configure_attendance_devices(app,db,Student,Employee)
+from attendance_controls import configure_attendance_controls
+configure_attendance_controls(app,db,Student,Employee)
+from whatsapp_settings import configure_whatsapp
+configure_whatsapp(app,db)
+from client_subscription import configure_client_subscription
+configure_client_subscription(app,db)
+
+from finance_setup import configure_finance
+configure_finance(app,db)
+from finance_ledger import configure_ledger
+configure_ledger(app,db)
+from finance_reports import configure_finance_reports
+configure_finance_reports(app,db)
+from finance_audit import configure_finance_audit
+configure_finance_audit(app,db,Student)
+from finance_partners import configure_finance_partners
+configure_finance_partners(app,db)
+from requisitions import configure_requisitions
+configure_requisitions(app,db)
+from fee_ledger import configure_fee_ledger
+configure_fee_ledger(app,db,Student)
+from daily_snapshots import configure_daily_snapshots
+configure_daily_snapshots(app,db,Student)
+
+from student_extras import configure_student_extras
+configure_student_extras(app,db,Student)
+from ptm import configure_ptm
+configure_ptm(app,db,Student,Employee)
+from parents import configure_parents
+configure_parents(app,db,Student)
+from general_tools import configure_general_tools
+configure_general_tools(app,db,Student,Employee)
 
 # General module API: tenant isolation is provided by identity.py; staff access
 # remains default-deny until the General permissions UI is implemented.
@@ -180,6 +216,9 @@ def headers(response):
 
 with app.app_context():
     db.create_all()
+    # Release-time additive table creation also upgrades existing institutes.
+    # No schema work is performed while visitors select an institute code.
+    app.extensions['identity_helpers']['upgrade_missing_tables']()
 
 if 'gunicorn' in os.path.basename(sys.argv[0]):
     app.extensions['fine_automation_helpers']['start_worker']()

@@ -186,7 +186,7 @@ def configure_operations(app, db, Student, Employee):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
         db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context))))
     def render(name, **kw):
-        return render_template(name, choices=choices, today=date.today().isoformat(), statuses=STATUSES, **kw)
+        return render_template(name, choices=choices, today=date.today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
     @app.context_processor
     def nav_context(): return dict(module_menus=MENUS, menu_url=menu_url, build_label='Pre-test • fictional records only')
@@ -196,6 +196,7 @@ def configure_operations(app, db, Student, Employee):
         if request.method=='POST':
             token=request.form.get('_csrf','')
             if not token or not hmac.compare_digest(token,session.get('record_csrf','')): abort(400,'Form session expired. Reload the page.')
+            if request.endpoint in ('ops.pay','ops.batch_payment','ops.reverse_receipts'):app.extensions['admission_capacity']['lock']()
 
     @bp.errorhandler(ValueError)
     def invalid(exc):
@@ -203,15 +204,35 @@ def configure_operations(app, db, Student, Employee):
         return render('operation_error.html',title='Please check this operation',error=str(exc)),422
 
     def menu_url(key):
+        if key in ('general-library','general-leaves','general-feedback'):return url_for('general_portal.index',section=key.removeprefix('general-'))
+        if key in ('app-links','widgets'):return url_for('general_tools.app_links' if key=='app-links' else 'general_tools.widgets')
+        if key=='parents-app':return url_for('parents.analytics')
+        if key=='ptm-events':return url_for('ptm.events')
+        if key in ('student-notices','student-diary'):return url_for('student_extras.index',kind='notices' if key=='student-notices' else 'diary')
+        if key=='finance-fee-audit':return url_for('finance_audit.fees')
+        if key=='finance-voided-challans':return url_for('finance_audit.challans')
+        if key=='finance-voided':return url_for('finance_reports.general').replace('/general','/voided')
+        if key=='finance-snapshots':return url_for('daily_snapshots.index')
+        if key.startswith('req-'):return url_for('requisitions.'+key.removeprefix('req-'))
+        if key.startswith('ledger-'):
+            mode=key.removeprefix('ledger-')
+            return url_for('ledger.entry',kind=mode) if mode in ('journal','expense','income') else url_for('ledger.report',mode='ledger' if mode=='home' else mode)
+        if key in ('finance-cash','finance-shareholders'):
+            return url_for('finance_partners.cash' if key=='finance-cash' else 'finance_partners.partners')
+        if key in ('finance-journal-inquiry','finance-general-ledger','finance-daily-profit'):
+            return url_for('finance_reports.'+{'finance-journal-inquiry':'journals','finance-general-ledger':'general','finance-daily-profit':'daily'}[key])
+        if key.startswith('finance-'):
+            return url_for('finance.chart') if key=='finance-chart' else url_for('finance.index',kind=key.removeprefix('finance-'))
         if key in ('students','employees'): return url_for('records.record_list',kind='student' if key=='students' else 'employee')
         if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return url_for('ops.fees',mode=key)
         if key=='certificates': return url_for('certificates.index')
         if key=='fee-plans': return url_for('student_plans.index')
         if key=='payment-history': return url_for('ops.history')
-        if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'): return url_for('reports.fees',view=key)
+        if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder','fee-sheet'): return url_for('reports.fees',view=key)
         if key in ('student-attendance','staff-attendance'): return url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student')
         if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return url_for('reports.attendance',view=key)
         if key in ('salary-plans','update-salary'): return url_for('ops.plans')
+        if key=='lecture-delivery': return url_for('hrm_reports.lecture_delivery')
         if key in ('salary-report','lecture-report'): return url_for('hrm_reports.report',view=key)
         if key in ('generate-salary','pay-salary'): return url_for('ops.payroll',view=key)
         if key in ('date-sheets','awards'): return url_for('ops.examination',kind=key)
@@ -247,6 +268,9 @@ def configure_operations(app, db, Student, Employee):
                 if kind not in ('increments','advances','leave-approvals','lecture-register'): raise ValueError('This record type does not use approval actions.')
                 rows=Workflow.query.filter(Workflow.id.in_(selected()),Workflow.kind==kind).with_for_update().all()
                 if not rows: raise ValueError('Select at least one record.')
+                if kind=='lecture-register':
+                    used={line['id'] for salary in Salary.query.all() for line in salary.detail.get('lecture_details',[])}
+                    if any(x.id in used for x in rows):raise ValueError('A selected lecture is already captured in a salary. Its source cannot be changed.')
                 if kind=='increments' and action in ('reject','delete'):
                     used={row['id'] for salary in Salary.query.all() for row in salary.detail.get('manual_increments',[])}
                     if any(x.id in used for x in rows):raise ValueError('A selected increment is already captured in a salary. Its saved source cannot be cancelled.')
@@ -368,7 +392,8 @@ def configure_operations(app, db, Student, Employee):
                 before=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)
                 b.paid+=amount;b.discount+=discount
                 changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)))
-                db.session.add(Receipt(student_id=s.id,bill_id=b.id,amount=amount,discount=discount,day=paid_day,account=account,discount_account=request.form.get('discount_account','Discounts'),notes=request.form.get('notes','')[:5000],token=token+':'+str(b.id)))
+                receipt=Receipt(student_id=s.id,bill_id=b.id,amount=amount,discount=discount,day=paid_day,account=account,discount_account=request.form.get('discount_account','Discounts'),notes=request.form.get('notes','')[:5000],token=token+':'+str(b.id));db.session.add(receipt)
+                app.extensions['fee_ledger_helpers']['post'](receipt)
                 count+=1
             if not count: raise ValueError('Enter a payment or discount amount.')
             if request.form.get('action')=='send': queue('Fee receipt',[s.id])
@@ -405,6 +430,7 @@ def configure_operations(app, db, Student, Employee):
             b=db.session.execute(db.select(Bill).where(Bill.id==r.bill_id).with_for_update()).scalar_one()
             if b.frozen: raise ValueError('Unfreeze challan before reversing its receipt.')
             before=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)
+            app.extensions['fee_ledger_helpers']['reverse'](r)
             b.paid-=r.amount;b.discount-=r.discount;r.voided=True
             changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)))
         audit('Reverse receipts',ids=[r.id for r in rows],changes=changes);commit();return redirect(url_for('ops.fees',mode='paid-challans'))
@@ -454,8 +480,8 @@ def configure_operations(app, db, Student, Employee):
             for p in objs:
                 status=request.form.get('status_'+str(p.id))
                 if not status: continue
-                if status not in STATUSES or status=='Sandwich Leave': raise ValueError('Invalid or disabled attendance status.')
                 row=Daily.query.filter_by(kind=kind,person_id=p.id,day=d).first()
+                if status not in STATUSES or not app.extensions['attendance_control_helpers']['allowed'](kind,status,row.status if row else None): raise ValueError('Invalid or disabled attendance status.')
                 if not row: row=Daily(kind=kind,person_id=p.id,day=d);db.session.add(row)
                 row.status=status
                 app.extensions.get('attendance_device_helpers',{}).get('manual_write',lambda r:None)(row)
@@ -898,7 +924,8 @@ def configure_operations(app, db, Student, Employee):
                 if not value: continue
                 if b.frozen or value>b.remaining: raise ValueError('Unfreeze challans and enter amounts no greater than the balance.')
                 before=dict(paid_paisa=b.paid,remaining_paisa=b.remaining)
-                b.paid+=value;changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,remaining_paisa=b.remaining)));db.session.add(Receipt(student_id=b.student_id,bill_id=b.id,amount=value,discount=0,day=d,account=account,token=token+':'+str(b.id)));saved.append(b.student_id)
+                b.paid+=value;changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,remaining_paisa=b.remaining)));receipt=Receipt(student_id=b.student_id,bill_id=b.id,amount=value,discount=0,day=d,account=account,token=token+':'+str(b.id));db.session.add(receipt)
+                app.extensions['fee_ledger_helpers']['post'](receipt);saved.append(b.student_id)
             if not saved: raise ValueError('Enter at least one payment amount.')
             if request.form.get('action')=='send': queue('Fee receipt',list(set(saved)))
             audit('Family payment' if family_mode else 'Direct payment',students=saved,changes=changes);commit();flash('Payments saved.','success');return redirect(url_for('ops.history'))
@@ -923,7 +950,7 @@ def configure_operations(app, db, Student, Employee):
         return render('legacy_data.html',title='Starter Attendance / Exam Records',attendance=Attendance.query.order_by(Attendance.id.desc()).all(),results=ExamResult.query.order_by(ExamResult.id.desc()).all())
 
     @bp.route('/readiness')
-    def readiness(): return render('readiness.html',title='Pre-test Build Status')
+    def readiness(): return render('readiness.html',title='Pre-test Build Status',storage_backend=db.engine.dialect.name)
 
     def dashboard_data():
         # Keep request work independent of pupil/score count: no per-row ORM
@@ -960,11 +987,14 @@ def configure_operations(app, db, Student, Employee):
                     pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months)
 
     @bp.route('/dashboard')
-    def dashboard(): return app.extensions['dashboard_render']()
+    def dashboard():
+        target=app.extensions.get('general_tools_helpers',{}).get('default_url',lambda:None)()
+        if target:return redirect(target)
+        return app.extensions['dashboard_render']()
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-pretest-v31')
+        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-general-v34')
 
     @app.route('/api/v1/summary')
     def summary_api():
