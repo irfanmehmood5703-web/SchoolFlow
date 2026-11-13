@@ -28,10 +28,10 @@ def prepare(data,logo=b''):
         font=next((ImageFont.truetype(str(path),160) for path in fonts if path.exists()),ImageFont.load_default(size=160))
         box=draw.textbbox((0,0),initials,font=font);draw.text(((512-(box[2]-box[0]))/2-box[0],(512-(box[3]-box[1]))/2-box[1]),initials,font=font,fill='white')
     # Place the complete logo inside the adaptive icon's safe central region.
-    foreground=Image.new('RGBA',(432,432),(255,255,255,0));fitted=ImageOps.contain(image,(248,248),Image.Resampling.LANCZOS);foreground.alpha_composite(fitted,((432-fitted.width)//2,(432-fitted.height)//2))
+    foreground=Image.new('RGBA',(432,432),(255,255,255,0));fitted=ImageOps.contain(image,(184,184),Image.Resampling.LANCZOS);foreground.alpha_composite(fitted,((432-fitted.width)//2,(432-fitted.height)//2))
     (target/'drawable').mkdir();foreground.save(target/'drawable'/'school_icon_foreground.png')
     for density,size in [('mdpi',48),('hdpi',72),('xhdpi',96),('xxhdpi',144),('xxxhdpi',192)]:
-        folder=target/('mipmap-'+density);folder.mkdir();canvas=Image.new('RGBA',(size,size),'white');fit=ImageOps.contain(image,(round(size*.72),round(size*.72)),Image.Resampling.LANCZOS);canvas.alpha_composite(fit,((size-fit.width)//2,(size-fit.height)//2));canvas.save(folder/'school_launcher.png')
+        folder=target/('mipmap-'+density);folder.mkdir();canvas=Image.new('RGBA',(size,size),'white');fit=ImageOps.contain(image,(round(size*.66),round(size*.66)),Image.Resampling.LANCZOS);canvas.alpha_composite(fit,((size-fit.width)//2,(size-fit.height)//2));canvas.save(folder/'school_launcher.png')
     folder=target/'mipmap-anydpi-v26';folder.mkdir();(folder/'school_launcher.xml').write_text('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@android:color/white"/><foreground android:drawable="@drawable/school_icon_foreground"/></adaptive-icon>')
     return target
 

@@ -10,6 +10,7 @@ import jwt
 
 def verify():
     with tempfile.TemporaryDirectory(prefix='school-app-check-') as tmp:
+        os.environ['SCHOOLFLOW_FIXTURE_BUILD']='1'
         os.environ['DATABASE_URL']='sqlite:///'+str(Path(tmp)/'control.db');os.environ['INSTITUTE_DATABASE_DIR']=str(Path(tmp)/'schools');os.environ['SCHOOLFLOW_FINE_WORKER']='0'
         from app import app,db
         import app_builder_auth

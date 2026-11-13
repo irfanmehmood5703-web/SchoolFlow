@@ -36,7 +36,12 @@ def inspect_apks(branding,source_sha):
         certificate=subprocess.check_output([str(signer),'verify','--print-certs',str(path)],text=True)
         fingerprint=re.search(r'Signer #1 certificate SHA-256 digest: ([0-9a-f]+)',certificate)
         expected='com.schoolflow.schools.s'+branding['school_key']+'.'+role+'.test'
-        if not package or package[1]!=expected or int(package[2])!=branding['sequence'] or not label or label[1]!=branding['name']+' '+title or not fingerprint:raise RuntimeError('APK does not match the requested school')
+        observed=dict(package=package[1] if package else None,version=int(package[2]) if package else None,label=label[1] if label else None,certificate_found=bool(fingerprint))
+        if os.environ.get('SCHOOLFLOW_FIXTURE_BUILD')=='1':print('Fictional APK verification:',observed,flush=True)
+        if not package or package[1]!=expected:raise RuntimeError('APK package does not match its school')
+        if int(package[2])!=branding['sequence']:raise RuntimeError('APK version does not match its school build')
+        if not label or label[1]!=branding['name']+' '+title:raise RuntimeError('APK launcher name does not match its school')
+        if not fingerprint:raise RuntimeError('APK signing certificate could not be verified')
         blob=path.read_bytes();artifacts.append(dict(role=role,package=package[1],label=label[1],version_code=int(package[2]),signing_sha256=fingerprint[1],sha256=hashlib.sha256(blob).hexdigest(),content=base64.b64encode(blob).decode()))
     return dict(source_sha=source_sha,artifacts=artifacts)
 
