@@ -52,3 +52,17 @@ APK queue checks and a separate-process school/student persistence check. The
 identity seed fixture now uses generated student IDs so PostgreSQL sequences
 remain valid when import tests add new pupils. Fourteen operations tests passed
 after health checks were extended to include the configured private store.
+
+
+Activation completed on 2026-11-13 after the software owner explicitly approved
+the new private-account database and setup settings. Original Render service
+srv-dbi3dqks728c73c7snv0 is live at deploy dep-dbre1qtbedkc73dbbo6g.
+IDENTITY_DATABASE_URL now selects the separate schoolflow_private_accounts
+database; DATABASE_URL was not changed. The central-owner, institute and APK
+signing tables were confirmed in PostgreSQL. The public vendor setup form is
+enabled; owner credentials remain for the software owner to choose.
+VENDOR_SETUP_HASH, SCHOOLFLOW_SESSION_KEY and SCHOOL_APP_SIGNING_KEY are
+configured in the service, without values in source. Do not regenerate or
+replace these settings during later continuation work. Once used, the private
+setup code cannot create another central owner. The private handover file is
+SchoolFlow-Owner-Setup.txt; it must never be committed.
