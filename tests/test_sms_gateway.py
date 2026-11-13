@@ -46,6 +46,7 @@ class SmsGatewayTests(unittest.TestCase):
         self.assertFalse(self.call('result',body).json['replayed'])
         self.assertTrue(self.call('result',body).json['replayed'])
         self.assertEqual(self.call('result',{**body,'state':'failed'}).status_code,409)
+        self.assertEqual(self.call('start',{'id':job['id'],'token':'غلط'}).status_code,403)
     def test_expired_pre_dispatch_claim_can_be_reclaimed_but_started_cannot(self):
         job=self.claim()
         with app.test_request_context('/'):

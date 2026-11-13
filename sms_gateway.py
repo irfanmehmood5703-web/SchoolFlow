@@ -109,6 +109,8 @@ def configure_sms_gateway(app,db,Student):
         if request.method=='POST':
             csrf()
             if not device or not items or request.form.get('confirm')!='yes':raise ValueError('Preview the recipients and confirm the school SIM cost.')
+            db.session.refresh(device)
+            if not device.active:raise ValueError('This SMS phone was suspended. Reload before releasing messages.')
             # Re-evaluate only under the tenant write gate. Source is unique, so
             # a repeated release does not send the same request a second time.
             for item in candidates(row,device):
@@ -150,8 +152,10 @@ def configure_sms_gateway(app,db,Student):
             if job:job.state='claimed';job.token=secrets.token_urlsafe(32);job.expires=stamp+300;job.updated=stamp
         db.session.commit();return jsonify(job=serialize(job) if job else None)
     def owned(device,payload):
-        job=db.get_or_404(Job,str(payload.get('id','')))
-        if job.device_id!=device.id or job.generation!=device.generation or not job.token or not hmac.compare_digest(str(payload.get('token','')),job.token):abort(403)
+        jid=payload.get('id','');token=payload.get('token','')
+        if not isinstance(jid,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',jid) or not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):abort(403)
+        job=db.get_or_404(Job,jid)
+        if job.device_id!=device.id or job.generation!=device.generation or not job.token or not hmac.compare_digest(token,job.token):abort(403)
         return job
     @bp.post('/api/sms/devices/<int:did>/start')
     def start(did):

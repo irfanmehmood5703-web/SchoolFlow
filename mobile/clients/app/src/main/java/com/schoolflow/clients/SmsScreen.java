@@ -13,7 +13,7 @@ import java.util.*;
 import java.util.concurrent.*;
 final class SmsScreen {
  private final Activity a;private final Vault vault;private final ExecutorService io=Executors.newSingleThreadExecutor();
- private JSONObject config=new JSONObject();private JSONObject job;private TextView status,preview;private EditText code,id,key;private Spinner sims;private Button connect,fetch,send,report;private boolean busy=false,awaiting=false;private BroadcastReceiver receiver;private int completed,expected;private boolean failed;
+ private JSONObject config=new JSONObject();private JSONObject job;private TextView status,preview;private EditText code,id,key;private Spinner sims;private Button connect,fetch,send,report;private boolean busy=false,awaiting=false,active=true;private BroadcastReceiver receiver;private int completed,expected;private boolean failed;
  private final ArrayList<Integer> subscriptionIds=new ArrayList<>();
  SmsScreen(Activity activity){a=activity;vault=new Vault(a);}
  void show(){
@@ -54,6 +54,7 @@ final class SmsScreen {
   a.runOnUiThread(()->sendParts(manager,parts));return "Submitting to the phone network. Do not retry this message.";
  });}
  @SuppressWarnings("MissingPermission") private void sendParts(SmsManager manager,ArrayList<String> parts){
+  if(!active||a.isFinishing()||a.isDestroyed()){status.setText("Send paused. Review the uncertain outbox entry; no automatic resend.");return;}
   awaiting=true;controls();
   String action=a.getPackageName()+".SENT."+UUID.randomUUID();completed=0;expected=parts.size();failed=false;
   final java.util.Set<Integer> seenParts=new java.util.HashSet<>();
@@ -65,5 +66,6 @@ final class SmsScreen {
  private void finishResult(String outcome){awaiting=false;try{config.put("outcome",outcome);vault.save(config.toString());status.setText("Phone result: "+outcome+". Upload result to the school outbox; this will not resend.");controls();}catch(Exception e){status.setText("Result could not be saved. Review phone SMS history; do not resend.");}}
  private void report(){if(job==null||!config.has("outcome"))return;task(()->{JSONObject body=reference().put("state",config.getString("outcome")).put("detail","Android SIM submission; recipient delivery not verified");call("result",body);config.remove("job");config.remove("stage");config.remove("outcome");vault.save(config.toString());job=null;a.runOnUiThread(()->preview.setText(""));return "Result saved. This message will not be resent.";});}
  private void unregister(){if(receiver!=null){try{a.unregisterReceiver(receiver);}catch(Exception ignored){}receiver=null;}}
- void destroy(){unregister();io.shutdownNow();}
+ void pause(){active=false;}void resume(){active=true;}
+ void destroy(){active=false;unregister();io.shutdownNow();}
 }
