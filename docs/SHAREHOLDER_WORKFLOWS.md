@@ -63,3 +63,16 @@ exact retry/changed-payload refusal, append-only reversals, partner mismatch,
 private-school persistence/isolation, staff grants/account/two-step restrictions,
 CSV safety and profile history. Full regression and hosted deployment results
 are recorded after completion. No real-school transaction or SMS was sent.
+
+
+Verification completed: 682 local backend tests passed (241.144 seconds),
+including eleven new shareholder accounting/isolation/staff checks. PostgreSQL
+workflow 43452004467 passed its complete private-account/identity/APK queue
+suite, the eleven shareholder checks (including actual private-schema capital
+posting and fresh sign-in), and the separate-process retained-data check.
+Original Render service srv-dbi3dqks728c73c7snv0 is live at source
+8513af1b349be6ce0b9bac104fc5c552f0b3015b, deploy dep-dbrinnpsrm7s73e412v0.
+Live health returned HTTP200 and both new anonymous shareholder routes
+redirected to institute sign-in. No real shareholder or financial posting was
+created for the hosted smoke check. Physical-phone/PDF visual checks were not
+performed in this pass.
