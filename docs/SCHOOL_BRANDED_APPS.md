@@ -99,3 +99,12 @@ is explicitly allowed alongside the exact legacy subject; no wildcard subject
 is accepted. Other repository/workflow/ref/signature checks remain required.
 The first live authorization check revealed this format difference; synthetic
 legacy-subject checks alone were not evidence of a working hosted connection.
+
+
+Hosted verification on 2026-11-13: main run 43374186884 recompiled all twelve
+fictional school APKs successfully, then authenticated the real central worker
+against the original live Render service. The worker returned “No pending school
+app builds.” No real school build was queued for this check. Render deploy
+dep-dbra8am7bikc73eo1n2g is live at source 9b2f27a. The live health endpoint and
+shared-demo App Links returned HTTP 200; anonymous builder access returned 401.
+Physical Android installation and durable storage migration remain outstanding.
