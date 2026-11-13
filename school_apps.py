@@ -119,13 +119,16 @@ def configure_school_apps(app,db):
         latest_build=Build.query.filter_by(school_key=school.storage_key).order_by(Build.sequence.desc()).first()
         existing=latest_build if latest_build and latest_build.fingerprint==fingerprint else None
         if existing:
-            if existing.state=='failed' and existing.attempts<3:existing.state='queued';existing.error='';existing.worker='';existing.lease_until=0
+            if existing.state=='failed' and existing.attempts>=3:raise ValueError('This school build failed three times. The central software owner must review it before another attempt.')
+            if existing.state=='failed':existing.state='queued';existing.error='';existing.worker='';existing.lease_until=0
         else:
             recent=Build.query.filter(Build.school_key==school.storage_key,Build.created>time.time()-86400).count()
             if recent>=3:raise ValueError('Three school app builds were already requested today. Use the existing build or try tomorrow.')
             latest=db.session.query(db.func.max(Build.sequence)).filter(Build.school_key==school.storage_key).scalar() or 0
             db.session.add(Build(school_key=school.storage_key,fingerprint=fingerprint,sequence=latest+1,spec=spec,logo=logo))
-        db.session.commit();flash('School apps queued. The central builder checks about every 15 minutes; a first build takes additional time. Refresh this page to check progress.','success')
+        db.session.commit()
+        notice='School apps are already ready. Use the download buttons below.' if existing and existing.state=='ready' else 'School apps queued or building. The central builder checks about every 15 minutes; a first build takes additional time. Refresh this page to check progress.'
+        flash(notice,'success')
         return redirect(url_for('general_tools.app_links'))
     @bp.get('/workspace/general/school-apps/status')
     def status():
