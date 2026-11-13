@@ -59,6 +59,9 @@ heartbeat was refused with HTTP401. No live recipient was queued or messaged.
 The original host's Build Status explicitly reported SQLite development storage.
 Persistent database migration is pending confirmation of whether the original
 host contains real school records, so those records can be backed up/preserved.
-No storage URL was replaced and no data was erased in this task. The original
-service remains on its existing free plan. This outstanding data-protection
+No storage URL change or explicit SQL DELETE/DROP was performed. Preservation
+of temporary SQLite files across hosting redeployments was not verified;
+existing host records may already have reset. A verified backup is required
+before migrating any real school data. The original service remains on its
+existing free plan. This outstanding data-protection
 issue prevents treating the system as production-ready.
