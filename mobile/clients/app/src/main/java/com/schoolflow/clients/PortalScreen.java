@@ -36,7 +36,7 @@ final class PortalScreen {
    @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(files!=null)files.onReceiveValue(null);files=callback;try{a.startActivityForResult(params.createIntent(),41);}catch(ActivityNotFoundException e){files.onReceiveValue(null);files=null;status.setText("No file chooser installed.");}return true;}
    @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
   });
-  web.setDownloadListener((url,agent,disposition,mime,length)->{if(!EndpointPolicy.allowed(url))return;downloadUrl=url;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime==null?"application/octet-stream":mime).putExtra(Intent.EXTRA_TITLE,"SchoolFlow-export"+(mime!=null&&mime.contains("pdf")?".pdf":mime!=null&&mime.contains("spreadsheet")?".xlsx":".csv"));try{a.startActivityForResult(i,42);}catch(ActivityNotFoundException e){status.setText("File saving is unavailable on this phone.");}});
+  web.setDownloadListener((url,agent,disposition,mime,length)->{if(!EndpointPolicy.allowed(url))return;downloadUrl=url;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime==null?"application/octet-stream":mime).putExtra(Intent.EXTRA_TITLE,URLUtil.guessFileName(url,disposition,mime));try{a.startActivityForResult(i,42);}catch(ActivityNotFoundException e){status.setText("File saving is unavailable on this phone.");}});
   if(state==null||web.restoreState(state)==null)web.loadUrl(startUrl());
  }
  void result(int code,int result,Intent data){if(code==41&&files!=null){files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));files=null;}

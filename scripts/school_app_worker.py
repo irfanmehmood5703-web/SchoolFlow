@@ -1,5 +1,6 @@
 """Trusted central builder. Never prints tokens, passwords, keys or school records."""
-import argparse,base64,hashlib,importlib.util,json,os,re,shutil,subprocess,tempfile,time,urllib.request,urllib.parse
+import argparse,base64,hashlib,importlib.util,io,json,os,re,shutil,subprocess,tempfile,time,urllib.request,urllib.parse,zipfile
+from PIL import Image
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -26,6 +27,15 @@ def make_key(path,password):
     env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password}
     subprocess.run(['keytool','-genkeypair','-keystore',str(path),'-storetype','PKCS12','-alias','schoolflow','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=SchoolFlow School Apps','-storepass:env','SCHOOLFLOW_KEYSTORE_PASSWORD','-keypass:env','SCHOOLFLOW_KEYSTORE_PASSWORD'],env=env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
+def decode_label(value):
+    # aapt quotes punctuation in its text output; preserve non-ASCII school names.
+    result=[];index=0
+    while index<len(value):
+        if ord(value[index])==92 and index+1<len(value) and ord(value[index+1]) in (92,34,39):
+            result.append(value[index+1]);index+=2
+        else:result.append(value[index]);index+=1
+    return ''.join(result)
+
 def inspect_apks(branding,source_sha):
     aapt,signer=tools();artifacts=[]
     for role,title in ROLES.items():
@@ -37,13 +47,21 @@ def inspect_apks(branding,source_sha):
         certificates={value.lower() for value in re.findall(r'certificate SHA-256 digest:\s*([0-9a-fA-F]{64})',certificate)}
         fingerprint=next(iter(certificates)) if len(certificates)==1 else ''
         expected='com.schoolflow.schools.s'+branding['school_key']+'.'+role+'.test'
-        observed=dict(package=package[1] if package else None,version=int(package[2]) if package else None,label=label[1] if label else None,certificate_found=bool(fingerprint))
+        label_text=decode_label(label[1]) if label else None
+        observed=dict(package=package[1] if package else None,version=int(package[2]) if package else None,label=label_text,certificate_found=bool(fingerprint))
         if os.environ.get('SCHOOLFLOW_FIXTURE_BUILD')=='1':print('Fictional APK verification:',observed,flush=True)
         if not package or package[1]!=expected:raise RuntimeError('APK package does not match its school')
         if int(package[2])!=branding['sequence']:raise RuntimeError('APK version does not match its school build')
-        if not label or label[1]!=branding['name']+' '+title:raise RuntimeError('APK launcher name does not match its school')
+        if label_text!=branding['name']+' '+title:raise RuntimeError('APK launcher name does not match its school')
         if not fingerprint:raise RuntimeError('APK signing certificate could not be verified')
-        blob=path.read_bytes();artifacts.append(dict(role=role,package=package[1],label=label[1],version_code=int(package[2]),signing_sha256=fingerprint,sha256=hashlib.sha256(blob).hexdigest(),content=base64.b64encode(blob).decode()))
+        with zipfile.ZipFile(path) as archive:
+            icons=[name for name in archive.namelist() if name.endswith('/school_icon_foreground.png')]
+            if len(icons)!=1:raise RuntimeError('School launcher icon is missing')
+            with Image.open(io.BytesIO(archive.read(icons[0]))) as actual,Image.open(CLIENTS/'generated-school-res'/'drawable'/'school_icon_foreground.png') as expected_icon:
+                def visible(image):
+                    canvas=Image.new('RGBA',image.size,'white');canvas.alpha_composite(image.convert('RGBA'));return canvas.convert('RGB').tobytes()
+                if actual.size!=expected_icon.size or visible(actual)!=visible(expected_icon):raise RuntimeError('APK icon does not match its school logo')
+        blob=path.read_bytes();artifacts.append(dict(role=role,package=package[1],label=label_text,version_code=int(package[2]),signing_sha256=fingerprint,sha256=hashlib.sha256(blob).hexdigest(),content=base64.b64encode(blob).decode()))
     return dict(source_sha=source_sha,artifacts=artifacts)
 
 def build(branding,logo,keyfile,password):
