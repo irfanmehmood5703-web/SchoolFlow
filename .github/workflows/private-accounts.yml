@@ -1,8 +1,8 @@
 name: Private account panel
 on:
   push:
-    branches: [main, feature/private-account-panel, feature/shareholder-workflows, feature/parent-result-connection]
-    paths: ['parents.py', 'school_settings.py', 'templates/exam_results.html', 'templates/parent_portal.html', 'tests/test_parent_exam_results.py', 'finance_partners.py', 'shareholder_posting.py', 'templates/shareholder*.html', 'tests/test_shareholder_posting.py', 'vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
+    branches: [main, feature/private-account-panel, feature/shareholder-workflows, feature/parent-result-connection, feature/diary-ptm-forms]
+    paths: ['diary_work.py', 'ptm_groups.py', 'ptm.py', 'student_extras.py', 'staff_access.py', 'templates/ptm*.html', 'templates/student_extras.html', 'static/diary-work.js', 'static/ptm-groups.js', 'tests/test_diary_work.py', 'tests/test_ptm_groups.py', 'parents.py', 'school_settings.py', 'templates/exam_results.html', 'templates/parent_portal.html', 'tests/test_parent_exam_results.py', 'finance_partners.py', 'shareholder_posting.py', 'templates/shareholder*.html', 'tests/test_shareholder_posting.py', 'vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,5 +42,9 @@ jobs:
         run: python -W ignore -m unittest discover -s tests -p test_shareholder_posting.py -q
       - name: Published family-scoped parent exam results
         run: python -W ignore -m unittest discover -s tests -p test_parent_exam_results.py -q
+      - name: Subject diary files and parent access
+        run: python -W ignore -m unittest discover -s tests -p test_diary_work.py -q
+      - name: Class PTM and event preferences
+        run: python -W ignore -m unittest discover -s tests -p test_ptm_groups.py -q
       - name: Verify account and school data survive a new application process
         run: python scripts/verify_private_storage.py

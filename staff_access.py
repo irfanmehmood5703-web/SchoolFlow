@@ -319,7 +319,7 @@ def configure_staff_access(app,db,Student,Employee):
             if ep in ('parents.reveal','parents.qr','parents.link_action'):return 'parents.codes'
             return 'parents.'+('export' if request.args.get('export') else 'create' if ep=='parents.invitation' else 'update' if request.method=='POST' else 'view')
         if ep.startswith('ptm.'):
-            return 'ptm.'+('export' if request.args.get('export') else 'update' if ep=='ptm.update' else 'create' if request.method=='POST' else 'view')
+            return 'ptm.'+('export' if request.args.get('export') else 'update' if ep in ('ptm.update','ptm.update_group') else 'create' if request.method=='POST' else 'view')
         if ep.startswith('student_extras.'):
             return 'student_extras.'+('create' if request.method=='POST' else 'view')
         if ep.startswith('fee_ledger.'):

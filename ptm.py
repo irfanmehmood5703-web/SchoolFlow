@@ -82,15 +82,18 @@ def configure_ptm(app,db,Student,Employee):
             scope(campus);starts=day(request.form.get('starts',''));ends=day(request.form.get('ends',''))
             if ends<starts:raise ValueError('Event end must be on or after its start.')
             row=Event(campus=campus,title=text('title',180,True),starts=starts,ends=ends,notes=text('notes'),token=token)
-            db.session.add(row);db.session.flush();audit('Create PTM event',row);db.session.commit();flash('PTM event saved.','success');return redirect(url_for('ptm.events'))
+            db.session.add(row);db.session.flush()
+            if request.form.get('event_preferences')=='1':groups['event_config'](row)
+            audit('Create PTM event',row);db.session.commit();flash('PTM event saved.','success');return redirect(url_for('ptm.events'))
         rows=event_query().order_by(Event.starts.desc(),Event.id.desc()).all()
-        return render_template('ptm.html',title='PTM Events',tab='events',rows=rows,creating=request.args.get('new')=='1',campuses=options('campus'),submission=secrets.token_urlsafe(32))
+        return render_template('ptm.html',title='PTM Events',tab='events',rows=rows,creating=request.args.get('new')=='1',event_configs={c.event_id:c.data for c in app.extensions['ptm_models']['event_config'].query.all()},campuses=options('campus'),submission=secrets.token_urlsafe(32))
     @bp.route('/create',methods=['GET','POST'])
     def create():
         events=event_query().order_by(Event.starts.desc()).all()
         students=app.extensions['record_helpers']['read_many']('student',Student.query.filter_by(status='Active').order_by(Student.name).all())
         employees=Employee.query.filter_by(status='Active').order_by(Employee.name).all()
         if request.method=='POST':
+            if request.form.get('scope_mode')=='group':return groups['save']()
             token=text('submission',64,True)
             if len(token)!=43:raise ValueError('Reload this form.')
             old=Meeting.query.filter_by(token=token).first()
@@ -113,7 +116,7 @@ def configure_ptm(app,db,Student,Employee):
             except ValueError:raise ValueError('Choose a valid meeting time.')
             row=Meeting(event_id=event.id,student_id=student[0].id,employee_id=employee.id,campus=campus,day=meeting_day,time=raw,notes=text('notes'),token=token,teacher_slot=f'{employee.id}:{meeting_day}:{raw}',student_slot=f'{student[0].id}:{meeting_day}:{raw}')
             db.session.add(row);db.session.flush();audit('Schedule PTM meeting',row);db.session.commit();flash('PTM meeting saved. No message was sent.','success');return redirect(url_for('ptm.meetings'))
-        return render_template('ptm.html',title='Create PTM',tab='create',events=events,students=students,employees=employees,submission=secrets.token_urlsafe(32))
+        return render_template('ptm.html',title='Create PTM',tab='create',events=events,students=students,employees=employees,campuses=options('campus'),submission=secrets.token_urlsafe(32))
     def matching():
         q=Meeting.query
         for key in ('event_id','student_id','employee_id'):
@@ -130,6 +133,8 @@ def configure_ptm(app,db,Student,Employee):
             q=q.filter_by(status=status)
         if request.args.get('from'):q=q.filter(Meeting.day>=day(request.args['from']))
         if request.args.get('to'):q=q.filter(Meeting.day<=day(request.args['to']))
+        p=getattr(g,'staff_principal',None)
+        if p and p.data.get('role')=='Teacher':q=q.filter_by(employee_id=p.employee_id)
         return q.order_by(Meeting.day,Meeting.time,Meeting.id).all()
     @bp.get('/meetings')
     def meetings():
@@ -139,14 +144,17 @@ def configure_ptm(app,db,Student,Employee):
         return listing('reports')
     def listing(tab):
         rows=matching();student_names={s.id:s.name for s in Student.query.all()};teacher_names={e.id:e.name for e in Employee.query.all()};events=event_query().order_by(Event.starts.desc()).all();event_names={e.id:e.title for e in events}
-        counts={s:sum(r.status==s for r in rows) for s in ('Scheduled','Attended','Absent','Cancelled')}
+        group_rows=groups['listing']()
+        counts={s:sum(r.status==s for r in rows)+sum(e.status==s for group,e,student in group_rows) for s in ('Scheduled','Attended','Absent','Cancelled')}
         if request.args.get('export')=='xlsx':
             from report_exports import report_xlsx
-            return report_xlsx(['Event','Student','Teacher','Date','Time','Status','Feedback'],[[event_names.get(r.event_id,''),student_names.get(r.student_id,''),teacher_names.get(r.employee_id,''),str(r.day),r.time,r.status,r.feedback] for r in rows],'ptm-meetings')
-        return render_template('ptm.html',title='PTM Reports' if tab=='reports' else 'PTM Meetings',tab=tab,rows=rows,events=events,student_names=student_names,teacher_names=teacher_names,event_names=event_names,counts=counts,campuses=options('campus'))
+            return report_xlsx(['Event','Student','Teacher','Date','Time','Status','Feedback'],[[event_names.get(r.event_id,''),student_names.get(r.student_id,''),teacher_names.get(r.employee_id,''),str(r.day),r.time,r.status,r.feedback] for r in rows]+[[event_names.get(group.event_id,'Standalone PTM'),student.get('name',''),', '.join(teacher_names.get(t,'') for t in group.data['teachers']),str(group.day),'',e.status,e.feedback] for group,e,student in group_rows],'ptm-meetings')
+        return render_template('ptm.html',title='PTM Reports' if tab=='reports' else 'PTM Meetings',tab=tab,rows=rows,group_rows=group_rows,events=events,student_names=student_names,teacher_names=teacher_names,event_names=event_names,counts=counts,campuses=options('campus'))
     @bp.post('/meetings/<int:mid>')
     def update(mid):
         row=db.get_or_404(Meeting,mid);scope(row.campus)
+        p=getattr(g,'staff_principal',None)
+        if p and p.data.get('role')=='Teacher' and row.employee_id!=p.employee_id:abort(403)
         if request.form.get('version')!=str(row.version):raise ValueError('Meeting changed. Reload first.')
         status=text('status',20,True)
         if status not in ('Scheduled','Attended','Absent','Cancelled'):raise ValueError('Choose a valid meeting status.')
@@ -154,4 +162,6 @@ def configure_ptm(app,db,Student,Employee):
         row.teacher_slot=None if status=='Cancelled' else f'{row.employee_id}:{row.day}:{row.time}'
         row.student_slot=None if status=='Cancelled' else f'{row.student_id}:{row.day}:{row.time}'
         audit('Update PTM meeting',row);db.session.commit();flash('Meeting attendance and feedback saved.','success');return redirect(url_for('ptm.meetings',event_id=row.event_id))
+    from ptm_groups import configure_ptm_groups
+    groups=configure_ptm_groups(app,db,bp,Student,Employee,Event,scope,day,audit)
     app.register_blueprint(bp)

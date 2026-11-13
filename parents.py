@@ -442,7 +442,14 @@ def configure_parents(app,db,Student):
                     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
                     insert=pg_insert if db.session.get_bind(mapper=Seen.__mapper__).dialect.name=='postgresql' else sqlite_insert
                     db.session.execute(insert(Seen).values(entry_id=e.id,student_id=sid,family_id=f.id,seen=now()).on_conflict_do_nothing(index_elements=['entry_id','student_id','family_id']))
-                content.append(dict(title=e.title,body=e.body,attachments=attachments))
+                if feature=='diary' and e.data.get('format')=='subject-work':
+                    if data.get('subjects') and e.data.get('subject') not in data['subjects']:continue
+                    files=app.extensions['student_extras_models']['attachment'].query.filter_by(entry_id=e.id).all()
+                    work={}
+                    for part in ('classwork','homework'):
+                        work[part]=dict(html=e.data.get(part,''),files=[dict(name=a.filename,url=url_for('parent_portal.diary_file',code=code,sid=sid,entry_id=e.id,aid=a.id)) for a in files if a.id in e.data.get(part+'_attachments',[])])
+                    content.append(dict(title=e.title,body='',work=work))
+                else:content.append(dict(title=e.title,body=e.body,attachments=attachments))
             if feature=='notice':db.session.commit()
         elif feature=='attendance':
             Daily=app.extensions['ops_models']['daily'];content=[dict(title=str(r.day),body=r.status) for r in Daily.query.filter_by(kind='student',person_id=sid).order_by(Daily.day.desc()).limit(60).all()]
@@ -464,6 +471,21 @@ def configure_parents(app,db,Student):
         response=send_file(io.BytesIO(a.content),mimetype=a.mime,download_name=a.filename,as_attachment=True)
         response.headers['Content-Security-Policy']="default-src 'none'; sandbox"
         return response
+    @public.get('/students/<int:sid>/diary/<int:entry_id>/files/<int:aid>')
+    def diary_file(code,sid,entry_id,aid):
+        f=principal()
+        if not f:return redirect(url_for('parent_portal.login',code=code))
+        student=Student.query.join(rm['student'],rm['student'].student_id==Student.id).filter(Student.id==sid,rm['student'].family_id==f.id,Student.status=='Active').first_or_404()
+        d=app.extensions['record_helpers']['read_many']('student',[student])[0][1]
+        entry=db.get_or_404(app.extensions['student_extras_models']['entry'],entry_id)
+        if entry.kind!='diary' or entry.campus not in ('',d.get('campus','')) or entry.starts>today() or entry.data.get('class_name')!=student.class_name or entry.data.get('section')!=d.get('section') or (d.get('subjects') and entry.data.get('subject') not in d['subjects']):abort(404)
+        if access(sid,d.get('campus',''),'diary')['effective']=='block':abort(403)
+        a=app.extensions['student_extras_models']['attachment'].query.filter_by(id=aid,entry_id=entry.id).first_or_404()
+        if aid not in entry.data.get('classwork_attachments',[])+entry.data.get('homework_attachments',[]):abort(404)
+        audit('Parent downloaded Diary attachment',family_id=f.id,student_id=sid,entry_id=entry.id);db.session.commit()
+        response=send_file(io.BytesIO(a.content),mimetype=a.mime,download_name=a.filename,as_attachment=True);response.headers['Content-Security-Policy']="default-src 'none'; sandbox"
+        return response
+
     @public.after_request
     def private_headers(response):
         response.headers['Cache-Control']='no-store';response.headers['Referrer-Policy']='no-referrer';return response

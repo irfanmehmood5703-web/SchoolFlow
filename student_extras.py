@@ -4,7 +4,7 @@ import io
 import secrets
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, session, url_for, jsonify
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
@@ -72,6 +72,7 @@ def configure_student_extras(app, db, Student):
     @bp.before_request
     def protect():
         if request.method == 'POST':
+            if request.content_length and request.content_length>20*1024*1024:abort(413,'Diary/notice upload exceeds 20 MB.')
             token = request.form.get('_csrf', '')
             if not token or not hmac.compare_digest(token, session.get('record_csrf', '')):
                 abort(400, 'Reload this form before saving.')
@@ -86,8 +87,8 @@ def configure_student_extras(app, db, Student):
         db.session.rollback()
         return render_template('operation_error.html', title='Reload this form', error='This submission was already saved. Return to the list before adding another.'), 409
 
-    def uploads():
-        files = [f for f in request.files.getlist('attachments') if f.filename]
+    def uploads(field='attachments'):
+        files = [f for f in request.files.getlist(field) if f.filename]
         if len(files) > 5: raise ValueError('Attach at most five files.')
         result = []
         total = 0
@@ -98,19 +99,19 @@ def configure_student_extras(app, db, Student):
             total += len(content)
             if not content or len(content) > 5 * 1024 * 1024 or total > 15 * 1024 * 1024:
                 raise ValueError('Files must be nonempty, up to 5 MB each and 15 MB combined.')
-            mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','pdf':'application/pdf','mp3':'audio/mpeg','mp4':'video/mp4'}.get(ext)
+            mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','pdf':'application/pdf','mp3':'audio/mpeg','mp4':'video/mp4'}.get(ext)
             valid = False
-            if ext in ('jpg','jpeg'):
+            if ext in ('jpg','jpeg','png','webp'):
                 from PIL import Image, UnidentifiedImageError
                 try:
                     with Image.open(io.BytesIO(content)) as image:
-                        valid = image.format == 'JPEG'
+                        valid = image.format == {'jpg':'JPEG','jpeg':'JPEG','png':'PNG','webp':'WEBP'}[ext]
                         image.verify()
                 except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError): pass
             elif ext == 'pdf': valid = content.startswith(b'%PDF-')
             elif ext == 'mp3': valid = content.startswith(b'ID3') or (len(content)>1 and content[0]==255 and content[1]&224==224)
             elif ext == 'mp4': valid = len(content)>12 and content[4:8]==b'ftyp'
-            if not mime or not valid: raise ValueError('Use valid JPG, PDF, MP3 or MP4 attachments.')
+            if not mime or not valid: raise ValueError('Use valid JPG, PNG, WebP, PDF, MP3 or MP4 attachments.')
             result.append((name,mime,content))
         return result
 
@@ -119,6 +120,7 @@ def configure_student_extras(app, db, Student):
         if kind not in ('notices','diary'): abort(404)
         creating = request.args.get('new') == '1'
         if request.method == 'POST':
+            if kind=='diary' and request.form.get('format')=='subject-work':return app.extensions['diary_work_helpers']['save'](choices,scope_ok,day,uploads)
             token = text('submission', 64, True)
             if len(token) != 43: raise ValueError('Reload this form before saving.')
             existing = Entry.query.filter_by(token=token).first()
@@ -183,7 +185,7 @@ def configure_student_extras(app, db, Student):
         try: page = max(1,int(request.args.get('page','1')))
         except ValueError: raise ValueError('Choose a valid page.')
         total=query.count(); rows=query.order_by(Entry.starts.desc(),Entry.id.desc()).offset((page-1)*25).limit(25).all()
-        attachments={r.id:Attachment.query.filter_by(entry_id=r.id).all() for r in rows} if kind=='notices' else {}
+        attachments={r.id:Attachment.query.filter_by(entry_id=r.id).all() for r in rows}
         seen_counts={}
         Seen=app.extensions.get('parent_models',{}).get('seen')
         if Seen is not None and rows:
@@ -192,6 +194,18 @@ def configure_student_extras(app, db, Student):
         return render_template('student_extras.html',title='Student Notice Board' if kind=='notices' else 'Student Diary',kind=kind,creating=creating,rows=rows,attachments=attachments,
             choices={k:choices(k) for k in ('campus','class_name','section','subject')},section_rows=section_rows,
             submission=secrets.token_urlsafe(32),today=today(),page=page,total=total,seen_counts=seen_counts)
+
+    @bp.get('/diary/options')
+    def diary_options():
+        campus=request.args.get('campus','');cls=request.args.get('class_name','')
+        if campus and campus not in choices('campus'):raise ValueError('Choose a configured campus.')
+        scope_ok(campus)
+        maps=app.extensions['institute_setup_models']['mapping'].query.filter_by(campus=campus).all() if campus else []
+        classes=[c for c in choices('class_name') if not maps or any(m.class_name==c and m.active for m in maps)]
+        if cls and cls not in classes:raise ValueError('Choose a class at this campus.')
+        sections=sorted({r.value for r in rm['settings'].query.filter_by(category='section').all() if not r.class_name or r.class_name==cls}) if cls else []
+        subjects=sorted({r.value for r in rm['settings'].query.filter_by(category='subject').all() if cls and (not r.class_name or r.class_name==cls) and app.extensions['school_settings_helpers']['subject_allowed'](campus,cls,r.value)})
+        return jsonify(classes=classes,sections=sections,subjects=subjects)
 
     @bp.get('/attachments/<int:aid>')
     def attachment(aid):
