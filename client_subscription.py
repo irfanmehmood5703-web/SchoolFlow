@@ -11,6 +11,7 @@ from operations import money
 def configure_client_subscription(app,db):
     bp=Blueprint('client_subscription',__name__,url_prefix='/workspace/core/subscription');control={'info':{'identity_control':True}};School=app.extensions['identity_models']['institute']
     class Service(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='client_service'
         __table_args__=control
         id=db.Column(db.Integer,primary_key=True)
@@ -20,11 +21,13 @@ def configure_client_subscription(app,db):
         price=db.Column(db.BigInteger,nullable=False)
         active=db.Column(db.Boolean,nullable=False,default=True)
     class Bank(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='client_billing_profile'
         __table_args__=control
         id=db.Column(db.Integer,primary_key=True)
         data=db.Column(db.JSON,nullable=False,default=dict)
     class Invoice(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='client_invoice'
         __table_args__=(db.UniqueConstraint('institute_id','month'),db.CheckConstraint('amount >= 0 AND discount >= 0 AND paid >= 0 AND paid + discount <= amount'),control)
         id=db.Column(db.Integer,primary_key=True)
@@ -38,6 +41,7 @@ def configure_client_subscription(app,db):
         @property
         def remaining(self):return self.amount-self.paid-self.discount
     class Receipt(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='client_payment'
         __table_args__=control
         id=db.Column(db.Integer,primary_key=True)

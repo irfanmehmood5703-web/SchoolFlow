@@ -1,0 +1,12 @@
+{% extends 'public_base.html' %}{% block content %}
+<div class="auth-layout"><section class="auth-intro"><p class="eyebrow">SchoolFlow · Software owner</p><h1>Your schools.<br>Your control.</h1><p>Create private school accounts and manage their owner access from one place.</p><a href="{{url_for('identity.institute')}}">School sign in →</a></section>
+<section class="auth-card"><h2>{{title}}</h2>{% if error %}<div class="flash error" role="alert">{{error}}</div>{% endif %}
+{% if mode=='setup' and not enabled %}<p>Private setup has not been enabled by the server operator.</p>
+{% else %}<form method="post"><input type="hidden" name="_csrf" value="{{record_csrf}}">
+{% if mode=='setup' %}<p>Use your private, one-time setup code. Choose your own software owner email and password.</p><label>Private setup code<input name="setup_code" type="password" required maxlength="200" autocomplete="off"></label>{% endif %}
+{% if mode!='password' %}<label>Software owner email<input name="email" type="email" required maxlength="254" autocomplete="username"></label>{% else %}<label>Current password<input name="current_password" type="password" required maxlength="128" autocomplete="current-password"></label>{% endif %}
+<label>{{'Password' if mode=='login' else 'New password (at least 12 characters)'}}<input name="password" type="password" required minlength="{{1 if mode=='login' else 12}}" maxlength="128" autocomplete="{{'current-password' if mode=='login' else 'new-password'}}"></label>
+{% if mode!='login' %}<label>Confirm new password<input name="confirm" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>{% endif %}
+<button>{{'Sign in' if mode=='login' else 'Create software owner account' if mode=='setup' else 'Change password'}}</button></form>{% endif %}
+{% if mode=='login' and not configured %}<p><a href="{{url_for('vendor.setup')}}">First-time software owner setup</a></p>{% endif %}
+</section></div>{% endblock %}

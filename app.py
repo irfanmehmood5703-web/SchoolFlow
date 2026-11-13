@@ -9,7 +9,7 @@ from identity import InstituteSession, configure_identity
 
 app = Flask(__name__)
 app.config.update(
-    SECRET_KEY=os.getenv('SECRET_KEY') or secrets.token_hex(32),
+    SECRET_KEY=os.getenv('SECRET_KEY') or os.getenv('SCHOOLFLOW_SESSION_KEY') or secrets.token_hex(32),
     SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL','sqlite:///schoolflow.db').replace('postgres://','postgresql+psycopg2://',1).replace('postgresql://','postgresql+psycopg2://',1),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SCHOOLFLOW_API_TOKEN=os.getenv('SCHOOLFLOW_API_TOKEN'),
@@ -19,6 +19,15 @@ app.config.update(
     PUBLIC_DEMO_ENABLED=os.getenv('PUBLIC_DEMO_ENABLED', '1') == '1',
     INSTITUTE_DATABASE_DIR=os.getenv('INSTITUTE_DATABASE_DIR'),
 )
+# Private accounts can use durable storage without replacing the shared demo DB.
+_identity_url=os.getenv('IDENTITY_DATABASE_URL')
+if _identity_url:
+    _identity_url=_identity_url.replace('postgres://','postgresql+psycopg2://',1).replace('postgresql://','postgresql+psycopg2://',1)
+    if not _identity_url.startswith('postgresql') and not os.getenv('SCHOOLFLOW_ALLOW_TEST_IDENTITY_DB'):
+        raise RuntimeError('Private account storage requires PostgreSQL.')
+    app.config['SQLALCHEMY_BINDS']={'identity':dict(url=_identity_url,pool_pre_ping=True)}
+app.config['VENDOR_SETUP_HASH']=os.getenv('VENDOR_SETUP_HASH','')
+app.config['SCHOOL_APP_SIGNING_KEY']=os.getenv('SCHOOL_APP_SIGNING_KEY')
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
     app.config['SQLALCHEMY_ENGINE_OPTIONS']=dict(pool_pre_ping=True,pool_size=3,max_overflow=2,pool_recycle=300,connect_args={'connect_timeout':10})
 if os.getenv('SCHOOLFLOW_REQUIRE_POSTGRES')=='1' and not app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
@@ -76,6 +85,8 @@ configure_hrm_reports(app,db,Employee)
 from certificates import configure_certificates
 configure_certificates(app,db,Student)
 configure_identity(app,db)
+from vendor_admin import configure_vendor_admin
+configure_vendor_admin(app,db)
 from dashboard import configure_dashboard
 configure_dashboard(app,db)
 from payroll_calendar import configure_payroll_calendar
@@ -216,11 +227,12 @@ def headers(response):
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Referrer-Policy']='same-origin'
     response.headers['X-Frame-Options']='SAMEORIGIN'
-    if request.path.startswith(('/workspace','/records','/api','/auth')):
+    if request.path.startswith(('/workspace','/records','/api','/auth','/vendor')):
         response.headers['Cache-Control']='no-store'
     return response
 
 with app.app_context():
+    app.extensions['identity_helpers']['check_cutover']()
     db.create_all()
     # Release-time additive table creation also upgrades existing institutes.
     # No schema work is performed while visitors select an institute code.

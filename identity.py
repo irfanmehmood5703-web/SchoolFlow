@@ -17,7 +17,7 @@ import click
 from flask import (Blueprint, abort, g, has_request_context, jsonify, redirect,
                    render_template, request, session, url_for)
 from flask_sqlalchemy.session import Session
-from sqlalchemy import create_engine, event, case, delete
+from sqlalchemy import create_engine, event, case, delete, inspect, text
 from sqlalchemy.schema import CreateSchema
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
@@ -39,8 +39,11 @@ class InstituteSession(Session):
 def configure_identity(app, db):
     bp = Blueprint('identity', __name__, url_prefix='/auth')
     control = {'info': {'identity_control': True}}
+    bind_key='identity' if 'identity' in app.config.get('SQLALCHEMY_BINDS',{}) else None
+    app.extensions['identity_bind_key']=bind_key
 
     class Institute(db.Model):
+        __bind_key__ = bind_key
         __tablename__ = 'identity_institute'
         __table_args__ = control
         id = db.Column(db.Integer, primary_key=True)
@@ -50,6 +53,7 @@ def configure_identity(app, db):
         active = db.Column(db.Boolean, nullable=False, default=True)
 
     class Owner(db.Model):
+        __bind_key__ = bind_key
         __tablename__ = 'identity_owner'
         __table_args__ = (db.UniqueConstraint('institute_id', 'email'), control)
         id = db.Column(db.Integer, primary_key=True)
@@ -60,6 +64,7 @@ def configure_identity(app, db):
         version = db.Column(db.Integer, nullable=False, default=1)
 
     class Attempt(db.Model):
+        __bind_key__ = bind_key
         __tablename__ = 'identity_attempt'
         __table_args__ = control
         key = db.Column(db.String(64), primary_key=True)
@@ -72,15 +77,25 @@ def configure_identity(app, db):
     app.config.setdefault('IDENTITY_ENFORCE_IN_TESTS', False)
     app.config.update(PERMANENT_SESSION_LIFETIME=timedelta(hours=8), SESSION_REFRESH_EACH_REQUEST=False)
 
+    def control_engine():
+        return db.engines[bind_key]
+
+    def check_cutover():
+        if not bind_key or not inspect(db.engine).has_table('identity_institute'):return
+        with db.engine.connect() as connection:
+            if connection.execute(text('SELECT count(*) FROM identity_institute')).scalar():
+                raise RuntimeError('Existing private accounts require a verified backup and migration before changing identity storage.')
+
     def tenant_engine(institute_id):
         school = db.session.get(Institute, int(institute_id))
         if school is None or not re.fullmatch(r'[0-9a-f]{32}', school.storage_key):
             raise RuntimeError('Institute storage identity is unavailable.')
-        if db.engine.dialect.name=='postgresql':
+        identity_engine=control_engine()
+        if identity_engine.dialect.name=='postgresql':
             schema='school_'+school.storage_key
-            key=(id(db.engine),schema)
+            key=(id(identity_engine),schema)
             if key not in engines:
-                engines[key]=db.engine.execution_options(schema_translate_map={None:schema})
+                engines[key]=identity_engine.execution_options(schema_translate_map={None:schema})
             return engines[key]
         root = Path(app.config.get('INSTITUTE_DATABASE_DIR') or Path(app.instance_path) / 'institutes').resolve()
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -115,7 +130,7 @@ def configure_identity(app, db):
         # never while a visitor chooses an arbitrary institute code.
         # PostgreSQL can atomically create the private schema, profile and
         # identity in one transaction. Do not leave orphan schemas on failure.
-        connection=db.session.connection() if engine.dialect.name=='postgresql' else None
+        connection=db.session.connection(bind_arguments={'mapper':Institute}) if engine.dialect.name=='postgresql' else None
         create_workspace(engine,connection)
         Profile=app.extensions.get('institute_setup_models',{}).get('profile')
         if Profile is not None:
@@ -160,7 +175,7 @@ def configure_identity(app, db):
             keys.append((f'{scope}:account:{identity}', 10))
         now = time.time()
         blocked = False
-        insert = postgres_insert if db.engine.dialect.name == 'postgresql' else sqlite_insert
+        insert = postgres_insert if control_engine().dialect.name == 'postgresql' else sqlite_insert
         # Atomic upserts avoid lost increments / first-attempt insertion races
         # between gunicorn workers. Expired throttle keys are not retained.
         db.session.execute(delete(Attempt).where(Attempt.started < now - 86400))
@@ -189,7 +204,7 @@ def configure_identity(app, db):
         db.session.remove()
         if request.url_rule is None:
             return
-        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card','sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail','school_apps.public_download') or request.blueprint in ('identity','parent_portal','mobile_clients'):
+        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card','sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail','school_apps.public_download') or request.blueprint in ('identity','parent_portal','mobile_clients','vendor'):
             return
         if session.get('demo') and app.config.get('PUBLIC_DEMO_ENABLED', True):
             # Demo always uses the original fictional-data database, never a
@@ -376,5 +391,5 @@ def configure_identity(app, db):
         upgrade_missing_tables()
         click.echo('Missing institute tables created. Existing columns require a versioned migration.')
 
-    app.extensions['identity_helpers'] = dict(provision=provision, engine=tenant_engine, workspace_tables=workspace_tables,create_workspace=create_workspace,upgrade_missing_tables=upgrade_missing_tables)
+    app.extensions['identity_helpers'] = dict(provision=provision, engine=tenant_engine, control_engine=control_engine, check_cutover=check_cutover, csrf=csrf, limited=limited, valid_email=valid_email, workspace_tables=workspace_tables,create_workspace=create_workspace,upgrade_missing_tables=upgrade_missing_tables)
     app.register_blueprint(bp)

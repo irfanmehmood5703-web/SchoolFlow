@@ -1,0 +1,42 @@
+name: Private account panel
+on:
+  push:
+    branches: [main, feature/private-account-panel]
+    paths: ['vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: private_account_qa
+          POSTGRES_USER: fictional_qa
+          POSTGRES_PASSWORD: fictional_ci_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      IDENTITY_DATABASE_URL: postgresql://fictional_qa:fictional_ci_password@localhost:5432/private_account_qa
+      SCHOOLFLOW_PRIVATE_STORAGE_QA: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - run: python -m pip install -r requirements.txt
+      - name: Vendor and real-school access on durable PostgreSQL
+        run: python -W ignore -m unittest discover -s tests -p test_vendor_admin.py -q
+      - name: Existing identity and cross-school regressions on PostgreSQL
+        run: python -W ignore -m unittest discover -s tests -p test_identity.py -q
+      - name: School APK queue on separate control database
+        run: python -W ignore -m unittest discover -s tests -p test_school_apps.py -q
+      - name: Verify account and school data survive a new application process
+        run: python scripts/verify_private_storage.py

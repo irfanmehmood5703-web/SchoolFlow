@@ -19,15 +19,18 @@ def configure_school_apps(app,db):
     School=app.extensions['identity_models']['institute'];Profile=app.extensions['institute_setup_models']['profile'];Item=app.extensions['school_settings_models']['item']
     control={'info':{'identity_control':True}}
     class Gate(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='school_app_build_gate';__table_args__=control
         id=db.Column(db.Integer,primary_key=True);revision=db.Column(db.Integer,nullable=False)
     class Signing(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='school_app_signing';__table_args__=control
         school_key=db.Column(db.String(32),primary_key=True)
         encrypted=db.deferred(db.Column(db.LargeBinary,nullable=False))
         fingerprint=db.Column(db.String(64),nullable=False,default='')
         download_token=db.Column(db.String(43),nullable=False,unique=True,default=lambda:secrets.token_urlsafe(32))
     class Build(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='school_app_build';__table_args__=(db.UniqueConstraint('school_key','sequence'),control)
         id=db.Column(db.String(43),primary_key=True,default=lambda:secrets.token_urlsafe(32))
         school_key=db.Column(db.String(32),nullable=False,index=True)
@@ -44,6 +47,7 @@ def configure_school_apps(app,db):
         source_sha=db.Column(db.String(40),nullable=False,default='')
         error=db.Column(db.String(200),nullable=False,default='')
     class Artifact(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='school_app_artifact';__table_args__=(db.UniqueConstraint('build_id','role'),control)
         id=db.Column(db.Integer,primary_key=True)
         build_id=db.Column(db.String(43),db.ForeignKey('school_app_build.id'),nullable=False)
@@ -55,7 +59,7 @@ def configure_school_apps(app,db):
     def lock():
         engine=db.session.get_bind(mapper=Gate.__mapper__);insert=postgres_insert if engine.dialect.name=='postgresql' else sqlite_insert
         db.session.execute(insert(Gate).values(id=1,revision=1).on_conflict_do_update(index_elements=['id'],set_={'revision':Gate.revision+1}))
-    def cipher():return Fernet(base64.urlsafe_b64encode(hashlib.sha256(str(app.config['SECRET_KEY']).encode()+b'school-app-signing-v1').digest()))
+    def cipher():return Fernet(base64.urlsafe_b64encode(hashlib.sha256(str(app.config.get('SCHOOL_APP_SIGNING_KEY') or app.config['SECRET_KEY']).encode()+b'school-app-signing-v1').digest()))
     def private_school():
         identity=getattr(g,'school_identity',None) or {}
         if identity.get('demo') or not identity.get('scope'):return None
