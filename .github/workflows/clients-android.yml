@@ -23,7 +23,7 @@ jobs:
         with: {gradle-version: '8.9', cache-disabled: true}
       - name: Test, lint and compile all four clients
         working-directory: mobile/clients
-        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+        run: gradle --no-daemon :app:testParentsDebugUnitTest :app:lintParentsDebug :app:assembleParentsDebug :app:testTeacherDebugUnitTest :app:lintTeacherDebug :app:assembleTeacherDebug :app:testOwnerDebugUnitTest :app:lintOwnerDebug :app:assembleOwnerDebug :app:testSmsDebugUnitTest :app:lintSmsDebug :app:assembleSmsDebug
       - name: Package installable test clients
         working-directory: mobile/clients
         shell: bash

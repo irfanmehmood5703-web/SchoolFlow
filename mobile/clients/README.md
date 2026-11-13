@@ -59,7 +59,7 @@ READ_PHONE_STATE. Portal flavours do not require SMS permissions.
 
 Java17, Gradle8.9, Android SDK35, AGP8.7.3:
 
-    gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+    gradle --no-daemon :app:testParentsDebugUnitTest :app:lintParentsDebug :app:assembleParentsDebug :app:testTeacherDebugUnitTest :app:lintTeacherDebug :app:assembleTeacherDebug :app:testOwnerDebugUnitTest :app:lintOwnerDebug :app:assembleOwnerDebug :app:testSmsDebugUnitTest :app:lintSmsDebug :app:assembleSmsDebug
 
 CI tests all four flavours, packages APKs with source SHA/checksums, and publishes
 a prerelease only after backend and Android checks pass on main. Each build uses
