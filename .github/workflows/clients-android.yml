@@ -1,0 +1,70 @@
+name: SchoolFlow Android Clients
+on:
+  push:
+    branches: [main, feature/connected-android-clients]
+    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py']
+  pull_request:
+    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py']
+permissions:
+  contents: read
+concurrency:
+  group: schoolflow-clients-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with: {gradle-version: '8.9', cache-disabled: true}
+      - name: Test, lint and compile all four clients
+        working-directory: mobile/clients
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Package installable test clients
+        working-directory: mobile/clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for role in parents teacher owner sms; do
+            cp "app/build/outputs/apk/$role/debug/app-$role-debug.apk" "dist/SchoolFlow-$role-test.apk"
+          done
+          (cd dist && sha256sum *.apk >SHA256SUMS.txt)
+          printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with: {name: SchoolFlow-Android-clients-test, path: 'mobile/clients/dist/', retention-days: 14}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with: {name: SchoolFlow-Android-clients-reports, path: 'mobile/clients/app/build/reports/', retention-days: 14}
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - run: python -m pip install -r requirements.txt
+      - run: python -W ignore -m unittest discover -s tests -q
+  publish-test-apks:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [android, backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {contents: write, actions: read}
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with: {name: SchoolFlow-Android-clients-test, path: clients/}
+      - name: Publish verified test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$(cat clients/SOURCE-COMMIT.txt)" = "$GITHUB_SHA"
+          (cd clients && sha256sum -c SHA256SUMS.txt)
+          gh release create "clients-test-${{ github.run_number }}" clients/*.apk clients/SHA256SUMS.txt clients/SOURCE-COMMIT.txt --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Android clients — test build" --notes "Parents, Teacher and Owner are native Android portal clients using existing live web workflows and permissions. SMS is an attended native school-SIM client with explicit per-message confirmation and a durable no-automatic-resend outbox. Debug-signed test APKs, not Play Store or production releases. No credentials or school records bundled. Physical Android/SIM testing and production owner-controlled signing remain required. SMS consumes the phone's SIM package; no paid service provisioned."

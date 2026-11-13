@@ -152,6 +152,10 @@ from ptm import configure_ptm
 configure_ptm(app,db,Student,Employee)
 from parents import configure_parents
 configure_parents(app,db,Student)
+from mobile_clients import configure_mobile_clients
+configure_mobile_clients(app)
+from sms_gateway import configure_sms_gateway
+configure_sms_gateway(app,db,Student)
 from general_tools import configure_general_tools
 configure_general_tools(app,db,Student,Employee)
 

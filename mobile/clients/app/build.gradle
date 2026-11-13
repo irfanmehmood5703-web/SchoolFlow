@@ -1,0 +1,18 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.schoolflow.clients'
+    compileSdk 35
+    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1-test' }
+    buildFeatures { buildConfig true }
+    flavorDimensions += 'role'
+    productFlavors {
+        parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','SchoolFlow Parents (Test)' }
+        teacher { dimension 'role'; applicationId 'com.schoolflow.teacher'; buildConfigField 'String', 'ROLE', '"teacher"'; resValue 'string','app_name','SchoolFlow Teacher (Test)' }
+        owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','SchoolFlow Owner (Test)' }
+        sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','SchoolFlow SMS (Test)' }
+    }
+    buildTypes { debug { applicationIdSuffix '.test' }; release { minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    lint { abortOnError true }
+}
+dependencies { testImplementation 'junit:junit:4.13.2' }
