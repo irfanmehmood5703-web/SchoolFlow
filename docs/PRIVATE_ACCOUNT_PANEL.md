@@ -45,3 +45,10 @@ passwords and escaped school names. The dedicated CI workflow repeats these,
 existing identity tests and APK queue tests against a disposable PostgreSQL16
 service, plus a separate-process retained-school/student check. The hosted
 setup screen remains unused until the software owner chooses credentials.
+
+Verified on 2026-11-13: 671 backend tests passed locally. PostgreSQL CI run
+43376612524 passed seven vendor checks, 31 identity/cross-school checks, seven
+APK queue checks and a separate-process school/student persistence check. The
+identity seed fixture now uses generated student IDs so PostgreSQL sequences
+remain valid when import tests add new pupils. Fourteen operations tests passed
+after health checks were extended to include the configured private store.

@@ -950,7 +950,7 @@ def configure_operations(app, db, Student, Employee):
         return render('legacy_data.html',title='Starter Attendance / Exam Records',attendance=Attendance.query.order_by(Attendance.id.desc()).all(),results=ExamResult.query.order_by(ExamResult.id.desc()).all())
 
     @bp.route('/readiness')
-    def readiness(): return render('readiness.html',title='Pre-test Build Status',storage_backend=db.engine.dialect.name)
+    def readiness(): return render('readiness.html',title='Pre-test Build Status',storage_backend=db.session.get_bind(mapper=Student.__mapper__).dialect.name)
 
     def dashboard_data():
         # Keep request work independent of pupil/score count: no per-row ORM
@@ -994,7 +994,10 @@ def configure_operations(app, db, Student, Employee):
 
     @app.route('/healthz')
     def health():
-        db.session.execute(db.text('SELECT 1'));return jsonify(status='ok',build='schoolflow-school-apps-v36')
+        db.session.execute(db.text('SELECT 1'))
+        if app.extensions.get('identity_bind_key'):
+            with app.extensions['identity_helpers']['control_engine']().connect() as connection:connection.execute(db.text('SELECT 1'))
+        return jsonify(status='ok',build='schoolflow-private-accounts-v37')
 
     @app.route('/api/v1/summary')
     def summary_api():
