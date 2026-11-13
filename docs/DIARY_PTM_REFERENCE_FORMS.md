@@ -27,4 +27,14 @@ Focused tests cover multi-subject formatting/files, atomic rejection, exact/chan
 
 Local browser execution could not run: Chromium's process socket is prohibited in this execution environment. JavaScript syntax checks and HTTP/template/form regression tests passed locally. A separate GitHub browser check exercises mobile and desktop forms on an isolated synthetic SQLite workspace; it cannot touch the hosted school database. Physical Android testing is not claimed.
 
-Release checks and hosted QA results are appended after deployment.
+## Verified release — 13 November 2026
+
+- Full backend suite: **695 tests passed** (87.411 seconds). JavaScript syntax checks and git diff checks passed.
+- PostgreSQL private-account / identity / cross-school / APK-queue / finance / parent-results / diary / PTM checks, plus cross-process persistence: GitHub Actions run **43475096473** passed.
+- Chromium checks in that run passed at 390 × 844 and 1440 × 1000: multiple subject editors, deselection/reselection retaining unsaved work, Diary save, dependent PTM roster and save, event preferences and save. Mobile meeting page had no horizontal overflow. These are browser viewport checks, not physical-phone testing.
+- Runtime commit: `0f1aa30f8cfd4d58644128f7cd01ad7d5bc7e1b1`.
+- Original Render service `srv-dbi3dqks728c73c7snv0`, deployment `dep-dbrko7rm8hqs739iq9p0`: **live**.
+- **28 hosted checks passed** on the existing isolated synthetic QA school. They exercised login, new forms and dependent options, two subject diaries plus a PDF, exact/changed retries, event preferences, class PTM with saved marks, feedback updates, stale update rejection, report and Excel, forged student rejection, parent subject filtering, scoped PDF access and foreign-child rejection. A fresh HTTP login retained both new diaries and PTM feedback.
+- No real school's student records were added/edited by this QA run; no messages or money were sent. The existing QA student and its prior fee/attendance/exam data were retained.
+
+Location: **General → Student Extras → Student Diary** and **General → Student Extras → PTM** on https://schoolflow-phase1.onrender.com/.
