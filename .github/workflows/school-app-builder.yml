@@ -1,0 +1,54 @@
+name: School-specific Android apps
+on:
+  push:
+    branches: [main, feature/school-app-branding]
+    paths: ['mobile/clients/**', 'school_apps.py', 'app_builder_auth.py', 'scripts/school_app_worker.py', 'scripts/verify_school_builds.py', 'tests/test_school_apps.py', '.github/workflows/school-app-builder.yml']
+  pull_request:
+    paths: ['mobile/clients/**', 'school_apps.py', 'app_builder_auth.py', 'scripts/school_app_worker.py', 'scripts/verify_school_builds.py', 'tests/test_school_apps.py', '.github/workflows/school-app-builder.yml']
+  workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: school-specific-apps-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with: {gradle-version: '8.9', cache-disabled: true}
+      - run: python -m pip install -r requirements.txt
+      - name: Verify queue, permissions and OIDC
+        run: python -W ignore -m unittest discover -s tests -p test_school_apps.py -q
+      - name: Compile actual school APKs and verify callback/download/update flow
+        run: python scripts/verify_school_builds.py
+  build-school-requests:
+    needs: [verify]
+    if: always() && github.ref == 'refs/heads/main' && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with: {gradle-version: '8.9', cache-disabled: true}
+      - run: python -m pip install Pillow==12.3.0
+      - name: Prepare pending school requests using short-lived workflow identity
+        run: python scripts/school_app_worker.py --max-jobs 2

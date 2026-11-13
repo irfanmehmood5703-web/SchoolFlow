@@ -1,9 +1,30 @@
 plugins { id 'com.android.application' }
+import groovy.json.JsonSlurper
+
+def schoolFile=providers.gradleProperty('schoolBrandingFile').orNull
+def school=schoolFile ? new JsonSlurper().parse(new File(schoolFile),'UTF-8') : null
+if (school && (!(school.school_key ==~ /[0-9a-f]{32}/) || !(school.code ==~ /[A-Z0-9][A-Z0-9-]{2,39}/) || school.name.size()<1 || school.name.size()>80)) throw new GradleException('Invalid school branding')
+def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').replace("'","\\'")+'"' }
+
 android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
     defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1-test' }
     buildFeatures { buildConfig true }
+    defaultConfig {
+        buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
+        buildConfigField 'String','SCHOOL_SCOPE',school ? '"'+school.school_key+'"' : '""'
+        manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/schoolflow_icon']
+        if(school){ versionCode (school.sequence as int); versionName '0.2-school-test.'+school.sequence }
+    }
+    if(school){
+        sourceSets.main.res.srcDir rootProject.file('generated-school-res')
+        signingConfigs { schoolKey {
+            storeFile file(providers.gradleProperty('schoolSigningFile').get())
+            storeType 'PKCS12'; storePassword System.getenv('SCHOOLFLOW_KEYSTORE_PASSWORD')
+            keyAlias 'schoolflow'; keyPassword System.getenv('SCHOOLFLOW_KEYSTORE_PASSWORD')
+        } }
+    }
     flavorDimensions += 'role'
     productFlavors {
         parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','SchoolFlow Parents (Test)' }
@@ -11,7 +32,12 @@ android {
         owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','SchoolFlow Owner (Test)' }
         sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','SchoolFlow SMS (Test)' }
     }
-    buildTypes { debug { applicationIdSuffix '.test' }; release { minifyEnabled false } }
+    if(school){ productFlavors.all { flavor ->
+        def names=[parents:'Parents',teacher:'Teacher',owner:'Owner',sms:'SMS']
+        flavor.applicationId='com.schoolflow.schools.s'+school.school_key+'.'+flavor.name
+        flavor.resValue 'string','app_name',resourceText(school.name+' '+names[flavor.name])
+    } }
+    buildTypes { debug { applicationIdSuffix '.test'; if(school) signingConfig signingConfigs.schoolKey }; release { minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { abortOnError true }
 }

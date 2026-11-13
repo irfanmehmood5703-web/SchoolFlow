@@ -9,6 +9,10 @@ def configure_mobile_clients(app):
         if kind not in ('parents','teacher','owner'):abort(404)
         token=session.setdefault('record_csrf',secrets.token_urlsafe(32))
         error=''
+        preset=request.args.get('school','').strip().upper()
+        if preset and re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',preset):
+            if kind=='parents':return redirect(url_for('parent_portal.login',code=preset))
+            return redirect(url_for('identity.institute',school=preset))
         if request.method=='POST':
             if not hmac.compare_digest(request.form.get('_csrf',''),token):abort(400)
             if kind!='parents':return redirect(url_for('identity.institute'))

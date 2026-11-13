@@ -66,7 +66,7 @@ class GeneralToolsTests(unittest.TestCase):
         self.assertEqual(self.c.post('/workspace/general/widgets/layout',data={'action':'default'}).status_code,400)
     def test_actual_counts_dates_and_missing_sms(self):
         page=self.c.get('/workspace/general/widgets/report/birthdays');self.assertIn(b'Fictional Widget Pupil',page.data)
-        page=self.c.get('/workspace/general/widgets/report/sms');self.assertIn(b'No SIM/provider balance',page.data)
+        page=self.c.get('/workspace/general/widgets/report/sms');self.assertIn(b'SIM/provider balance and recipient delivery are unavailable',page.data)
         self.assertEqual(self.c.get('/workspace/general/widgets?period=custom&from=bad&to=2026-11-07').status_code,422)
         b=self.ops['bill'](student_id=self.sid,month=self.today.strftime('%Y-%m'),due=self.today+timedelta(days=1),lines=[{'particular':'Tuition','amount':10000}],paid=4000,discount=1000)
         db.session.add(b);db.session.flush();db.session.add(self.ops['receipt'](student_id=self.sid,bill_id=b.id,amount=4000,discount=1000,day=self.today,account='Cash',token='widget-qa'));db.session.commit()

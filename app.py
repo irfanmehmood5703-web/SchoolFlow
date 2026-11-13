@@ -156,6 +156,8 @@ from mobile_clients import configure_mobile_clients
 configure_mobile_clients(app)
 from sms_gateway import configure_sms_gateway
 configure_sms_gateway(app,db,Student)
+from school_apps import configure_school_apps
+configure_school_apps(app,db)
 from general_tools import configure_general_tools
 configure_general_tools(app,db,Student,Employee)
 

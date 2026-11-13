@@ -309,6 +309,8 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('school_apps.'):
+            return 'apps.'+('view' if request.method=='GET' else 'update')
         if ep.startswith('general_tools.'):
             if ep=='general_tools.app_links':return 'apps.'+('update' if request.method=='POST' else 'view')
             if ep=='general_tools.permissions':return 'widgets.manage'

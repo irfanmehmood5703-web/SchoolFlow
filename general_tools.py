@@ -68,7 +68,7 @@ def configure_general_tools(app,db,Student,Employee):
                 notes=data.get('notes',''),revision=row.version if row else 0,
                 sha256=data.get('sha256','') if not row else '',
                 source_commit=data.get('source_commit','') if not row else ''))
-        return result
+        return app.extensions['school_app_helpers']['releases'](result)
     def days():
         t=today();period=request.args.get('period','month')
         if period not in ('today','month','session','custom'):raise ValueError('Choose a valid period.')
@@ -114,6 +114,7 @@ def configure_general_tools(app,db,Student,Employee):
     def app_links():
         if request.method=='POST':
             full_scope();key=request.form.get('app','')
+            if key in ('parents','teacher','owner','sms') and app.extensions['school_app_helpers']['view_model']():raise ValueError('Use school app branding to prepare these apps. Generic URLs cannot replace a school-specific app.')
             if key not in dict((k,label) for k,label,_ in APPS):raise ValueError('Choose a valid app.')
             row=Item.query.filter_by(kind='app-release',scope='',name=key).first()
             if request.form.get('version_token')!=str(row.version if row else 0):raise ValueError('This release changed. Reload first.')
@@ -129,7 +130,7 @@ def configure_general_tools(app,db,Student,Employee):
             db.session.add(Audit(action='Update app release',data=dict(app=key,owner_id=session.get('owner_id'),staff_id=session.get('staff_id'))));db.session.commit();flash('Release registry saved. No app file was generated or message sent.','success');return redirect(url_for('general_tools.app_links'))
         p=getattr(g,'staff_principal',None);helper=app.extensions['staff_access_helpers']
         can_edit=not session.get('demo') and (p is None or helper['grant'](p,'apps.update')==set(helper['campuses']()))
-        return render_template('app_links.html',title='SchoolFlow App Links',apps=releases(),can_edit=can_edit)
+        return render_template('app_links.html',title='SchoolFlow App Links',apps=releases(),can_edit=can_edit,school_apps=app.extensions['school_app_helpers']['view_model']())
     @bp.get('/widgets')
     def widgets():
         current,row=prefs();visible=allowed();selected=[k for k in current['order'] if k in current['selected'] and k in visible]

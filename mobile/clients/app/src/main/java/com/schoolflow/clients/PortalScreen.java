@@ -14,12 +14,13 @@ final class PortalScreen {
  private final Activity a;private WebView web;private TextView status;
  private ValueCallback<Uri[]> files;private String downloadUrl;private final ExecutorService io=Executors.newSingleThreadExecutor();
  PortalScreen(Activity activity){a=activity;}
+ private String startUrl(){return EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE+(BuildConfig.INSTITUTE_CODE.isEmpty()?"":"?school="+BuildConfig.INSTITUTE_CODE);}
  void show(Bundle state){
   LinearLayout root=new LinearLayout(a);root.setOrientation(LinearLayout.VERTICAL);LinearLayout bar=new LinearLayout(a);
-  Button home=new Button(a);home.setText("Home");home.setOnClickListener(v->web.loadUrl(EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE));bar.addView(home);
+  Button home=new Button(a);home.setText("Home");home.setOnClickListener(v->web.loadUrl(startUrl()));bar.addView(home);
   Button reload=new Button(a);reload.setText("Reload");reload.setOnClickListener(v->web.reload());bar.addView(reload);
   Button print=new Button(a);print.setText("Print");print.setOnClickListener(v->((PrintManager)a.getSystemService(Context.PRINT_SERVICE)).print("SchoolFlow",web.createPrintDocumentAdapter("SchoolFlow"),null));bar.addView(print);
-  Button clear=new Button(a);clear.setText("Sign out");clear.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("Clear this app’s school session?").setPositiveButton("Sign out",(d,w)->{CookieManager.getInstance().removeAllCookies(ok->{web.clearHistory();web.clearCache(true);WebStorage.getInstance().deleteAllData();web.loadUrl(EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE);});}).setNegativeButton("Cancel",null).show());bar.addView(clear);
+  Button clear=new Button(a);clear.setText("Sign out");clear.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("Clear this app’s school session?").setPositiveButton("Sign out",(d,w)->{CookieManager.getInstance().removeAllCookies(ok->{web.clearHistory();web.clearCache(true);WebStorage.getInstance().deleteAllData();web.loadUrl(startUrl());});}).setNegativeButton("Cancel",null).show());bar.addView(clear);
   root.addView(bar);status=new TextView(a);root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
   WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSafeBrowsingEnabled(true);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
@@ -36,7 +37,7 @@ final class PortalScreen {
    @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
   });
   web.setDownloadListener((url,agent,disposition,mime,length)->{if(!EndpointPolicy.allowed(url))return;downloadUrl=url;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime==null?"application/octet-stream":mime).putExtra(Intent.EXTRA_TITLE,"SchoolFlow-export"+(mime!=null&&mime.contains("pdf")?".pdf":mime!=null&&mime.contains("spreadsheet")?".xlsx":".csv"));try{a.startActivityForResult(i,42);}catch(ActivityNotFoundException e){status.setText("File saving is unavailable on this phone.");}});
-  if(state==null||web.restoreState(state)==null)web.loadUrl(EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE);
+  if(state==null||web.restoreState(state)==null)web.loadUrl(startUrl());
  }
  void result(int code,int result,Intent data){if(code==41&&files!=null){files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));files=null;}
   if(code==42&&result==Activity.RESULT_OK&&data!=null&&data.getData()!=null&&downloadUrl!=null){Uri target=data.getData();String url=downloadUrl;downloadUrl=null;String cookies=CookieManager.getInstance().getCookie(url);io.execute(()->{HttpURLConnection conn=null;try{conn=(HttpURLConnection)new URL(url).openConnection();conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(30000);if(cookies!=null)conn.setRequestProperty("Cookie",cookies);if(conn.getResponseCode()!=200)throw new IOException();try(InputStream in=conn.getInputStream();OutputStream out=a.getContentResolver().openOutputStream(target)){if(out==null)throw new IOException();byte[] buffer=new byte[8192];int n;long total=0;while((n=in.read(buffer))!=-1){total+=n;if(total>25*1024*1024)throw new IOException();out.write(buffer,0,n);}}a.runOnUiThread(()->status.setText("File saved."));}catch(Exception e){a.runOnUiThread(()->status.setText("Download failed. Sign in again and retry."));}finally{if(conn!=null)conn.disconnect();}});}
