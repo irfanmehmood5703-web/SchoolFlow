@@ -46,12 +46,13 @@ class PtmGroupTests(unittest.TestCase):
             self.n+=1;data=dict(submission=str(self.n).zfill(43),title='Term meeting',starts='2026-11-07',ends='2026-11-09',campus='North',event_preferences='1',term='Term 1',academic_year='2026-27',notify_parents='1',voice_notes='1',feedback_opens='2026-11-07T09:00',feedback_closes='2026-11-09T13:00');data.update(changes);return data
         self.assertEqual(self.post('/workspace/general/ptm/events',payload(feedback_closes='2026-11-06T12:00')).status_code,422)
         self.assertEqual(self.post('/workspace/general/ptm/events',payload()).status_code,302)
+        event_id=self.tenant(lambda:self.P['event'].query.one().id)
         meta=self.tenant(lambda:self.P['event_config'].query.one().data);self.assertTrue(meta['notify_parents']);self.assertTrue(meta['voice_notes'])
         self.assertEqual(self.post('/workspace/general/ptm/events',payload()).status_code,409)
         self.assertEqual(self.post('/workspace/general/ptm/events',payload(academic_year='2027-28')).status_code,302)
         self.assertEqual(self.post('/workspace/general/ptm/events',payload(campus='South')).status_code,302)
-        self.assertEqual(self.c.post('/workspace/general/ptm/create',data=self.group(event_id='1')).status_code,302)
-        self.assertEqual(self.c.post('/workspace/general/ptm/create',data=self.group(event_id='1',day='2026-12-01')).status_code,422)
+        self.assertEqual(self.c.post('/workspace/general/ptm/create',data=self.group(event_id=str(event_id))).status_code,302)
+        self.assertEqual(self.c.post('/workspace/general/ptm/create',data=self.group(event_id=str(event_id),day='2026-12-01')).status_code,422)
 
     def test_marks_snapshot_respects_filters_and_remains_unchanged(self):
         def seed():
