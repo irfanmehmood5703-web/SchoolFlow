@@ -25,6 +25,6 @@ Reference: five user-supplied screenshots on 13 November 2026. Implementation ke
 
 Focused tests cover multi-subject formatting/files, atomic rejection, exact/changed retries, class mappings, parent file/family/fee checks, event preferences/name scope, roster validation, report/export, immutable marks and assigned-teacher access. Existing parent/legacy-diary/PTM tests remain in the full suite.
 
-Local browser execution could not run: Chromium's process socket is prohibited in this execution environment. JavaScript syntax checks and HTTP/template/form regression tests are used; no physical Android/browser visual testing is claimed.
+Local browser execution could not run: Chromium's process socket is prohibited in this execution environment. JavaScript syntax checks and HTTP/template/form regression tests passed locally. A separate GitHub browser check exercises mobile and desktop forms on an isolated synthetic SQLite workspace; it cannot touch the hosted school database. Physical Android testing is not claimed.
 
 Release checks and hosted QA results are appended after deployment.
