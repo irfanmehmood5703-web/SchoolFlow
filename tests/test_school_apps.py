@@ -73,6 +73,8 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(self.claim(self.token(exp=int(time.time())-100)).status_code,401)
         self.assertEqual(self.claim(self.token(aud='different')).status_code,401)
         self.assertIsNone(self.claim().json['job'])
+        self.assertEqual(self.claim(self.token(sub=auth.IMMUTABLE_SUBJECT)).status_code,200)
+        self.assertEqual(self.claim(self.token(sub=auth.IMMUTABLE_SUBJECT.replace('@349908224/','@999999/'))).status_code,403)
     def test_artifacts_are_school_bound_and_public_links_share_no_account_access(self):
         self.prepare();job=self.claim().json['job'];self.complete(job)
         self.assertEqual(self.clients[0].get('/workspace/general/school-apps/parents/download').status_code,200)

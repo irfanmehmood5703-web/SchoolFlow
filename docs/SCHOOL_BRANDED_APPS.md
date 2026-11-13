@@ -91,3 +91,11 @@ Server regression checks passed664tests; the seven targeted school/OIDC checks
 were rerun successfully after the final orchestration refinements. No real
 school account, SMS send, paid service or signing secret was published by these
 fictional tests. Hosted OIDC and deployment verification follow the main rollout.
+
+
+The live repository uses GitHub immutable subjects: the signed subject includes
+owner ID349908224 and repository ID1439152590. This exact main-branch subject
+is explicitly allowed alongside the exact legacy subject; no wildcard subject
+is accepted. Other repository/workflow/ref/signature checks remain required.
+The first live authorization check revealed this format difference; synthetic
+legacy-subject checks alone were not evidence of a working hosted connection.
