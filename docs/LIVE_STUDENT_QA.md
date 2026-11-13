@@ -22,14 +22,14 @@ private PostgreSQL schema checked saved records and accounting totals.
 | Issued November challan | PKR 3,000; one bill after repeated generation |
 | Receipt | PKR 1,000; duplicate submission refused |
 | Outstanding | PKR 2,000 |
-| Receipt ledger | One source link; total debit100,000 / credit100,000 paisa |
+| Receipt ledger | One source link; total debit 100,000 / credit 100,000 paisa |
 | Attendance | Present; invalid status rejected without replacing it |
-| Exam | Mathematics80 /100 persisted and appeared in school results |
+| Exam | Mathematics 80 / 100 persisted and appeared in school results |
 | Fee exports | Student status, detail, class/particular, family and monthly defaulter reports reconcile with 3,000 /1,000 /2,000 |
 | General / parent | Targeted diary and notice saved; parent saw correct fees, attendance, diary, notice and profile |
 | Access separation | Parent denied foreign child and staff administration; private child absent from shared demo; anonymous student requests redirected |
 
-Initial testing recorded81 distinct checks:80 passed and one missing connection
+Initial testing recorded 81 distinct checks: 80 passed and one missing connection
 was found. Parent Academics & Marks and Exam Report Cards had no connection to
 saved exam scores. This was not treated as a successful empty result.
 
@@ -59,3 +59,24 @@ restrictions. Full regression, PostgreSQL and corrected live checks follow.
 
 This one-student pass does not certify HRM/payroll, every report layout,
 physical mobile apps, gate hardware, SIM delivery or load/security behavior.
+
+
+## Verified corrected result
+
+All 89 distinct hosted checks now pass, including the initial missing parent
+marks connection after correction. Full backend regression passed 686 tests in
+86.798 seconds. PostgreSQL workflow 43462976509 passed the existing account,
+identity, shareholder and APK tests, the four publication tests, and restart
+persistence. Original-host deploy dep-dbrjmcff3r2c73c6ojp0 is live at source
+01c9c8ea394df2b49a904ca6e92025c63bcc1e5a.
+
+The QA owner explicitly published the synthetic exam through the new web form.
+A fresh parent login then displayed Mathematics 80/100 and 80% in both Academics
+& Marks and Exam Report Cards, still refused an unrelated child ID, and retained
+Remaining Rs 2000.00. Student profile survived the deployment. Independent
+PostgreSQL reads confirmed one receipt, one photo, 200000 paisa outstanding and
+a published exam copy of 80/100. No real institute's exam was published.
+
+Synthetic QA records are retained in the isolated school for inspection; its
+owner login can be managed from the software owner's existing school directory.
+No generated password, login link credential or cookie is part of this report.
