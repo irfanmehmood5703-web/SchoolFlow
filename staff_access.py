@@ -334,8 +334,10 @@ def configure_staff_access(app,db,Student,Employee):
             if ep in ('requisitions.issue','requisitions.settle','requisitions.reports'):return 'requisitions.print' if request.args.get('print')=='1' else 'requisitions.manage'
             if ep=='requisitions.blocked_posting':return 'requisitions.'+('pay' if request.path.endswith('/issue') else 'update')
             return 'requisitions.'+('create' if ep=='requisitions.mine' and request.method=='POST' else 'update' if ep=='requisitions.cancel' else 'print' if request.args.get('print')=='1' else 'view')
+        if ep.startswith('shareholder_posting.'):
+            return 'finance.'+('delete' if ep=='shareholder_posting.reverse' and request.method=='POST' else 'create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_partners.'):
-            return 'finance.'+('create' if ep=='finance_partners.edit' and not args.get('rid') else 'update' if ep=='finance_partners.edit' else 'print' if request.args.get('print')=='1' else 'view')
+            return 'finance.'+('create' if ep=='finance_partners.edit' and not args.get('rid') else 'update' if ep=='finance_partners.edit' else 'export' if request.args.get('export') else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_audit.'):
             return 'finance.'+('export' if request.args.get('export') else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance_reports.'):

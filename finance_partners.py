@@ -140,6 +140,8 @@ def configure_finance_partners(app,db):
                     if prior.created_key!=H['actor']()[1] or any(getattr(prior,k)!=v for k,v in values.items()):raise ValueError('This submission token was already used with different details.')
                     return redirect(url_for('finance_partners.partners'))
             check_allocation(values,rid)
+            movement=app.extensions.get('shareholder_posting_models',{}).get('movement')
+            if row and movement and values['campus']!=row.campus and movement.query.filter_by(partner_id=row.id).first():raise ValueError('A shareholder scope with recorded transactions cannot be replaced.')
             if row and row.account_id and (row.account_id!=values['account_id'] or row.campus!=values['campus']) and L.query.filter_by(account_id=row.account_id).first():raise ValueError('A linked capital account or scope with posted activity cannot be replaced.')
             now=datetime.now(timezone.utc);who=H['actor']()[0]
             before={k:getattr(row,k) for k in values} if row else None
@@ -147,6 +149,10 @@ def configure_finance_partners(app,db):
             if not row:row=Partner(token=token,created_at=now,created_by=who,created_key=H['actor']()[1]);db.session.add(row)
             for k,v in values.items():setattr(row,k,v)
             row.updated_at=now;row.updated_by=who;db.session.flush()
+            history=app.extensions.get('shareholder_posting_models',{}).get('revision')
+            if history:
+                after={k:(v.isoformat() if isinstance(v,date) else v) for k,v in values.items()}
+                db.session.add(history(partner_id=row.id,actor=who,before=before,after=after))
             db.session.add(Audit(action='Save shareholder',data={'id':row.id,'actor':who,'before':before}));db.session.commit();flash('Shareholder saved. Profit shares are estimates using the current ownership percentages.','success')
             return redirect(url_for('finance_partners.partners'))
         accounts=H['options']();accounts=[a for a in accounts if a.group.account_class=='Equity']
@@ -165,6 +171,11 @@ def configure_finance_partners(app,db):
                 base=H['scoped'](own,[]).filter(L.account_id==p.account_id)
                 capital=int(base.filter(J.day<=end).with_entities(func.coalesce(func.sum(L.credit-L.debit),0)).scalar())
                 d,c,n=base.filter(J.day>=start,J.day<=end).with_entities(func.coalesce(func.sum(L.debit),0),func.coalesce(func.sum(L.credit),0),func.count(func.distinct(J.id))).one();debits=int(d);credits=int(c);transactions=int(n)
+            movement=app.extensions.get('shareholder_posting_models',{}).get('movement')
+            if movement:
+                ids={r.journal_id for r in movement.query.filter_by(partner_id=p.id).filter(movement.day>=start,movement.day<=end).all()}
+                if p.account_id:ids.update(jid for jid, in base.filter(J.day>=start,J.day<=end).with_entities(J.id).distinct().all())
+                transactions=len(ids)
             if not p.active and not include_former:continue
             if capital is not None:capital_total+=capital
             effective=max(start,p.since) if p.since else start;pi,pe=profit(effective,end,own) if effective<=end and p.active else (0,0)
@@ -174,7 +185,10 @@ def configure_finance_partners(app,db):
         return render('shareholders.html',title='Shareholders',start=start,end=end,scope=[],include_former=include_former,rows=rows,income=income,expense=expense,capital_total=capital_total,allocations=allocations,link=lambda **kw:link('finance_partners.partners',**kw))
     @bp.get('/shareholders/<int:rid>/transactions')
     def transactions(rid):
-        row=db.get_or_404(Partner,rid);start,end,scope,users=H['filters']();lines=[]
+        row=db.get_or_404(Partner,rid)
+        enhanced=app.extensions.get('shareholder_posting_helpers',{}).get('statement')
+        if enhanced:return enhanced(row)
+        start,end,scope,users=H['filters']();lines=[]
         if row.account_id:lines=H['scoped']([row.campus] if row.campus else [],[]).filter(L.account_id==row.account_id,J.day>=start,J.day<=end).order_by(J.day,J.id,L.id).all()
         return render('shareholder_transactions.html',title='Shareholder Transactions',row=row,lines=lines,start=start,end=end)
     app.register_blueprint(bp)

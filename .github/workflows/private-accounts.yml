@@ -1,8 +1,8 @@
 name: Private account panel
 on:
   push:
-    branches: [main, feature/private-account-panel]
-    paths: ['vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
+    branches: [main, feature/private-account-panel, feature/shareholder-workflows]
+    paths: ['finance_partners.py', 'shareholder_posting.py', 'templates/shareholder*.html', 'tests/test_shareholder_posting.py', 'vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,5 +38,7 @@ jobs:
         run: python -W ignore -m unittest discover -s tests -p test_identity.py -q
       - name: School APK queue on separate control database
         run: python -W ignore -m unittest discover -s tests -p test_school_apps.py -q
+      - name: Shareholder accounting and tenant isolation
+        run: python -W ignore -m unittest discover -s tests -p test_shareholder_posting.py -q
       - name: Verify account and school data survive a new application process
         run: python scripts/verify_private_storage.py

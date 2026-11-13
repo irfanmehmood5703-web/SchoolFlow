@@ -1,3 +1,5 @@
+> Current extension: the user authorized original complete shareholder actions without further screenshots. See SHAREHOLDER_WORKFLOWS.md for capital/payout postings, reversals, statements and history. Requests for populated reference screens below describe the older checkpoint.
+
 # Cash Report and Shareholders reference batch
 
 Cash Report uses the supplied date, multi-campus, multi-user and hierarchical multi-account filters. Account class/group checkboxes select descendants; search, select-all and clear-selection controls are included. No account selection means all configured accounts, including inactive accounts with historical activity. Assets, Liabilities, Equity, Expense and Income tabs show grouped historical account snapshots. Summary rows contain group/class rollups and a single grand total calculated from account rows, avoiding double counting. Brought-forward columns contain gross posted debit/credit before From; duration columns cover the inclusive selected dates; balance is brought debit minus credit plus duration debit minus credit. This uses actual SchoolFlow journal history rather than copying the reference's example zero openings.

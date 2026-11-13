@@ -150,6 +150,8 @@ from finance_audit import configure_finance_audit
 configure_finance_audit(app,db,Student)
 from finance_partners import configure_finance_partners
 configure_finance_partners(app,db)
+from shareholder_posting import configure_shareholder_posting
+configure_shareholder_posting(app,db)
 from requisitions import configure_requisitions
 configure_requisitions(app,db)
 from fee_ledger import configure_fee_ledger
