@@ -39,9 +39,9 @@ class IdentityTests(unittest.TestCase):
         rm = app.extensions['record_models']
         with app.test_request_context('/'):
             g.institute_engine = app.extensions['identity_helpers']['engine'](institute_id)
-            db.session.add(Student(id=1, admission_no='SAME-001', name=name, status='Active'))
+            db.session.add(Student(admission_no='SAME-001', name=name, status='Active'))
             if extra:
-                db.session.add(Student(id=2, admission_no='SAME-002', name='Secret A second pupil'))
+                db.session.add(Student(admission_no='SAME-002', name='Secret A second pupil'))
             db.session.add(rm['settings'](category='campus', value='Campus '+name, class_name=''))
             db.session.add(rm['file'](id=1, owner_kind='student', owner_id=1, title='Document', filename='test.txt', mime='text/plain', photo=False, content=name.encode(), sha256='test'))
             db.session.flush()

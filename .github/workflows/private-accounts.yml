@@ -19,7 +19,7 @@ jobs:
           POSTGRES_PASSWORD: fictional_ci_password
         ports: ['5432:5432']
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U fictional_qa -d private_account_qa"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
