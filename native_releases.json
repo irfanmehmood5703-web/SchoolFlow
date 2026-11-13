@@ -1,0 +1,34 @@
+{
+  "parents": {
+    "url": "https://github.com/irfanmehmood5703-web/SchoolFlow/releases/download/clients-test-3/SchoolFlow-parents-test.apk",
+    "version": "0.1-test",
+    "size": "28029 bytes",
+    "notes": "Debug-signed Android test build. Native Android portal client using existing SchoolFlow web workflows. Internet required; offline mode and push notifications are not included. Physical device testing and owner-controlled production signing remain required.",
+    "sha256": "d0c9a43e3560bf080c00e03a76ed6139be994beaf70ad82a1d52af697e9437f1",
+    "source_commit": "d41f40f0ad80930d82e9615803f97702a14a252c"
+  },
+  "teacher": {
+    "url": "https://github.com/irfanmehmood5703-web/SchoolFlow/releases/download/clients-test-3/SchoolFlow-teacher-test.apk",
+    "version": "0.1-test",
+    "size": "28045 bytes",
+    "notes": "Debug-signed Android test build. Native Android portal client using existing SchoolFlow web workflows. Internet required; offline mode and push notifications are not included. Physical device testing and owner-controlled production signing remain required.",
+    "sha256": "fe85632b675ec8f89214ad2e25a7c2e5e13ae4316634aeef98be86df58e5e34b",
+    "source_commit": "d41f40f0ad80930d82e9615803f97702a14a252c"
+  },
+  "owner": {
+    "url": "https://github.com/irfanmehmood5703-web/SchoolFlow/releases/download/clients-test-3/SchoolFlow-owner-test.apk",
+    "version": "0.1-test",
+    "size": "28029 bytes",
+    "notes": "Debug-signed Android test build. Native Android portal client using existing SchoolFlow web workflows. Internet required; offline mode and push notifications are not included. Physical device testing and owner-controlled production signing remain required.",
+    "sha256": "5e85b03f0667578c33268907ced3e446c0b3c192780bc85445b441ca8818f6e3",
+    "source_commit": "d41f40f0ad80930d82e9615803f97702a14a252c"
+  },
+  "sms": {
+    "url": "https://github.com/irfanmehmood5703-web/SchoolFlow/releases/download/clients-test-3/SchoolFlow-sms-test.apk",
+    "version": "0.1-test",
+    "size": "28173 bytes",
+    "notes": "Debug-signed Android test build. Attended school-SIM sender; confirm each SMS on the phone. SIM/network charges apply. Physical device testing and owner-controlled production signing remain required.",
+    "sha256": "66fa106c9f14ea55419e8b8df948eb2763924b1e5a8a4c4560bf8e41c9419123",
+    "source_commit": "d41f40f0ad80930d82e9615803f97702a14a252c"
+  }
+}

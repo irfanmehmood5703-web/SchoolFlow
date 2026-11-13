@@ -39,3 +39,26 @@ process-death/network-loss trials. These cannot be proved by server tests or an
 APK compile. Native push, offline synchronisation and broader provider/bank
 integrations remain separate work. Original hosting storage configuration is
 unchanged; this revision does not establish durable production database storage.
+
+
+## Published and hosted verification
+
+Main commit d41f40f0ad80930d82e9615803f97702a14a252c passed both Android
+and all 656 backend checks in run43349337646. Four APKs were published as
+clients-test-3, alongside SHA256SUMS.txt and SOURCE-COMMIT.txt. Each published
+APK was downloaded independently, checked against its published SHA256, and
+inspected for AndroidManifest.xml and classes.dex. The source provenance matches
+the tested commit. App Links now uses this exact verified release by default;
+explicit school-specific overrides (including hiding a URL) are preserved.
+
+Original Render deploy dep-dbr6vmgjo6nc73ep7vo0 became live on 13 November.
+Live health returned schoolflow-clients-v35; Parent/Teacher/Owner entry pages,
+App Links and all 37 widget cards loaded successfully. An anonymous SMS device
+heartbeat was refused with HTTP401. No live recipient was queued or messaged.
+
+The original host's Build Status explicitly reported SQLite development storage.
+Persistent database migration is pending confirmation of whether the original
+host contains real school records, so those records can be backed up/preserved.
+No storage URL was replaced and no data was erased in this task. The original
+service remains on its existing free plan. This outstanding data-protection
+issue prevents treating the system as production-ready.

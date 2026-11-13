@@ -21,13 +21,13 @@
 <section class="form-card"><h2>Partial or incomplete workflows</h2><ul>
 
 <li>Automatic fee receipt posting is available under Ledger Setup → Automatic Fee Ledger Posting. Enable it only after mapping accounts. New receipts post cash-basis gross income and discounts atomically; reversals post on the current date. Earlier receipts are not backfilled. Payroll-to-General-Ledger automatic posting remains separate work.</li>
-<li>Report/filter/print parity and remaining template tag values still need reference-specific checks. The complete reference dashboard widget set is not implemented.</li>
+<li>Report/filter/print parity and remaining template tag values still need reference-specific checks. All 37 reference widgets are implemented under General → Widgets, with source access checks and explicit unavailable telemetry.</li>
 <li>Consecutive lecture carry-forward, remaining fee proration/advance rules and recurring automatic annual payroll increments need further work. Approved manual increments are available; sandwich leave remains disabled.</li>
 <li>Daily history cannot backfill unobserved dates. Old saved snapshots remain frozen, including after backdated journals; current captures refresh enabled history.</li>
 </ul></section>
 <section class="form-card"><h2>External connections and launch work</h2><ul>
-<li>Teacher, Parent, SMS and Owner mobile apps are not connected. Parent-app publication is not active.</li>
-<li>SMS/WhatsApp delivery requires a working sender/provider; saving a request does not send it. WhatsApp setup controls do not by themselves establish provider delivery.</li>
+<li>Android test clients are available for Teacher, Parent and Owner using the existing web portal. The attended SMS client connects a school SIM to the reviewed outbox; no push notifications or offline sync are included.</li>
+<li>WhatsApp/branded SMS delivery requires a working sender/provider; saving a request does not send it. WhatsApp setup controls do not by themselves establish provider delivery.</li>
 <li>Registered bank consumer numbers and automatic bank collection are not connected.</li>
 <li>Free sleeping hosts cannot promise uninterrupted scheduled reminders, fine jobs, attendance jobs or snapshot capture. The free trial disables the continuous worker.</li>
 <li>Physical Android/device testing, production hardening and tested backup/restore procedures remain launch requirements.</li>

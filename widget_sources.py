@@ -165,7 +165,7 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         add('complaints-chart',sum(complaint_months[m] for m in six),'records in 6 months',['Month','Records'],[[m,complaint_months[m]] for m in six],'Actual creation months of locally saved complaint/suggestion records.',[(m,complaint_months[m]) for m in six])
         add('updates',len(published),'published releases',['App','Version','Release notes'],[[r['label'],r['version'],r['notes']] for r in published],'Your configured SchoolFlow release versions and notes; no vendor announcements are copied.')
         requests=rm['communication'].query.filter(rm['communication'].created_at>=start,rm['communication'].created_at<end+timedelta(days=1)).all()
-        add('sms',None,'SMS credit / sent telemetry unavailable',['Request','Student ID','Status','Created'],[[r.id,r.student_id,r.status,str(r.created_at)] for r in requests],f'{len(requests)} local communication requests in the selected period. No SIM/provider balance or delivery telemetry is connected; saved requests are not sent messages.')
+        add('sms',None,'SMS credit unavailable',['Request','Student ID','Status','Created'],[[r.id,r.student_id,r.status,str(r.created_at)] for r in requests],f'{len(requests)} local communication requests in the selected period. SIM/provider balance and recipient delivery are unavailable. Phone-submission results are recorded separately under School SIM SMS; saved requests here are not sent messages.')
     if 'attendance-donut' in out:
         summary=out['attendance-donut'];total=sum(value for _,value in summary['chart']);offset=0;segments=[]
         colors=['#177653','#bd4545','#bf861b','#2d6db1','#8974b6','#8a9690']

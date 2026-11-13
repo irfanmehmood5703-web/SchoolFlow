@@ -36,7 +36,9 @@ class GeneralToolsTests(unittest.TestCase):
         self.assertEqual(self.M['preference'].query.count(),0)
     def test_registry_version_url_checks_and_real_link_only(self):
         page=self.c.get('/workspace/general/app-links')
-        self.assertEqual(page.data.count(b'No native release published'),8);self.assertNotIn(b'data-copy-release=',page.data)
+        self.assertEqual(page.data.count(b'No native release published'),4)
+        self.assertEqual(page.data.count(b'Verify test APK'),4)
+        self.assertIn(b'/releases/download/clients-test-3/SchoolFlow-parents-test.apk',page.data)
         payload=dict(app='teacher',version_token='0',url='https://example.invalid/schoolflow.apk',version='1.0',size='10 MB',notes='Fictional test release')
         self.assertEqual(self.post('/workspace/general/app-links',payload).status_code,302)
         page=self.c.get('/workspace/general/app-links');self.assertIn(b'data-copy-release="https://example.invalid/schoolflow.apk"',page.data)
@@ -139,6 +141,15 @@ class GeneralToolsTests(unittest.TestCase):
         self.assertEqual(self.c.get('/workspace/general/widgets/permissions').status_code,403)
         self.assertEqual(self.post('/workspace/general/widgets/layout',dict(version='0',action='default')).status_code,302)
         self.assertEqual(self.M['preference'].query.count(),0)
+
+    def test_school_can_hide_bundled_test_release_without_rewriting_catalogue(self):
+        import json
+        from pathlib import Path
+        before=Path('native_releases.json').read_text()
+        self.assertEqual(self.post('/workspace/general/app-links',dict(app='parents',version_token='0',url='',version='',size='',notes='Hidden for this school')).status_code,302)
+        page=self.c.get('/workspace/general/app-links')
+        self.assertNotIn(json.loads(before)['parents']['url'].encode(),page.data)
+        self.assertEqual(Path('native_releases.json').read_text(),before)
 
     def test_unknown_widget_404(self):
         self.assertEqual(self.c.get('/workspace/general/widgets/report/unknown').status_code,404)

@@ -1,5 +1,6 @@
 """App release registry and the complete 37-widget reference workspace."""
-import hmac
+import hmac,json
+from pathlib import Path
 from datetime import date,datetime
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -55,7 +56,19 @@ def configure_general_tools(app,db,Student,Employee):
         if p is not None and set(g.access_campuses)!=set(app.extensions['staff_access_helpers']['campuses']()):abort(403,'This setting requires access to every configured campus.')
     def releases():
         items={r.name:r for r in Item.query.filter_by(kind='app-release',scope='').all()}
-        return [dict(key=key,label=label,platform=platform,url=items[key].data.get('url','') if key in items else '',version=items[key].data.get('version','') if key in items else '',size=items[key].data.get('size','') if key in items else '',notes=items[key].data.get('notes','') if key in items else '',revision=items[key].version if key in items else 0) for key,label,platform in APPS]
+        published=json.loads(Path(__file__).with_name('native_releases.json').read_text())
+        result=[]
+        for key,label,platform in APPS:
+            row=items.get(key)
+            # Explicit school settings (including an intentionally empty URL)
+            # override the published test build; never rewrite tenant records.
+            data=row.data if row else published.get(key,{})
+            result.append(dict(key=key,label=label,platform=platform,
+                url=data.get('url',''),version=data.get('version',''),size=data.get('size',''),
+                notes=data.get('notes',''),revision=row.version if row else 0,
+                sha256=data.get('sha256','') if not row else '',
+                source_commit=data.get('source_commit','') if not row else ''))
+        return result
     def days():
         t=today();period=request.args.get('period','month')
         if period not in ('today','month','session','custom'):raise ValueError('Choose a valid period.')
