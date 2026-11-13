@@ -61,7 +61,8 @@ def configure_school_apps(app,db):
         if identity.get('demo') or not identity.get('scope'):return None
         return School.query.filter_by(storage_key=identity['scope'],active=True).first()
     def display_name(value):
-        value=' '.join(str(value).split())
+        if not isinstance(value,str) or len(value)>256:raise ValueError('Use a school app name of 1–80 characters.')
+        value=' '.join(value.split())
         if not 1<=len(value)<=80 or any(ord(c)<32 or ord(c) in (*range(0x202a,0x202f),*range(0x2066,0x206a)) for c in value):raise ValueError('Use a school app name of 1–80 characters without control characters.')
         return value
     def snapshot(school):

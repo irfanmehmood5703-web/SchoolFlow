@@ -77,3 +77,17 @@ fictional schools (ISF School System and Sadia School), then compiles an updated
 ISF branding revision to check stable signing/package identity and increased
 version. These fixtures and keys are isolated and never become live institutes.
 Final build and hosted results are recorded after the verification run completes.
+
+
+### Verified compiled result
+
+Feature run43371745285 at b631b5aec62c13793b723fe3ffe2985824c64936 passed
+the complete Android callback/download flow. Twelve actual APKs compiled,
+passed lint/unit checks, matched each school’s launcher name, icon pixels,
+package ID and signing certificate, and returned to the matching school. The
+ISF rename/update retained its signing identity/package and advanced versionCode
+to2; an ampersand and quoted school name also passed aapt metadata verification.
+Server regression checks passed664tests; the seven targeted school/OIDC checks
+were rerun successfully after the final orchestration refinements. No real
+school account, SMS send, paid service or signing secret was published by these
+fictional tests. Hosted OIDC and deployment verification follow the main rollout.
