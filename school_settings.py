@@ -496,11 +496,7 @@ def configure_school_settings(app,db,Student,Employee):
         total=len(employees);page=max(1,request.args.get('p',1,type=int));pages=max(1,(total+24)//25);page=min(page,pages)
         return render_template('shift_assignments.html',title='Assign employee shifts',employees=employees[(page-1)*25:page*25],all_employees=Employee.query.order_by(Employee.name).all(),details=details,templates=templates,cfg=cfg,data=data,days=DAYS,options=options,page=page,pages=pages,total=total)
 
-    @bp.route('/exam/results/<int:award_id>')
-    def results(award_id):
-        award=db.get_or_404(W,award_id)
-        if award.kind!='awards':abort(404)
-        group_view=request.args.get('view')=='groups'
+    def result_rows(award,group_view=False):
         scores=ops['score'].query.filter_by(award_id=award.id).all()
         qualitative=ops['qualitative'].query.filter_by(award_id=award.id).all()
         detail_model=rm['student'];roster=Student.query.outerjoin(detail_model,detail_model.student_id==Student.id).filter(Student.status=='Active')
@@ -548,7 +544,17 @@ def configure_school_settings(app,db,Student,Employee):
             percent=obtained/total*100 if total and complete else None
             grade,remarks=grade_for(award.data.get('campus',''),award.data.get('class_name',''),percent) if percent is not None else ('','')
             rows.append(dict(student=pupil,details=details.get(pupil.id,{}),obtained=obtained,total=total,percentage=percent,grade=grade,remarks=remarks,complete=complete,papers=paper_rows,groups=grouped))
-        return render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+award.data['name'],award=award,rows=rows,group_view=group_view)
+        return rows
+
+    @bp.route('/exam/results/<int:award_id>')
+    def results(award_id):
+        award=db.get_or_404(W,award_id)
+        if award.kind!='awards':abort(404)
+        group_view=request.args.get('view')=='groups'
+        rows=result_rows(award,group_view)
+        publication=app.extensions.get('parent_exam_helpers',{}).get('review')
+        release=publication(award,rows if not group_view else result_rows(award)) if publication else None
+        return render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+award.data['name'],award=award,rows=rows,group_view=group_view,parent_release=release)
 
     @bp.get('/hrm/increment-sheet')
     def increment_sheet():
@@ -685,5 +691,5 @@ def configure_school_settings(app,db,Student,Employee):
         values=tag_values['employee'](person,details) if person else {};values.update(salary_month=month,date=month)
         return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',branding_values=values,details=details,employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
 
-    app.extensions['school_settings_helpers']=dict(config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
+    app.extensions['school_settings_helpers']=dict(result_rows=result_rows,config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
     app.register_blueprint(bp)

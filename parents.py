@@ -4,7 +4,7 @@ Native Android clients and SIM delivery are separate integrations. No invitation
 or OTP is sent by these routes; verified staff can hand a short-lived code/link
 to the correct family after checking identity.
 """
-import base64,hashlib,hmac,io,re,secrets,time
+import base64,hashlib,hmac,io,re,secrets,time,json
 from collections import defaultdict
 from datetime import date,datetime
 from zoneinfo import ZoneInfo
@@ -22,6 +22,17 @@ def configure_parents(app,db,Student):
     bp=Blueprint('parents',__name__,url_prefix='/workspace/general/parents')
     public=Blueprint('parent_portal',__name__,url_prefix='/parents/<code>')
     rm=app.extensions['record_models'];Audit=app.extensions['ops_models']['audit'];Bill=app.extensions['ops_models']['bill']
+    class ExamRelease(db.Model):
+        __tablename__='parent_exam_release'
+        award_id=db.Column(db.Integer,db.ForeignKey('workflow.id',ondelete='RESTRICT'),primary_key=True)
+        published=db.Column(db.Boolean,nullable=False,default=False)
+        snapshot=db.Column(db.JSON,nullable=False,default=dict)
+        updated=db.Column(db.Float,nullable=False,default=0)
+        actor=db.Column(db.String(254),nullable=False,default='')
+        version=db.Column(db.Integer,nullable=False,default=1)
+        __mapper_args__={'version_id_col':version}
+    app.extensions['parent_exam_release_model']=ExamRelease
+
     class Account(db.Model):
         __tablename__='parent_account'
         family_id=db.Column(db.Integer,db.ForeignKey(rm['family'].id),primary_key=True)
@@ -158,6 +169,43 @@ def configure_parents(app,db,Student):
         if raw not in ('25','50','100'):raise ValueError('Choose 25, 50 or 100 entries per page.')
         g.parent_page_size=int(raw)
         return rows[(page-1)*g.parent_page_size:page*g.parent_page_size],page,len(rows)
+    def result_snapshot(award,rows):
+        children={}
+        for row in rows:
+            papers=[]
+            for item in row['papers']:
+                if item.get('excluded'):continue
+                papers.append(dict(subject=item['paper']['subject'],grading=item['paper'].get('grading','Marks'),obtained=str(item['obtained']) if item['obtained'] is not None else None,total=str(item['total']),state=item['state'],grade=item['grade'],remarks=item.get('remarks',''),marked=item['marked']))
+            children[str(row['student'].id)]=dict(name=row['student'].name,obtained=str(row['obtained']),total=str(row['total']),percentage=str(row['percentage']) if row['percentage'] is not None else None,grade=row['grade'],remarks=row['remarks'],complete=row['complete'] and all(p['marked'] for p in papers),papers=papers)
+        return dict(exam_name=award.data['name'],children=children)
+    def review_result(award,rows):
+        snapshot=result_snapshot(award,rows)
+        fingerprint=hashlib.sha256(json.dumps(dict(award=award.data,result=snapshot),sort_keys=True,default=str).encode()).hexdigest()
+        release=db.session.get(ExamRelease,award.id)
+        return dict(snapshot=snapshot,fingerprint=fingerprint,version=release.version if release else 0,published=bool(release and release.published))
+    app.extensions['parent_exam_helpers']=dict(review=review_result)
+
+    @bp.post('/exams/<int:award_id>/publish')
+    def publish_result(award_id):
+        if not session.get('owner_id') or session.get('staff_id'):abort(403,'Only the school owner can publish parent results.')
+        award=db.get_or_404(app.extensions['ops_models']['workflow'],award_id)
+        if award.kind!='awards':abort(404)
+        release=db.session.get(ExamRelease,award_id)
+        if request.form.get('version')!=str(release.version if release else 0):raise ValueError('Parent publication changed. Reload the result before saving.')
+        action=request.form.get('action')
+        if action=='publish':
+            rows=app.extensions['school_settings_helpers']['result_rows'](award)
+            review=review_result(award,rows)
+            if not re.fullmatch(r'[0-9a-f]{64}',request.form.get('fingerprint','')) or not hmac.compare_digest(request.form['fingerprint'],review['fingerprint']):raise ValueError('Marks, roster or grading changed. Review the current result before publishing.')
+            if not rows or any(not row['complete'] or not row['papers'] for row in review['snapshot']['children'].values()):raise ValueError('Complete all eligible student papers before publishing parent results.')
+            release=release or ExamRelease(award_id=award_id);db.session.add(release);release.snapshot=review['snapshot'];release.published=True
+        elif action=='unpublish' and release:release.published=False
+        else:raise ValueError('Choose Publish or Unpublish.')
+        release.updated=now();release.actor=(getattr(g,'school_identity',None) or {}).get('email','School owner')
+        audit('Publish parent exam result' if release.published else 'Unpublish parent exam result',award_id=award_id,student_count=len(release.snapshot.get('children',{})))
+        db.session.commit();flash('Parent result published.' if release.published else 'Parent result unpublished.','success')
+        return redirect(url_for('school_settings.results',award_id=award_id))
+
     @bp.get('')
     def analytics():
         allrows=selection();rows,page,total=pagination(allrows)
@@ -365,6 +413,22 @@ def configure_parents(app,db,Student):
         if decision['effective']=='block':return render_template('parent_portal.html',title=dict(FEATURES)[feature],view='blocked',school=g.parent_school,student=student),403
         warn=decision['effective']=='warn';content=[];label=dict(FEATURES)[feature]
         if feature=='fees':content=[dict(title=b.month,body='Payable Rs '+format(b.total/100,'.2f')+' · Paid Rs '+format(b.paid/100,'.2f')+' · Remaining Rs '+format(b.remaining/100,'.2f')) for b in Bill.query.filter_by(student_id=sid).order_by(Bill.month.desc()).all()]
+        elif feature in ('marks','results'):
+            def display_number(value):
+                text=str(value)
+                return text.rstrip('0').rstrip('.') if '.' in text else text
+            for release in ExamRelease.query.filter_by(published=True).order_by(ExamRelease.updated.desc(),ExamRelease.award_id.desc()).all():
+                result=release.snapshot.get('children',{}).get(str(sid))
+                if not result:continue
+                lines=[]
+                for paper in result['papers']:
+                    value={'A':'Absent','L':'Leave'}.get(paper['state'])
+                    if value is None:value=(display_number(paper['obtained'])+' / '+display_number(paper['total'])) if paper['grading']=='Marks' else paper['grade']
+                    lines.append(paper['subject']+': '+value)
+                if result['percentage'] is not None:lines.append('Total: '+display_number(result['obtained'])+' / '+display_number(result['total'])+' · '+display_number(result['percentage'])+'%')
+                if result.get('grade'):lines.append('Grade: '+result['grade'])
+                if result.get('remarks'):lines.append(result['remarks'])
+                content.append(dict(title=release.snapshot['exam_name'],body='\n'.join(lines)))
         elif feature in ('notice','diary'):
             Entry=app.extensions['student_extras_models']['entry'];day=today()
             for e in Entry.query.filter(Entry.campus.in_(['',data.get('campus','')]),Entry.kind==('notices' if feature=='notice' else 'diary')).order_by(Entry.starts.desc()).all():
