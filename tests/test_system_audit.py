@@ -1,6 +1,8 @@
 """Whole-menu traversal and real setup failures found in the pre-UAT audit."""
 import json,re,unittest
 from html.parser import HTMLParser
+from datetime import datetime,timezone
+from unittest.mock import patch
 from flask import g,session
 from tests import test_messaging as fixture
 from app import app,db
@@ -69,3 +71,16 @@ class SystemAuditTests(unittest.TestCase):
             demo=app.test_client();demo.get('/auth/institute');self.assertEqual(self.post('/auth/demo',{},demo).status_code,302)
             page=demo.get('/workspace/readiness');self.assertIn(b'Public DEMO: temporary testing only',page.data);self.assertIn(b'Do not enter real school records here',page.data)
         finally:app.config['PUBLIC_DEMO_ENABLED']=before
+
+    def test_school_date_and_previous_payroll_month_follow_pakistan_at_utc_boundary(self):
+        class FrozenClock:
+            @classmethod
+            def now(cls,tz=None):
+                instant=datetime(2026,10,31,20,30,tzinfo=timezone.utc)
+                return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+        with patch('school_clock.datetime',FrozenClock):
+            self.assertIn(b'value="2026-11-01"',self.c.get('/records/student/new').data)
+            self.assertIn(b'value="2026-11-01"',self.c.get('/records/employee/new').data)
+            self.assertIn(b'value="2026-11-01"',self.c.get('/workspace/attendance/student').data)
+            self.assertIn(b'value="2026-10"',self.c.get('/workspace/payroll').data)
+            self.assertIn(b'value="2026-11-01"',self.c.get('/workspace/reports/attendance/combined-attendance').data)

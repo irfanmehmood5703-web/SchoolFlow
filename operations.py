@@ -2,6 +2,7 @@
 import calendar, csv, hmac, io, json, re, secrets, hashlib
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
+from school_clock import school_today
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy import case
@@ -186,7 +187,7 @@ def configure_operations(app, db, Student, Employee):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
         db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context))))
     def render(name, **kw):
-        return render_template(name, choices=choices, today=date.today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
+        return render_template(name, choices=choices, today=school_today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
     @app.context_processor
     def nav_context(): return dict(module_menus=MENUS, menu_url=menu_url, build_label='Pre-test • fictional records only')
@@ -475,7 +476,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/attendance/<kind>',methods=['GET','POST'])
     def take_attendance(kind):
         if kind not in ('student','staff'): abort(404)
-        d=day(request.values.get('day',date.today().isoformat()));people_kind='student' if kind=='student' else 'employee'
+        d=day(request.values.get('day',school_today().isoformat()));people_kind='student' if kind=='student' else 'employee'
         objs=people(people_kind)
         if request.method=='POST':
             app.extensions['admission_capacity']['lock']()
@@ -508,7 +509,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/attendance-report')
     def attendance_report():
         view=request.args.get('view','attendance-summary');kind='staff' if view=='staff-attendance-report' else 'student'
-        start=day(request.args.get('from',date.today().replace(day=1).isoformat()));end=day(request.args.get('to',date.today().isoformat()))
+        start=day(request.args.get('from',school_today().replace(day=1).isoformat()));end=day(request.args.get('to',school_today().isoformat()))
         if start>end: raise ValueError('Invalid date range.')
         cls=Student if kind=='student' else Employee
         rows=Daily.query.filter(Daily.kind==kind,Daily.day>=start,Daily.day<=end).order_by(Daily.day.desc(),Daily.person_id).all()
@@ -728,7 +729,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/payroll',methods=['GET','POST'])
     def payroll():
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
-        today=date.today();previous=today.replace(day=1).toordinal()-1;default_month=date.fromordinal(previous).strftime('%Y-%m')
+        today=school_today();previous=today.replace(day=1).toordinal()-1;default_month=date.fromordinal(previous).strftime('%Y-%m')
         m=month(request.values.get('month',default_month));view=request.values.get('view','generate-salary')
         if request.method=='POST':
             action=request.form.get('action')
@@ -961,7 +962,7 @@ def configure_operations(app, db, Student, Employee):
         # Keep request work independent of pupil/score count: no per-row ORM
         # lookups, no attachment/salary/certificate payloads, and one pass over
         # scalar financial rows rather than rescanning receipts per month.
-        today=date.today();month_key=today.strftime('%Y-%m')
+        today=school_today();month_key=today.strftime('%Y-%m')
         student_count,active=db.session.query(db.func.count(Student.id),db.func.sum(case((Student.status=='Active',1),else_=0))).one()
         employee_count,active_employees=db.session.query(db.func.count(Employee.id),db.func.sum(case((Employee.status=='Active',1),else_=0))).one()
         class_label=db.func.coalesce(db.func.nullif(Student.class_name,''),'Unassigned')
