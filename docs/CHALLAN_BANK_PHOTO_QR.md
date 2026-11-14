@@ -24,3 +24,7 @@ An isolated sample was rendered through the actual print route and stylesheet to
 - Runtime commit `24f6da9b86c34c66a6d5a3b2a33242fc0e572d96`; original Render service `srv-dbi3dqks728c73c7snv0`, deployment `dep-dbrtvfc9v7es73b9v6l0`: **live**.
 - The provided sample PDF has one A4 landscape page; all three printed QR codes decoded successfully from its raster image. It is a print preview from the actual print route and stylesheet, not a live-browser screenshot or physical-device test.
 - **9 hosted checks passed**: demo entry, live settings, all three unsaved preview copies, bank-above-student layout, embedded QR copies, missing-photo label, unchanged saved account/version after preview, new stylesheet and HTTP200 health. Hosted verification used only the unsaved preview and did not save sample bank details or change student bills.
+
+## Boxed detail layout — 14 November 2026
+
+Bank name/title/account/IBAN and student name/guardian/ID/class/family/consumer/challan/month/due date now print as bordered two-column label/value tables. Table headings use the selected primary theme and label cells use the selected secondary color. Photo/QR controls and all financial values are retained. Nineteen existing challan tests passed after this layout-only edit; the single-page three-copy PDF was inspected and all three reference QR codes decoded from its image.
