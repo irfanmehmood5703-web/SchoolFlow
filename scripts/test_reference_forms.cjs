@@ -1,6 +1,29 @@
 const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE || 'playwright');
 (async()=>{for(let attempt=0;attempt<60;attempt++){try{const r=await fetch('http://127.0.0.1:5055/workspace/general/diary');if(r.ok)break;}catch(e){}if(attempt===59)throw Error('UI QA server did not start');await new Promise(r=>setTimeout(r,500));}
 const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',e=>{throw e});
+for (const width of [390,1440]) {
+await page.setViewportSize({width,height:width===390?844:1000});
+await page.goto('http://127.0.0.1:5055/workspace/how-to');
+if(await page.locator('.help-card').count()!==97)throw Error('How To guide coverage');
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('How To horizontal overflow at '+width);
+const navY=await page.locator('.help-categories').evaluate(el=>el.getBoundingClientRect().top);
+await page.locator('.help-results').evaluate(el=>el.scrollTop=400);
+if(await page.locator('.help-results').evaluate(el=>el.scrollTop)<300)throw Error('articles do not scroll');
+if(Math.abs(await page.locator('.help-categories').evaluate(el=>el.getBoundingClientRect().top)-navY)>1)throw Error('categories moved with articles');
+await page.locator('.help-categories a').filter({hasText:'Finance'}).click();
+if(await page.locator('.help-card').count()!==16)throw Error('Finance category filter');
+if(!(await page.locator('.help-categories a[aria-current=page]').textContent()).includes('Finance'))throw Error('selected category');
+await page.locator('#help-q').fill('requisition');await page.locator('.help-search button').click();
+if(await page.locator('.help-card').count()!==6)throw Error('category search');
+await page.locator('.help-card h2 a').first().click();
+if(!(await page.textContent('.help-detail')).includes('Step by step'))throw Error('missing full instructions');
+if(!(await page.locator('.help-detail>.button').getAttribute('href')).startsWith('/workspace/'))throw Error('guide target');
+await page.locator('.help-back').click();
+await page.locator('#help-q').fill('no-such-guide');await page.locator('.help-search button').click();
+if(await page.locator('.help-empty').count()!==1)throw Error('empty search');
+console.log('PASS How To '+width+'px: guide coverage, independent scrolling, category, search, reader and empty state');
+}
+await page.setViewportSize({width:390,height:844});
 await page.goto('http://127.0.0.1:5055/workspace/general/diary?new=1');
 await page.selectOption('[name=campus]','North');await page.waitForFunction(()=>[...document.querySelector('[name=class_name]').options].some(o=>o.value==='One'));await page.selectOption('[name=class_name]','One');await page.waitForFunction(()=>document.querySelector('#diary-subjects').options.length===2);await page.selectOption('[name=section]','A');await page.selectOption('#diary-subjects',['Math','English']);
 if(await page.locator('[data-subject-panel]:visible').count()!==2)throw Error('missing panels');

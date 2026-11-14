@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<link rel="stylesheet" href="{{asset_url('how_to.css')}}">
+<div class="help-reader">
+<a class="help-back" href="{{url_for('how_to.index',category=article.category)}}">← {{article.category}} guides</a>
+<div class="page-heading"><div><p class="eyebrow">SchoolFlow / How To / {{article.category}}</p><h1>{{article.title}}</h1><p class="muted">{{article.summary}}</p></div><button type="button" class="button secondary" onclick="window.print()">Print / PDF</button></div>
+<article class="form-card help-detail">
+  <h2>Where to find it</h2><p class="help-path">{{article.location}}</p>
+  <h2>Step by step</h2><ol>{% for step in article.steps %}<li>{{step}}</li>{% endfor %}</ol>
+  {% if article.fields %}<h2>Fields on this form</h2><ul class="help-fields">{% for field in article.fields %}<li>{{field}}</li>{% endfor %}</ul>{% endif %}
+  {% if article.note %}<div class="help-note"><h2>Before you continue</h2><p>{{article.note}}</p></div>{% endif %}
+  <p class="muted">Your account’s permissions still apply when opening a workspace page.</p>
+  <a class="button" href="{{article.target}}">Open {{article.title}} →</a>
+</article>
+{% if related %}<section class="help-related"><h2>Related guides</h2>{% for a in related %}<a href="{{url_for('how_to.article',slug=a.slug)}}">{{a.title}} →</a>{% endfor %}</section>{% endif %}
+<p><a href="{{url_for('how_to.index')}}">All How To articles</a></p>
+</div>
+{% endblock %}

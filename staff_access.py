@@ -397,6 +397,9 @@ def configure_staff_access(app,db,Student,Employee):
     def enforce():
         p=getattr(g,'staff_principal',None)
         if p is None:return
+        # Static instructions contain no school records and grant no target-page
+        # access. Institute authentication above still applies to these GETs.
+        if request.blueprint == 'how_to' and request.method in ('GET', 'HEAD'):return
         if request.endpoint in ('staff_access.my_password','staff_access.my_grids','home','favicon','health','static') or request.blueprint in ('identity','mobile_clients'):return
         code=required_permission()
         if not code or not grant(p,code):abort(403,'This action is not granted to this staff account.')

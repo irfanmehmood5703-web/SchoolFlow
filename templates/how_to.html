@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<link rel="stylesheet" href="{{asset_url('how_to.css')}}">
+<div class="page-heading"><div><p class="eyebrow">SchoolFlow / Help</p><h1>How To</h1><p class="muted">Practical guides to the options in your SchoolFlow workspace.</p></div></div>
+<div class="help-shell">
+  <nav class="help-categories" aria-label="Guide categories">
+    <p class="eyebrow">Categories</p>
+    <a href="{{url_for('how_to.index', q=q)}}" {% if not category %}aria-current="page"{% endif %}>All articles <span>{{total}}</span></a>
+    {% for c in categories %}<a href="{{url_for('how_to.index',category=c,q=q)}}" {% if category==c %}aria-current="page"{% endif %}>{{c}} <span>{{counts[c]}}</span></a>{% endfor %}
+  </nav>
+  <div class="help-main">
+    <form method="get" class="help-search" role="search">
+      {% if category %}<input type="hidden" name="category" value="{{category}}">{% endif %}
+      <label class="sr-only" for="help-q">Search guides</label><input type="search" id="help-q" name="q" value="{{q}}" maxlength="160" placeholder="Search guides…">
+      <button>Search</button>{% if q %}<a href="{{url_for('how_to.index',category=category)}}">Clear</a>{% endif %}
+    </form>
+    <p class="help-result-count" role="status">{{articles|length}} {{'guide' if articles|length==1 else 'guides'}}{% if category %} · {{category}}{% endif %}{% if q %} matching “{{q}}”{% endif %}</p>
+    <div class="help-results" tabindex="0" role="region" aria-label="Guide articles">
+      {% for a in articles %}<article class="help-card">
+        <h2><a href="{{url_for('how_to.article',slug=a.slug)}}">{{a.title}} <span aria-hidden="true">↗</span></a></h2>
+        <p>{{a.summary}}</p><small>{{a.category}}</small>
+      </article>{% else %}<div class="help-empty"><h2>No matching guides</h2><p>Try a shorter search or choose All articles.</p><a href="{{url_for('how_to.index')}}">Show all guides</a></div>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -248,6 +248,8 @@ def configure_operations(app, db, Student, Employee):
         if key=='student-360': return url_for('student_overview.index')
         return url_for('ops.entry',key=key)
 
+    app.extensions['workspace_menu_url'] = menu_url
+
     @bp.route('/<key>')
     def entry(key):
         target=menu_url(key)
