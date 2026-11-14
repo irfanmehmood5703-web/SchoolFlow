@@ -97,7 +97,7 @@ def configure_assistant(app,db,Student,Employee):
     def own_chat(cid):return Chat.query.filter_by(id=cid,actor=g.assistant_actor['key'],access_stamp=stamp(app)).first_or_404()
     def turn_data(t):return dict(id=t.id,role=t.role,body=t.body,mode=t.mode,links=t.links,created=t.created)
     @bp.get('')
-    def page():return render_template('assistant_page.html',title='SchoolFlow Guide')
+    def page():return render_template('assistant_page.html',title='AI Assistant')
     @bp.get('/history')
     def history():
         chats=Chat.query.filter_by(actor=g.assistant_actor['key'],access_stamp=stamp(app)).order_by(Chat.updated.desc()).limit(30).all()
@@ -160,6 +160,6 @@ def configure_assistant(app,db,Student,Employee):
     @vendor.route('',methods=['GET','POST'])
     def settings():
         if request.method=='POST':abort(403,'SchoolFlow uses built-in Guide mode only. External model activation is disabled.')
-        return render_template('assistant_settings.html',title='SchoolFlow Guide')
+        return render_template('assistant_settings.html',title='AI Assistant')
     app.register_blueprint(bp);app.register_blueprint(vendor)
     app.extensions['assistant_helpers']=dict(guides=allowed_guides,retrieve=retrieve,live=live)

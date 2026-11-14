@@ -1,7 +1,7 @@
 <div id="workspace-tools" data-csrf="{{record_csrf}}" data-assistant="{{url_for('assistant.page')}}" data-notices="{{url_for('notices.feed')}}" data-support="{{url_for('support.inbox')}}">
-{% if utility_allowed('assistant') %}<button type="button" class="assistant-launcher" data-assistant-open aria-label="Open SchoolFlow Guide">✧ <span>SchoolFlow Guide</span></button>
+{% if utility_allowed('assistant') %}<button type="button" class="assistant-launcher" data-assistant-open aria-label="Open AI Assistant">✧ <span>AI Assistant</span></button>
 <dialog id="assistant-dialog" class="tool-dialog assistant-dialog" aria-labelledby="assistant-title">
-<div class="tool-top"><div><strong id="assistant-title">SchoolFlow Guide</strong><small>Help for your school workspace · <span data-assistant-mode>Guide</span> mode</small></div><button type="button" data-close aria-label="Close assistant">×</button></div>
+<div class="tool-top"><div><strong id="assistant-title">AI Assistant</strong><small>Help for your school workspace · <span data-assistant-mode>Guide</span> mode</small></div><button type="button" data-close aria-label="Close assistant">×</button></div>
 <div class="tool-controls"><button type="button" data-chat-history>Chat history</button><button type="button" data-chat-new>New chat</button><button type="button" data-chat-hide>Hide on this page</button><a href="{{url_for('support.inbox')}}">Support</a></div>
 <p class="tool-disclosure" data-ai-disclosure>Built-in Guide mode uses saved SchoolFlow instructions. No AI credits are needed. No records are changed here.</p>
 <div data-chat-history-list hidden class="tool-history"></div>
