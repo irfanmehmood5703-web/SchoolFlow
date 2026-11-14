@@ -1,10 +1,10 @@
 const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE || 'playwright');
 (async()=>{for(let attempt=0;attempt<60;attempt++){try{const r=await fetch('http://127.0.0.1:5055/workspace/general/diary');if(r.ok)break;}catch(e){}if(attempt===59)throw Error('UI QA server did not start');await new Promise(r=>setTimeout(r,500));}
-const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',e=>{throw e});
+const browser=await chromium.launch({headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',e=>{throw e});
 for (const width of [390,1440]) {
 await page.setViewportSize({width,height:width===390?844:1000});
 await page.goto('http://127.0.0.1:5055/workspace/how-to');
-if(await page.locator('.help-card').count()!==97)throw Error('How To guide coverage');
+if(await page.locator('.help-card').count()!==100)throw Error('How To guide coverage');
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('How To horizontal overflow at '+width);
 const navY=await page.locator('.help-categories').evaluate(el=>el.getBoundingClientRect().top);
 await page.locator('.help-results').evaluate(el=>el.scrollTo({top:400,behavior:'instant'}));
@@ -23,6 +23,38 @@ await page.locator('.help-back').click();
 await page.locator('#help-q').fill('no-such-guide');await page.locator('.help-search button').click();
 if(await page.locator('.help-empty').count()!==1)throw Error('empty search');
 console.log('PASS How To '+width+'px: guide coverage, independent scrolling, category, search, reader and empty state');
+}
+await page.setViewportSize({width:390,height:844});
+await page.context().grantPermissions(['microphone'],{origin:'http://127.0.0.1:5055'});
+for(const width of [390,1440]) {
+await page.setViewportSize({width,height:width===390?844:1000});
+await page.goto('http://127.0.0.1:5055/workspace/conversations');
+await page.locator('[data-new-conversation]').click();
+await page.locator('#new-conversation [name=campus]').selectOption('North');
+await page.locator('#new-conversation [name=category][value=Teacher]').check();
+await page.waitForFunction(()=>document.querySelector('#new-conversation [name=recipient]').options.length===1);
+await page.locator('#new-conversation [name=recipient]').selectOption('staff:1');
+await page.locator('#new-conversation [name=subject]').fill('Browser chat '+width);
+await page.locator('#new-conversation [name=body]').fill('Fictional browser question');
+await page.locator('#new-conversation [name=attachments]').setInputFiles({name:'fictional.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\nfictional UI file')});
+await page.locator('#new-conversation button').filter({hasText:'Start conversation'}).click();
+await page.waitForURL(/\/workspace\/conversations\/[A-Za-z0-9_-]{43}$/);
+if(!(await page.textContent('.message-stream')).includes('Fictional browser question'))throw Error('chat not saved');
+await page.locator('.message-composer [name=body]').fill('Browser reply '+width);
+if(width===390) {
+await page.locator('.message-composer [data-record]').click();await page.waitForFunction(()=>!document.querySelector('.message-composer [data-stop]').disabled);await page.waitForTimeout(600);await page.locator('.message-composer [data-stop]').click();
+if(await page.locator('.message-composer [name=voice]').evaluate(el=>el.files.length)!==1)throw Error('voice recording not prepared');
+}
+await page.locator('.message-composer>button').click();await page.waitForLoadState('networkidle');
+if(!(await page.textContent('.message-stream')).includes('Browser reply '+width))throw Error('chat reply not saved');
+if(width===390 && !(await page.textContent('.message-stream')).includes('Voice note'))throw Error('voice upload missing');
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('chat overflow at '+width);
+await page.goto('http://127.0.0.1:5055/workspace/conversations/report?tab=response');
+if(!(await page.textContent('body')).includes('Who answered first'))throw Error('response report missing');
+await page.goto('http://127.0.0.1:5055/workspace/conversations/report?tab=conversations&q='+encodeURIComponent('Browser chat '+width));
+if(!(await page.textContent('tbody')).includes('Browser chat '+width))throw Error('report search missing');
+const download=page.waitForEvent('download');await page.locator('button[name=export][value=summary]').click();if(!(await download).suggestedFilename().endsWith('.xlsx'))throw Error('summary export');
+console.log('PASS Messages '+width+'px: recipients, new chat, PDF, reply, mobile WAV recording, responsive thread, reports and summary export');
 }
 await page.setViewportSize({width:390,height:844});
 await page.goto('http://127.0.0.1:5055/workspace/general/diary?new=1');

@@ -11,13 +11,15 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'messages':'Internal Messages','apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
 PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
 PERMISSIONS['widgets.manage']='Widgets · Manage role visibility'
 PERMISSIONS['parents.codes']='Parents App · View sensitive login codes'
 PERMISSIONS['attendance.self']='My Geo Attendance · self only'
+PERMISSIONS['messages.manage']='Messages · Institute settings'
+PERMISSIONS['messages.report']='Messages · Campus reports'
 ACCOUNTS=('Cash in Hand','Cash at Bank','Petty Cash','Accounts Receivable','Fee Receivable','Discounts','Bad Debts')
 ROLES=('Super Admin','Admin','User','Teacher')
 
@@ -309,6 +311,11 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('messages.'):
+            if ep=='messages.settings':return 'messages.manage'
+            if ep=='messages.report':return 'messages.export' if request.method=='POST' else 'messages.report'
+            if ep in ('messages.new','messages.reply','messages.recipients'):return 'messages.create'
+            return 'messages.update' if ep in ('messages.status','messages.flag') else 'messages.view'
         if ep in ('challan_branding.student_photo','challan_payment_qr'):return 'fees.print'
         if ep.startswith('school_apps.'):
             return 'apps.'+('view' if request.method=='GET' else 'update')

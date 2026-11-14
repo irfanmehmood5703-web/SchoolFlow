@@ -202,6 +202,8 @@ configure_general_portal(app)
 
 from how_to import configure_how_to
 configure_how_to(app)
+from messaging import configure_messaging
+configure_messaging(app,db,Student,Employee)
 
 
 @app.route('/')

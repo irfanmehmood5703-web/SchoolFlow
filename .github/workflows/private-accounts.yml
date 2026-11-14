@@ -1,8 +1,8 @@
 name: Private account panel
 on:
   push:
-    branches: [main, feature/private-account-panel, feature/shareholder-workflows, feature/parent-result-connection, feature/diary-ptm-forms, feature/challan-bank-photo-qr, feature/how-to-guides]
-    paths: ['how_to.py', 'how_to_content.py', 'templates/how_to*.html', 'static/how_to.css', 'tests/test_how_to.py', 'challan_branding.py', 'templates/challan*.html', 'static/challan.css', 'tests/test_challan_branding.py', 'tests/test_staff_access.py', 'scripts/reference_forms_ui_server.py', 'scripts/test_reference_forms.cjs', 'diary_work.py', 'ptm_groups.py', 'ptm.py', 'student_extras.py', 'staff_access.py', 'templates/ptm*.html', 'templates/student_extras.html', 'static/diary-work.js', 'static/ptm-groups.js', 'tests/test_diary_work.py', 'tests/test_ptm_groups.py', 'parents.py', 'school_settings.py', 'templates/exam_results.html', 'templates/parent_portal.html', 'tests/test_parent_exam_results.py', 'finance_partners.py', 'shareholder_posting.py', 'templates/shareholder*.html', 'tests/test_shareholder_posting.py', 'vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
+    branches: [main, feature/private-account-panel, feature/shareholder-workflows, feature/parent-result-connection, feature/diary-ptm-forms, feature/challan-bank-photo-qr, feature/how-to-guides, feature/internal-messages]
+    paths: ['messaging.py', 'messaging_files.py', 'templates/message*.html', 'templates/internal_messages.html', 'static/messages.*', 'tests/test_messaging.py', 'requirements.txt', 'how_to.py', 'how_to_content.py', 'templates/how_to*.html', 'static/how_to.css', 'tests/test_how_to.py', 'challan_branding.py', 'templates/challan*.html', 'static/challan.css', 'tests/test_challan_branding.py', 'tests/test_staff_access.py', 'scripts/reference_forms_ui_server.py', 'scripts/test_reference_forms.cjs', 'diary_work.py', 'ptm_groups.py', 'ptm.py', 'student_extras.py', 'staff_access.py', 'templates/ptm*.html', 'templates/student_extras.html', 'static/diary-work.js', 'static/ptm-groups.js', 'tests/test_diary_work.py', 'tests/test_ptm_groups.py', 'parents.py', 'school_settings.py', 'templates/exam_results.html', 'templates/parent_portal.html', 'tests/test_parent_exam_results.py', 'finance_partners.py', 'shareholder_posting.py', 'templates/shareholder*.html', 'tests/test_shareholder_posting.py', 'vendor_admin.py', 'identity.py', 'app.py', 'school_apps.py', 'client_subscription.py', 'templates/vendor_*.html', 'tests/test_vendor_admin.py', 'scripts/verify_private_storage.py', '.github/workflows/private-accounts.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,6 +48,8 @@ jobs:
         run: python -W ignore -m unittest discover -s tests -p test_ptm_groups.py -q
       - name: Bank, photo and reference QR challan printing
         run: python -W ignore -m unittest discover -s tests -p test_challan_branding.py -q
+      - name: Internal chat, family isolation, policies, audio and exports
+        run: python -W ignore -m unittest discover -s tests -p test_messaging.py -q
       - name: How To menu coverage, reader, search and authentication
         run: python -W ignore -m unittest discover -s tests -p test_how_to.py -q
       - name: Staff scopes including private challan photos
