@@ -21,7 +21,7 @@ The audit covers the existing five menu groups (82 menu entries), Dashboard, Con
 
 Read-only inspection of the connected `schoolflow_private_accounts` PostgreSQL database confirmed one private school schema, one school owner and one central software owner. No user records, credentials, database URLs or signing keys were changed by this inspection.
 
-The four published Android test APKs were fetched independently and checked against the committed SHA-256 digests and source provenance, including actual AndroidManifest.xml/classes.dex ZIP members. That verifies published packages, not camera, SIM delivery, microphone, notifications or phone installation. The Gate trial APK is pinned to a separate fictional trial host; original-host device acceptance is a distinct task.
+The four published Android test APKs were fetched independently and checked against the committed SHA-256 digests and source provenance, including actual AndroidManifest.xml/classes.dex ZIP members. That verifies published packages, not camera, SIM delivery, microphone, notifications or phone installation. The Gate trial APK remains pinned to a separate fictional trial host. The later School Test build targets the original host as described below.
 
 ## Option-by-option school-data test order
 
@@ -42,3 +42,11 @@ Use one record/cycle per option first. Preserve real school data; do not seed de
 ## Completion boundary
 
 This is a pre-acceptance audit of the implemented web scope, not a claim that every EDUBase module, bank/provider connection, offline feature, production signing, unattended recognition or physical device test exists. Front Desk remains deferred. Recurring automatic annual salary increases and sandwich leave remain off per the user's requirements. A consecutive lecture preference does not implement a recurring timetable or future lecture generation; delivered lectures are entered/approved explicitly. Production backup/restore operations and school/device acceptance are separate from the disposable recovery check.
+
+## Final native acceptance release
+
+Main commit `bb9d0f4f1d9fa6d0cf06aa751139dded21da4ce5` passed the full 743-test backend corpus, PostgreSQL isolation/process-restart/logical recovery checks, 390px/1440px browser checks, four Android client compile/unit/lint checks, school-specific APK signing/callback/update checks, and Gate compile/unit/lint/emulator checks. Release runs: clients `43607765904`, Gate `43607765892`, web `43607765870`, school-specific builds `43607765862`.
+
+Published `clients-test-6` and `gate-test-52` source files identify that exact commit. All six APKs were independently downloaded and matched published SHA-256 sums and sizes. Binary manifests confirm `.acceptance` client IDs, microphone permission in Parents/Teacher/Owner only, and separate `.schooltest`/`.trial` Gate IDs. All DEX files were inspected for the appropriate Gate host. App Links now selects the original-host Gate School Test APK. Completed voice previews survive native pause; active capture stops for explicit review. Physical hardware/phone acceptance remains outstanding.
+
+The audit web deployment was checked on the original host with 13 hosted checks, including health build v38, demo/private storage guidance, actual configured selectors, inactive-roll guards, student/employee/fee/ledger/Support pages and provider-disabled free Guide mode. No original school data or credentials were changed.

@@ -65,3 +65,9 @@ existing host records may already have reset. A verified backup is required
 before migrating any real school data. The original service remains on its
 existing free plan. This outstanding data-protection
 issue prevents treating the system as production-ready.
+
+## 14 November acceptance APK update
+
+Release `clients-test-6` (source `bb9d0f4f1d9fa6d0cf06aa751139dded21da4ce5`) supplies four `.acceptance` packages that coexist with earlier test packages. Parents/Teacher/Owner support original-host-only foreground Messages microphone recording with Android permission; SMS has no microphone permission. School-specific branding/signing builds retain their existing package contract.
+
+Release `gate-test-52` supplies both the isolated Trial APK and Gate School Test APK (`.schooltest`) targeting the original SchoolFlow host. App Links uses School Test for Face Attendance; the trial remains separate. Main CI passed Android compile/unit/lint, native Gate emulator tests, school-specific signing/callback/update, full backend and PostgreSQL/browser/persistence checks. These are test packages; actual phones, SIM and camera acceptance and production signing remain required.

@@ -14,7 +14,7 @@ AI requests contain the user's question, up to four previous AI turns, and three
 
 Assistant history belongs to the signed-in actor and school tenant. Staff permission changes invalidate the history access stamp. Exact request retries reuse the saved answer and cannot cause another provider call. Pending requests interrupted for over 90 seconds can be acknowledged without issuing a duplicate model request. The normal school session gates, CSRF, hourly request limits and scoped campus filters apply.
 
-Browser dictation depends on browser support and microphone permission and may use the browser vendor's speech service. It inserts text for review and never sends a question automatically. The existing Android portal APK does not support microphone capture. Unsupported devices can type or use their keyboard dictation. AI attachment analysis and autonomous database edits are not implemented; the plus attachment link opens Support.
+Browser dictation depends on browser support and microphone permission and may use the browser vendor's speech service. It inserts text for review and never sends a question automatically. Updated portal acceptance APKs support Messages voice-note capture after OS permission. Guide speech-to-text still depends on WebView/browser speech-recognition support; voice-note permission alone does not guarantee dictation. Unsupported devices can type or use their keyboard dictation. AI attachment analysis and autonomous database edits are not implemented; the plus attachment link opens Support.
 
 ## Human Support
 

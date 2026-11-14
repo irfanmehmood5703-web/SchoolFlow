@@ -104,7 +104,7 @@ blocked file privacy, exact/changed/concurrent retries, invalid uploads, decoded
 voice duration, retention expiry, settings versions, audited/formula-safe
 exports, read state, resolve/flags and response timing. Chromium CI exercises
 390px/1440px forms, actual recipients, PDF/reply, fake-microphone WAV capture,
-report search/download and the existing How To/Diary/PTM workflows. The current installed Android portal APK denies direct microphone capture; users can attach recorded audio or record through the phone browser. Native microphone permission support requires a separate APK update. Fake-device
+report search/download and the existing How To/Diary/PTM workflows. The earlier portal APK denied direct microphone capture. The 14 November acceptance APK update adds foreground, original-host-only audio permission in Parents, Teacher and Owner. Native pause stops active capture for explicit review and preserves completed previews; it never sends automatically. Fake-device
 Chromium is not a physical Android microphone or APK installation test.
 
 ## Verified release — 14 November 2026

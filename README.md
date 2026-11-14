@@ -13,7 +13,7 @@ Original green/white school-management web software with horizontal menus, priva
 - How To, built-in free SchoolFlow Guide, private Messages, central human Support tickets and the in-app notification bell. No external AI model, key or AI billing is needed by the Guide.
 - Institute/Exam/HRM configuration, staff grants and audit logs. Front Desk is deferred; Student 360° is excluded from the menu.
 
-Teacher/Parent/Owner Android portal test packages and an attended school-SIM SMS package are published under App Links. They share the existing backend and authentication. Actual phone installation, SIM/network behavior and owner-controlled production signing require device acceptance checks. The separately published attended Gate trial APK uses the isolated fictional Gate trial host; it is not automatically an original-host production app.
+Teacher/Parent/Owner Android portal test packages and an attended school-SIM SMS package are published under App Links. They share the existing backend and authentication. Actual phone installation, SIM/network behavior and owner-controlled production signing require device acceptance checks. App Links also supplies an attended Gate School Test APK targeting this original host. The separate Gate Trial APK stays on its fictional trial server. Physical camera/enrollment/recognition checks and owner-controlled production signing remain required.
 
 ## Private data versus demo
 

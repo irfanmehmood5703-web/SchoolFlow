@@ -60,7 +60,7 @@ class SchoolAppTests(unittest.TestCase):
         return body
     def test_school_name_no_generic_substitution_and_repeated_request_idempotent(self):
         html=self.clients[0].get('/workspace/general/app-links').data
-        self.assertIn(b'ISF School System Parents',html);self.assertNotIn(b'clients-test-3/SchoolFlow-parents-test.apk',html);self.assertNotIn(b'<h2>Sadia School Parents</h2>',html)
+        self.assertIn(b'ISF School System Parents',html);self.assertNotIn(b'/SchoolFlow-parents-test.apk',html);self.assertNotIn(b'<h2>Sadia School Parents</h2>',html)
         self.assertEqual(self.prepare().status_code,302);self.assertEqual(self.prepare(version='1').status_code,302)
         self.assertEqual(self.M['build'].query.count(),1)
         self.assertEqual(self.prepare(1).status_code,302);self.assertEqual(self.M['build'].query.count(),2)

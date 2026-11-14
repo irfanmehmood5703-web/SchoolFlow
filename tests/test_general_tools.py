@@ -36,9 +36,14 @@ class GeneralToolsTests(unittest.TestCase):
         self.assertEqual(self.M['preference'].query.count(),0)
     def test_registry_version_url_checks_and_real_link_only(self):
         page=self.c.get('/workspace/general/app-links')
-        self.assertEqual(page.data.count(b'No native release published'),4)
-        self.assertEqual(page.data.count(b'Verify test APK'),4)
-        self.assertIn(b'/releases/download/clients-test-3/SchoolFlow-parents-test.apk',page.data)
+        self.assertEqual(page.data.count(b'No native release published'),3)
+        self.assertEqual(page.data.count(b'Verify test APK'),5)
+        import json
+        from pathlib import Path
+        published=json.loads(Path('native_releases.json').read_text())
+        self.assertIn(published['parents']['url'].encode(),page.data)
+        self.assertIn(published['face']['url'].encode(),page.data)
+        self.assertNotIn(b'SchoolFlow-Gate-Trial.apk',page.data)
         payload=dict(app='teacher',version_token='0',url='https://example.invalid/schoolflow.apk',version='1.0',size='10 MB',notes='Fictional test release')
         self.assertEqual(self.post('/workspace/general/app-links',payload).status_code,302)
         page=self.c.get('/workspace/general/app-links');self.assertIn(b'data-copy-release="https://example.invalid/schoolflow.apk"',page.data)
