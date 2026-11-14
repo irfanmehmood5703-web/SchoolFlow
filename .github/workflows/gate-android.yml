@@ -31,7 +31,7 @@ jobs:
         run: python3 download_models.py
       - name: Compile, unit test and lint Android
         working-directory: mobile/gate
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:testSchoolTestUnitTest :app:assembleSchoolTest :app:lintSchoolTest
       - name: Test native models and encrypted storage in Android emulator
         working-directory: mobile/gate
         shell: bash
@@ -64,14 +64,16 @@ jobs:
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/SchoolFlow-Gate-Trial.apk
-          (cd dist && sha256sum SchoolFlow-Gate-Trial.apk) >dist/SHA256SUMS.txt
+          cp app/build/outputs/apk/schoolTest/app-schoolTest.apk dist/SchoolFlow-Gate-School-Test.apk
+          (cd dist && sha256sum *.apk) >dist/SHA256SUMS.txt
           printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
           cp app/src/main/assets/models.json dist/MODELS.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: SchoolFlow-Gate-test
           path: mobile/gate/dist/
-          retention-days: 14
+          retention-days: 2
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:
@@ -104,7 +106,7 @@ jobs:
           test "$gate_expected_sha" = "$GITHUB_SHA"
           (cd gate-apk && sed 's@dist/@@' SHA256SUMS.txt | sha256sum -c -)
           gate_tag="gate-test-${{ github.run_number }}"
-          gh release create "$gate_tag" gate-apk/SchoolFlow-Gate-Trial.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Gate 0.2 — trial APK" --notes "Installable attended trial build for ARM64 Android 8+ devices, pinned to the separate fictional Gate trial server. Local YuNet/SFace enrollment and recognition, encrypted device storage, explicit operator confirmation, and private-institute gate delivery. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
+          gh release create "$gate_tag" gate-apk/SchoolFlow-Gate-Trial.apk gate-apk/SchoolFlow-Gate-School-Test.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Gate 0.3 — school and isolated trial APKs" --notes "Two separate attended ARM64 Android 8+ test apps: SchoolFlow-Gate-School-Test.apk targets the original SchoolFlow host; SchoolFlow-Gate-Trial.apk stays on the separate fictional trial host. Distinct package IDs keep their enrollments and credentials separate. Local YuNet/SFace enrollment and recognition, encrypted device storage, explicit operator confirmation, and private-institute gate delivery. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 12

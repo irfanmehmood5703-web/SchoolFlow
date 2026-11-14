@@ -61,13 +61,15 @@
     };
     record.addEventListener('click',async()=>{
       const requestNumber=++captureRequest;record.disabled=true;status.textContent='Requesting microphone permission…';
-      try {clear();const captured=await navigator.mediaDevices.getUserMedia({audio:true});if(requestNumber!==captureRequest || document.visibilityState!=='visible' || (panel.closest('dialog') && !panel.closest('dialog').open)){captured.getTracks().forEach(track=>track.stop());return;}stream=captured;context=new AudioContext();await context.resume();source=context.createMediaStreamSource(stream);processor=context.createScriptProcessor(4096,1,1);chunks=[];count=0;stopped=false;processor.onaudioprocess=event=>{if(stopped)return;const data=new Float32Array(event.inputBuffer.getChannelData(0));chunks.push(data);count+=data.length;};source.connect(processor);processor.connect(context.destination);record.disabled=true;stop.disabled=false;status.textContent='Recording… press Stop to review.';timer=setTimeout(finish,Number(panel.dataset.maxSeconds)*1000);
+      try {clear();const captured=await navigator.mediaDevices.getUserMedia({audio:true});if(requestNumber!==captureRequest || document.visibilityState!=='visible' || (panel.closest('dialog') && !panel.closest('dialog').open)){captured.getTracks().forEach(track=>track.stop());return;}stream=captured;context=new AudioContext();await context.resume();if(requestNumber!==captureRequest || document.visibilityState!=='visible' || (panel.closest('dialog') && !panel.closest('dialog').open)){stopped=true;cleanup();return;}source=context.createMediaStreamSource(stream);processor=context.createScriptProcessor(4096,1,1);chunks=[];count=0;stopped=false;processor.onaudioprocess=event=>{if(stopped)return;const data=new Float32Array(event.inputBuffer.getChannelData(0));chunks.push(data);count+=data.length;};source.connect(processor);processor.connect(context.destination);record.disabled=true;stop.disabled=false;status.textContent='Recording… press Stop to review.';timer=setTimeout(finish,Number(panel.dataset.maxSeconds)*1000);
       } catch {stopped=true;cleanup();status.textContent='Microphone recording is unavailable. Check browser permission or attach an audio file.';}
     });
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){captureRequest++;if(!stopped)finish();else record.disabled=false;}});
     stop.addEventListener('click',finish);remove.addEventListener('click',()=>{clear();status.textContent='Recording removed.';});
     panel.closest('form').addEventListener('submit',event=>{if(!stopped){event.preventDefault();status.textContent='Stop and review the recording before sending.';}});
     dialog?.addEventListener('close',()=>{captureRequest++;record.disabled=false;if(!stopped){stopped=true;cleanup();chunks=[];status.textContent='Recording cancelled.';}});
-    window.addEventListener('pagehide',()=>{captureRequest++;stopped=true;cleanup();if(url)URL.revokeObjectURL(url);});
+    const pauseCapture=()=>{captureRequest++;stopped=true;cleanup();if(url){URL.revokeObjectURL(url);url=null;}};
+    window.addEventListener('pagehide',pauseCapture);
+    window.addEventListener('schoolflow:pause',()=>{captureRequest++;if(!stopped)finish();else record.disabled=false;});
   });
 })();
