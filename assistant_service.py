@@ -167,7 +167,7 @@ def configure_assistant(app,db,Student,Employee):
             return 'Student attendance on '+str(today)+':\n'+('\n'.join(str(status)+': '+str(count) for status,count in rows) if rows else 'No marks recorded. Unmarked students are not counted as present or absent.')
         bills=ops['bill'].query.filter_by(month=today.strftime('%Y-%m')).limit(2001).all()
         if len(bills)>2000:return 'This month has more than 2,000 challans. Open the Student Fee Status report for the complete filtered totals.'
-        return 'Saved challans for '+today.strftime('%Y-%m')+' in your permitted scope:\nChallans: '+str(len(bills))+'\nPayable PKR: '+format(sum(b.total for b in bills)/100,'.2f')+'\nRemaining PKR: '+format(sum(b.remaining for b in bills)/100,'.2f')+'\nThese are current balances against this bill month, not cash received during the month.'
+        return 'Saved challans for '+today.strftime('%Y-%m')+' in your permitted scope:\nChallans: '+str(len(bills))+'\nGross billed PKR: '+format(sum(b.total for b in bills)/100,'.2f')+'\nDiscount PKR: '+format(sum(b.discount for b in bills)/100,'.2f')+'\nNet payable PKR: '+format(sum(b.total-b.discount for b in bills)/100,'.2f')+'\nPaid PKR: '+format(sum(b.paid for b in bills)/100,'.2f')+'\nRemaining PKR: '+format(sum(b.remaining for b in bills)/100,'.2f')+'\nThese are current balances against this bill month, not cash received during the month.'
     def budget():
         app.extensions['vendor_helpers']['lock']();a=g.assistant_actor;day=datetime.now(ZoneInfo('Asia/Karachi')).date().isoformat();p=policy()
         if not p or not p.enabled:return False

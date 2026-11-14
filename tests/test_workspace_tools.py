@@ -58,7 +58,7 @@ class WorkspaceToolsTests(unittest.TestCase):
         def seed():
             db.session.add(self.ops['bill'](student_id=1,month=today.strftime('%Y-%m'),due=today,lines=[{'amount':12345}],paid=2000,discount=345));db.session.add(self.ops['daily'](kind='student',person_id=1,day=today,status='Present'))
         self.tenant(seed)
-        r=self.ask(action='fees',question='Fee balance');self.assertIn('123.45',r.json['answer']['body']);self.assertIn('100.00',r.json['answer']['body'])
+        r=self.ask(action='fees',question='Fee balance');self.assertIn('123.45',r.json['answer']['body']);self.assertIn('100.00',r.json['answer']['body']);self.assertIn('Net payable PKR: 120.00',r.json['answer']['body']);self.assertIn('Paid PKR: 20.00',r.json['answer']['body'])
         self.assertIn('Present: 1',self.ask(action='attendance',question='Today attendance').json['answer']['body'])
     def test_ai_model_activation_is_central_and_checks_availability(self):
         self.assertEqual(self.c.get('/vendor/assistant').status_code,302);v=self.vendor()
