@@ -23,7 +23,7 @@ jobs:
         with: {gradle-version: '8.9', cache-disabled: true}
       - name: Test, lint and compile all four clients
         working-directory: mobile/clients
-        run: gradle --no-daemon :app:testParentsDebugUnitTest :app:lintParentsDebug :app:assembleParentsDebug :app:testTeacherDebugUnitTest :app:lintTeacherDebug :app:assembleTeacherDebug :app:testOwnerDebugUnitTest :app:lintOwnerDebug :app:assembleOwnerDebug :app:testSmsDebugUnitTest :app:lintSmsDebug :app:assembleSmsDebug
+        run: gradle --no-daemon :app:testParentsAcceptanceUnitTest :app:lintParentsAcceptance :app:assembleParentsAcceptance :app:testTeacherAcceptanceUnitTest :app:lintTeacherAcceptance :app:assembleTeacherAcceptance :app:testOwnerAcceptanceUnitTest :app:lintOwnerAcceptance :app:assembleOwnerAcceptance :app:testSmsAcceptanceUnitTest :app:lintSmsAcceptance :app:assembleSmsAcceptance
       - name: Package installable test clients
         working-directory: mobile/clients
         shell: bash
@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for role in parents teacher owner sms; do
-            cp "app/build/outputs/apk/$role/debug/app-$role-debug.apk" "dist/SchoolFlow-$role-test.apk"
+            cp "app/build/outputs/apk/$role/acceptance/app-$role-acceptance.apk" "dist/SchoolFlow-$role-test.apk"
           done
           (cd dist && sha256sum *.apk >SHA256SUMS.txt)
           printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt

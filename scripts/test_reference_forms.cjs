@@ -71,6 +71,15 @@ await page.locator('.message-composer [name=body]').fill('Browser reply '+width)
 if(width===390) {
 await page.locator('.message-composer [data-record]').click();await page.waitForFunction(()=>!document.querySelector('.message-composer [data-stop]').disabled);await page.waitForTimeout(600);await page.locator('.message-composer [data-stop]').click();
 if(await page.locator('.message-composer [name=voice]').evaluate(el=>el.files.length)!==1)throw Error('voice recording not prepared');
+const recordedUrl=await page.locator('.message-composer audio').getAttribute('src');
+await page.evaluate(()=>window.dispatchEvent(new Event('schoolflow:pause')));
+if(await page.locator('.message-composer audio').getAttribute('src')!==recordedUrl)throw Error('native pause lost reviewed voice preview');
+if(!(await page.evaluate(async url=>(await fetch(url)).ok,recordedUrl)))throw Error('native pause revoked reviewed recording');
+await page.locator('.message-composer [data-record]').click();await page.waitForFunction(()=>!document.querySelector('.message-composer [data-stop]').disabled);await page.waitForTimeout(600);
+await page.evaluate(()=>window.dispatchEvent(new Event('schoolflow:pause')));
+if(!(await page.locator('.message-composer [data-stop]').isDisabled()))throw Error('native background left microphone recording active');
+if(await page.locator('.message-composer [name=voice]').evaluate(el=>el.files.length)!==1)throw Error('paused voice note was not prepared for explicit review');
+
 }
 await page.locator('.message-composer>button').click();await page.waitForLoadState('networkidle');
 if(!(await page.textContent('.message-stream')).includes('Browser reply '+width))throw Error('chat reply not saved');

@@ -8,6 +8,7 @@ public final class MainActivity extends Activity {
  @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(android.graphics.Color.rgb(23,107,74));getWindow().setNavigationBarColor(android.graphics.Color.rgb(23,107,74));getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,WindowManager.LayoutParams.FLAG_SECURE);
   if("sms".equals(BuildConfig.ROLE)){sms=new SmsScreen(this);sms.show();}else{portal=new PortalScreen(this);portal.show(state);}
  }
+ @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(portal!=null)portal.permissions(request,results);}
  @Override public void onBackPressed(){if(portal==null||!portal.back())super.onBackPressed();}
  @Override protected void onActivityResult(int request,int result,android.content.Intent data){super.onActivityResult(request,result,data);if(portal!=null)portal.result(request,result,data);}
  @Override protected void onPause(){if(portal!=null)portal.pause();if(sms!=null)sms.pause();super.onPause();}

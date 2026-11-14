@@ -9,7 +9,7 @@ def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').re
 android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
-    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1-test' }
+    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 2; versionName '0.2-acceptance' }
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
@@ -27,17 +27,18 @@ android {
     }
     flavorDimensions += 'role'
     productFlavors {
-        parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','SchoolFlow Parents (Test)' }
-        teacher { dimension 'role'; applicationId 'com.schoolflow.teacher'; buildConfigField 'String', 'ROLE', '"teacher"'; resValue 'string','app_name','SchoolFlow Teacher (Test)' }
-        owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','SchoolFlow Owner (Test)' }
-        sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','SchoolFlow SMS (Test)' }
+        parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','SchoolFlow Parents (School Test)' }
+        teacher { dimension 'role'; applicationId 'com.schoolflow.teacher'; buildConfigField 'String', 'ROLE', '"teacher"'; resValue 'string','app_name','SchoolFlow Teacher (School Test)' }
+        owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','SchoolFlow Owner (School Test)' }
+        sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','SchoolFlow SMS (School Test)' }
     }
     if(school){ productFlavors.all { flavor ->
         def names=[parents:'Parents',teacher:'Teacher',owner:'Owner',sms:'SMS']
         flavor.applicationId='com.schoolflow.schools.s'+school.school_key+'.'+flavor.name
         flavor.resValue 'string','app_name',resourceText(school.name+' '+names[flavor.name])
     } }
-    buildTypes { debug { applicationIdSuffix '.test'; if(school) signingConfig signingConfigs.schoolKey }; release { minifyEnabled false } }
+    buildTypes { debug { applicationIdSuffix '.test'; if(school) signingConfig signingConfigs.schoolKey }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
+        release { minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { abortOnError true }
 }

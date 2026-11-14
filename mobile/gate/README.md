@@ -1,4 +1,4 @@
-# SchoolFlow Gate — Android attended trial app
+# SchoolFlow Gate — attended school and isolated trial builds
 
 Native face-attendance companion for SchoolFlow's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
 
@@ -52,3 +52,7 @@ The first command downloads only official OpenCV Zoo model assets at immutable c
 The workflow checks the complete backend suite and native identity-binding contract, compiles Android, runs pure matching/endpoint tests, lints, and runs Android-emulator tests of real native model execution, encrypted storage round trips, tamper failure, scope changes, and backup/cleartext restrictions. The synthetic native-inference check is not a human face-accuracy or liveness test. After a successful main-branch build, a prerelease provides the APK, checksum, source commit and model provenance.
 
 Before real use: physical ARM64 camera/inference/recognition tests, representative consented user validation, false-accept/false-reject review, meaningful anti-spoof/liveness controls where required, production signing under the software owner's key, private-institute provisioning, durable production storage and operational/security review are still needed. Standard fingerprint readers require their own verified adapter; the Android device-unlock biometric is not a student fingerprint recognition feature.
+
+## Original-host acceptance build
+
+The `schoolTest` variant produces `SchoolFlow-Gate-School-Test.apk` for the original SchoolFlow host, with package suffix `.schooltest`. The `debug` trial variant keeps its `.trial` package and separate fictional host. They can coexist and do not share enrolled faces, keys or pending events. Both remain attended test apps with explicit operator confirmation; neither is a certified liveness system. Original-host testing requires a private institute, an explicitly registered gate/connection key and the school’s consented enrollment process. Physical ARM64 camera/accuracy tests and protected production signing remain required.

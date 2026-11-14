@@ -71,3 +71,9 @@ protected key, never a key generated into source or chat.
 Physical phone camera/file chooser/printing tests, consented real-SIM delivery,
 network-loss/restart trials and production signing remain operator/device
 verification steps; a compile or synthetic test is not proof of these outcomes.
+
+## Portal microphone and acceptance packages
+
+Parents, Teacher and Owner portal clients declare audio-recording permission. A foreground SchoolFlow page may request audio capture only from the exact original HTTPS origin; foreign origins, camera/mixed resources, background/cancelled requests and denied OS permission are refused. App pause stops/prepares an in-progress voice note for explicit review; it never sends a recording. Finished voice previews remain usable on return. Android permission timing may require pressing Record again after the first grant. Physical WebView/microphone checks remain necessary. SMS does not declare or request microphone permission.
+
+Default downloadable acceptance packages use a separate `.acceptance` suffix and can coexist with earlier `.test` packages. Existing school-specific builds keep their debug/signing path. Do not erase an old SMS app’s uncertain pending submission just to install a new test app; review server/phone state first. Test packages are not production-signed releases.

@@ -1,5 +1,7 @@
 package com.schoolflow.clients;
 import android.app.*;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.*;
 import android.net.Uri;
 import android.os.Bundle;
@@ -12,6 +14,8 @@ import java.net.URL;
 import java.util.concurrent.*;
 final class PortalScreen {
  private final Activity a;private WebView web;private TextView status;
+ private static final int MICROPHONE_PERMISSION=91;
+ private PermissionRequest microphone;private boolean foreground;
  private ValueCallback<Uri[]> files;private String downloadUrl;private final ExecutorService io=Executors.newSingleThreadExecutor();
  PortalScreen(Activity activity){a=activity;}
  private String startUrl(){return EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE+(BuildConfig.INSTITUTE_CODE.isEmpty()?"":"?school="+BuildConfig.INSTITUTE_CODE);}
@@ -34,7 +38,8 @@ final class PortalScreen {
   });
   web.setWebChromeClient(new WebChromeClient(){
    @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(files!=null)files.onReceiveValue(null);files=callback;try{a.startActivityForResult(params.createIntent(),41);}catch(ActivityNotFoundException e){files.onReceiveValue(null);files=null;status.setText("No file chooser installed.");}return true;}
-   @Override public void onPermissionRequest(PermissionRequest request){request.deny();}
+   @Override public void onPermissionRequest(PermissionRequest request){a.runOnUiThread(()->requestMicrophone(request));}
+   @Override public void onPermissionRequestCanceled(PermissionRequest request){a.runOnUiThread(()->{if(microphone==request)microphone=null;});}
   });
   web.setDownloadListener((url,agent,disposition,mime,length)->{if(!EndpointPolicy.allowed(url))return;downloadUrl=url;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime==null?"application/octet-stream":mime).putExtra(Intent.EXTRA_TITLE,URLUtil.guessFileName(url,disposition,mime));try{a.startActivityForResult(i,42);}catch(ActivityNotFoundException e){status.setText("File saving is unavailable on this phone.");}});
   if(state==null||web.restoreState(state)==null)web.loadUrl(startUrl());
@@ -42,7 +47,23 @@ final class PortalScreen {
  void result(int code,int result,Intent data){if(code==41&&files!=null){files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));files=null;}
   if(code==42&&result==Activity.RESULT_OK&&data!=null&&data.getData()!=null&&downloadUrl!=null){Uri target=data.getData();String url=downloadUrl;downloadUrl=null;String cookies=CookieManager.getInstance().getCookie(url);io.execute(()->{HttpURLConnection conn=null;try{conn=(HttpURLConnection)new URL(url).openConnection();conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(30000);if(cookies!=null)conn.setRequestProperty("Cookie",cookies);if(conn.getResponseCode()!=200)throw new IOException();try(InputStream in=conn.getInputStream();OutputStream out=a.getContentResolver().openOutputStream(target)){if(out==null)throw new IOException();byte[] buffer=new byte[8192];int n;long total=0;while((n=in.read(buffer))!=-1){total+=n;if(total>25*1024*1024)throw new IOException();out.write(buffer,0,n);}}a.runOnUiThread(()->status.setText("File saved."));}catch(Exception e){a.runOnUiThread(()->status.setText("Download failed. Sign in again and retry."));}finally{if(conn!=null)conn.disconnect();}});}
  }
+ private void denyMicrophone(){if(microphone!=null){microphone.deny();microphone=null;}}
+ private boolean permitted(PermissionRequest request){return !a.isFinishing()&&!a.isDestroyed()&&PortalPermissions.microphone(request.getOrigin().toString(),web.getUrl(),request.getResources(),foreground);}
+ private void requestMicrophone(PermissionRequest request){
+  denyMicrophone();
+  if(!permitted(request)){request.deny();return;}
+  if(a.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED){request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});return;}
+  microphone=request;status.setText("Allow the microphone, then press Record again if needed. No recording is sent automatically.");
+  a.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MICROPHONE_PERMISSION);
+ }
+ void permissions(int code,int[] results){
+  if(code!=MICROPHONE_PERMISSION)return;
+  PermissionRequest request=microphone;microphone=null;
+  if(request==null)return;
+  if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED&&permitted(request))request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+  else{request.deny();status.setText("Microphone unavailable. Retry Record while this app is open, or attach an audio file.");}
+ }
  boolean back(){if(web.canGoBack()){web.goBack();return true;}return false;}
- void save(Bundle out){web.saveState(out);}void pause(){web.onPause();CookieManager.getInstance().flush();}void resume(){web.onResume();}
- void destroy(){if(files!=null)files.onReceiveValue(null);web.destroy();io.shutdownNow();}
+ void save(Bundle out){web.saveState(out);}void pause(){foreground=false;denyMicrophone();web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:pause'));",null);web.onPause();CookieManager.getInstance().flush();}void resume(){foreground=true;web.onResume();}
+ void destroy(){foreground=false;denyMicrophone();if(files!=null)files.onReceiveValue(null);web.destroy();io.shutdownNow();}
 }
