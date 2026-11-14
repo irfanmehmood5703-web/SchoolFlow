@@ -84,3 +84,18 @@ class SystemAuditTests(unittest.TestCase):
             self.assertIn(b'value="2026-11-01"',self.c.get('/workspace/attendance/student').data)
             self.assertIn(b'value="2026-10"',self.c.get('/workspace/payroll').data)
             self.assertIn(b'value="2026-11-01"',self.c.get('/workspace/reports/attendance/combined-attendance').data)
+
+    def test_saved_register_rows_do_not_reload_the_employee_list_per_cell(self):
+        from sqlalchemy import event
+        def seed():
+            for n in range(60):db.session.add(self.ops['workflow'](kind='notices',status='Active',data=dict(title='Fictional notice '+str(n),employee_id='1',date='2026-11-01',message='Fictional memo')))
+        self.tenant(seed);engine=self.H['engine'](self.school);queries=[]
+        def capture(conn,cursor,statement,params,context,many):
+            if re.search(r'\bFROM (?:[\w"]+\.)?employee\b',statement,re.I):queries.append(statement)
+        event.listen(engine,'before_cursor_execute',capture)
+        try:
+            page=self.c.get('/workspace/register/notices');self.assertEqual(page.status_code,200);self.assertIn(b'Fictional notice 59',page.data)
+            self.assertLessEqual(len(queries),2,'Employee choices must be loaded once, not once per saved row')
+            self.tenant(lambda:setattr(db.session.get(__import__('app').Employee,1),'name','Renamed fictional teacher'))
+            self.assertIn(b'Renamed fictional teacher',self.c.get('/workspace/register/notices').data)
+        finally:event.remove(engine,'before_cursor_execute',capture)

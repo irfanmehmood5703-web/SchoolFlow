@@ -4,11 +4,12 @@
 
 The audit covers the existing five menu groups (82 menu entries), Dashboard, Configuration and the workspace utilities. All 106 private-owner How To destinations resolve to actual handlers. A two-level traversal of menu and inner-page links initially visited 313 URLs, with no unexpected 404/server error or placeholder menu handler. Owner-only Geo attendance correctly requires an employee login. Disabled roll-number review links initially produced expected validation errors; the UI now stops offering those links until numbering is enabled.
 
-735 backend tests passed at the starting revision. The repair adds seven integration cases for whole-menu traversal, required choice controls, invalid configured choices, primitive input preservation, roll-review availability, reminder days, storage guidance and private/demo boundaries. The same corpus exercises student/family/fee cycles, attendance/exams, payroll, ledger/requisitions, General/Parent/PTM, Messages/Support, staff scope isolation and Guide-only operation.
+735 backend tests passed at the starting revision. The repair adds eight integration cases for whole-menu traversal, required choice controls, invalid configured choices, primitive input preservation, roll-review availability, reminder days, storage guidance and private/demo boundaries. The same corpus exercises student/family/fee cycles, attendance/exams, payroll, ledger/requisitions, General/Parent/PTM, Messages/Support, staff scope isolation and Guide-only operation.
 
 ## Repairs
 
 - Admission/joining dates, attendance/report defaults, Dashboard and the completed payroll month now use the Pakistan school date, including when the UTC host is still on the previous date/month. Audit timestamps remain UTC.
+- Register choice lists are cached per request and campus scope, so 60 saved employee-linked rows do not reload the complete employee list 60 times. A subsequent request sees newly saved names/settings.
 - Empty configured dropdowns remain selects with an explicit empty-catalog message; they no longer become free-text fields. Ordinary text/date/money fields remain inputs.
 - Generic register writes reject unknown campus/class/section/subject choices; reminder schedules accept actual calendar days 1–31.
 - Roll-number blank review is offered after automatic numbering is enabled; server review/CSRF/staleness safeguards remain intact.

@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from school_clock import school_today
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for, has_request_context
 from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -160,13 +160,21 @@ def configure_operations(app, db, Student, Employee):
             if family: data.update(family.data, family_no=family.number)
         return data
     def choices(kind):
+        # Scope-sensitive, request-local only: saved rows reuse the same choices
+        # rather than reloading every employee/catalog for every cell.
+        allowed=getattr(g,'access_campuses',None) if has_request_context() else None
+        key=(kind,None if allowed is None else tuple(sorted(allowed)))
+        cache=request.environ.setdefault('schoolflow.choice_cache',{}) if has_request_context() else {}
+        if key in cache:return list(cache[key])
         if kind in ('employee','teacher','student'):
             cls=Student if kind=='student' else Employee
-            return [(str(x.id),x.name) for x in cls.query.order_by(cls.name).all() if kind!='teacher' or 'teacher' in (x.role or '').lower()]
-        values=[(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
-        if kind=='subject' and app.extensions.get('school_settings_helpers'):
-            order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
-            values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
+            values=[(str(x.id),x.name) for x in cls.query.order_by(cls.name).all() if kind!='teacher' or 'teacher' in (x.role or '').lower()]
+        else:
+            values=[(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
+            if kind=='subject' and app.extensions.get('school_settings_helpers'):
+                order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
+                values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
+        cache[key]=tuple(values)
         return values
     def people(kind='student', active=True):
         cls=Student if kind=='student' else Employee
