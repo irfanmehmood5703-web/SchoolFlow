@@ -1,4 +1,6 @@
-# Assistant, Support and personal notifications
+# SchoolFlow Guide, Support and personal notifications
+
+**Current user decision: built-in Guide mode only.** External model calls and the activation form have been removed. Guide replies and live summaries require no AI credits or provider key. The application no longer reads AI gateway environment variables; any previously saved credential is unused. Historical provider policy/budget table mappings are retained for upgrade compatibility and cannot enable a model. Earlier AI setup notes below describe the superseded implementation.
 
 The header adds AI Assistant, Support and a notification bell. The responsive assistant modal also has a floating launcher, history, new chat, suggestions, read-only summary actions, page-local hiding, optional browser dictation and speech synthesis. No saved transcript is kept in browser storage. Read-only summaries never alter school data.
 
