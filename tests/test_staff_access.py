@@ -47,6 +47,17 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.get('/workspace/general/widgets/report/active-students').status_code,403)
         self.assertNotIn(b'data-general-widget="active-students"',self.c.get('/workspace/general/widgets').data)
         self.assertNotIn(b'data-dashboard-widget="active"',self.c.get('/workspace/dashboard').data)
+
+    def test_how_to_is_read_only_and_does_not_grant_target_permissions(self):
+        self.login()
+        for path in ('/workspace/how-to', '/workspace/how-to/pay-salary', '/workspace/how-to/setup-users'):
+            page=self.c.get(path)
+            self.assertEqual(page.status_code,200)
+            self.assertNotIn(b'Pupil Campus B',page.data)
+            self.assertNotIn(b'Pupil Campus A',page.data)
+        self.assertEqual(self.c.get('/workspace/payroll?view=pay-salary').status_code,403)
+        self.assertEqual(self.c.get('/workspace/core/users').status_code,403)
+        self.assertEqual(self.c.get('/workspace/how-to/general-library').status_code,404)
     def test_widget_and_release_configuration_need_distinct_full_scope_grants(self):
         def allow():
             row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'widgets.view':['Campus A'],'widgets.manage':['Campus A'],'apps.view':['Campus A'],'apps.update':['Campus A']}}

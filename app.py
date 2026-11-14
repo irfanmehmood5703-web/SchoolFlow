@@ -200,6 +200,9 @@ configure_general_leaves(app, db, Student)
 from general_portal import configure_general_portal
 configure_general_portal(app)
 
+from how_to import configure_how_to
+configure_how_to(app)
+
 
 @app.route('/')
 def home():
