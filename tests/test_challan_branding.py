@@ -89,7 +89,8 @@ class ChallanBrandingTests(unittest.TestCase):
         self.post(show_photo='1');File=self.rm['file'];db.session.add(File(owner_kind='student',owner_id=self.s.id,title='Photo',filename='photo.png',mime='image/png',photo=True,content=b'PRIVATE_IMAGE_BYTES',sha256='x'));db.session.commit()
         r=self.print();self.assertEqual(r.status_code,200);self.assertIn(b'alt="Student photo"',r.data);self.assertNotIn(b'PRIVATE_IMAGE_BYTES',r.data)
         fid=File.query.one().id
-        self.assertIn(('/records/files/'+str(fid)).encode(),r.data)
+        self.assertIn(('/workspace/core/fees/challan-branding/student-photo/'+str(self.bill.id)).encode(),r.data)
+        photo=self.c.get('/workspace/core/fees/challan-branding/student-photo/'+str(self.bill.id));self.assertEqual(photo.status_code,200);self.assertEqual(photo.data,b'PRIVATE_IMAGE_BYTES');self.assertEqual(photo.headers['Cache-Control'],'no-store')
         self.assertEqual(self.bill.lines[0]['display_name'],'Saved Tuition Name')
     def test_audit_before_after_and_preview_of_existing_row(self):
         self.post(note='First');version=self.row().version;self.post(note='Second')
@@ -147,3 +148,28 @@ class ChallanBrandingTests(unittest.TestCase):
         page=self.c.get(path);token=html.unescape(re.search(rb'name="preview_token" value="([^"]+)"',page.data)[1].decode())
         self.assertEqual(self.c.post(path,data={'_csrf':self.csrf,'preview_token':token}).status_code,302);self.assertEqual(before,(self.bill.total,self.bill.paid,self.bill.discount));self.assertEqual(Ref.query.count(),1)
         self.assertEqual(self.c.post(path,data={'_csrf':self.csrf,'preview_token':token}).status_code,422)
+
+    def test_top_bank_block_reference_qr_and_hidden_photo(self):
+        import base64,json,io
+        from PIL import Image
+        from unittest.mock import patch
+        import qrcode
+        self.assertEqual(self.post(bank_name='Example Bank',account_title='School account',account_no='DEMO-ACCOUNT',iban='DEMO-IBAN',show_photo='1').status_code,302)
+        original=(self.bill.total,self.bill.paid,self.bill.discount,self.bill.version)
+        real=qrcode.make
+        with patch('challan_branding.qrcode.make',wraps=real) as make:page=self.print()
+        self.assertEqual(page.status_code,200)
+        self.assertLess(page.data.index(b'Bank payment details'),page.data.index(b'class="sf-fee-student"'))
+        self.assertEqual(page.data.count(b'DEMO-ACCOUNT'),3);self.assertEqual(page.data.count(b'alt="Challan reference QR"'),3)
+        self.assertIn(b'No student',page.data)
+        payload=json.loads(make.call_args[0][0]);self.assertEqual(payload['challan'],str(self.bill.id));self.assertIn('reference',payload);self.assertNotIn(self.s.name,make.call_args[0][0]);self.assertNotIn('2000',make.call_args[0][0])
+        raw=base64.b64decode(re.search(rb'src="data:image/png;base64,([^"]+)"',page.data)[1]);self.assertEqual(Image.open(io.BytesIO(raw)).format,'PNG')
+        self.assertEqual(original,(self.bill.total,self.bill.paid,self.bill.discount,self.bill.version))
+        self.post(show_challan_qr='',show_photo='');page=self.print();self.assertNotIn(b'alt="Challan reference QR"',page.data);self.assertNotIn(b'No student',page.data)
+        self.assertEqual(self.c.get('/workspace/core/fees/challan-branding/student-photo/'+str(self.bill.id)).status_code,404)
+
+    def test_preview_qr_and_settings_need_no_bank_link_or_student_photo(self):
+        response=self.post(action='preview',show_photo='1',show_challan_qr='1',bank_name='Example Bank',account_no='DEMO-ACCOUNT')
+        self.assertEqual(response.status_code,200);self.assertIn(b'alt="Challan reference QR"',response.data);self.assertIn(b'No student',response.data);self.assertIsNone(self.row())
+        settings=self.c.get('/workspace/core/fees/challan-branding').data
+        self.assertIn(b'Bank account printed at the top',settings);self.assertIn(b'name="show_photo"',settings);self.assertIn(b'name="show_challan_qr"',settings)

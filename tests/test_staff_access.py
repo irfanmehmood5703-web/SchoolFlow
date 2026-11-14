@@ -438,3 +438,21 @@ class StaffAccessTests(unittest.TestCase):
         self.tenant(check)
         self.login();self.assertEqual(self.c.get('/workspace/finance/snapshots').status_code,403)
         self.assertEqual(self.c.post('/workspace/finance/snapshots/capture',data={'_csrf':self.token()}).status_code,403)
+
+    def test_challan_photo_requires_print_grant_and_bill_campus(self):
+        import io
+        from PIL import Image
+        def seed():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'fees.view':['Campus A']}}
+            cfg=app.extensions['school_settings_models']['item'];db.session.add(cfg(kind='challan-branding',scope='',name='Fee Challan',data={'show_photo':True}))
+            f=io.BytesIO();Image.new('RGB',(12,12),'green').save(f,format='PNG')
+            for sid in (1,2):db.session.add(self.rm['file'](owner_kind='student',owner_id=sid,title='Photo',filename='qa.png',mime='image/png',photo=True,content=f.getvalue(),sha256='fictional'))
+        self.tenant(seed);self.login()
+        path='/workspace/core/fees/challan-branding/student-photo/'
+        self.assertEqual(self.c.get(path+'1').status_code,403)
+        def allow():
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'fees.print':['Campus A']}}
+        self.tenant(allow);self.login()
+        self.assertEqual(self.c.get(path+'1').status_code,200)
+        self.assertEqual(self.c.get(path+'2').status_code,404)
+        self.assertEqual(self.c.get('/workspace/core/fees/challan-branding').status_code,403)

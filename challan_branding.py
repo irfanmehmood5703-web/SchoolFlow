@@ -1,7 +1,8 @@
 """Institute/campus print settings; monetary values always come from saved bills."""
-import hmac,re
+import hmac,re,io,base64,json
+import qrcode
 from collections import OrderedDict
-from flask import Blueprint,abort,render_template,request,session,redirect,url_for
+from flask import Blueprint,abort,render_template,request,session,redirect,url_for,send_file
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -9,9 +10,9 @@ DEFAULTS=dict(layout='landscape',primary='#176b4a',secondary='#e7f3ec',paper='#f
               copy_1='Student Copy',copy_2='Bank Copy',copy_3='Office Copy',
               address='',contact='',bank_name='',account_title='',account_no='',iban='',
               note='',footer='Received by: __________     Stamp & Signature: __________',
-              show_logo=True,show_address=True,show_contact=True,show_father=True,show_photo=False,
+              show_challan_qr=True,show_logo=True,show_address=True,show_contact=True,show_father=True,show_photo=False,
               hide_zero=True,hide_status=False,consumer_mode='bill',consumer_prefix='SF',payment_url='',show_payment_qr=False)
-FLAGS=('show_logo','show_address','show_contact','show_father','show_photo','hide_zero','hide_status','show_payment_qr')
+FLAGS=('show_challan_qr','show_logo','show_address','show_contact','show_father','show_photo','hide_zero','hide_status','show_payment_qr')
 TEXT_LIMITS=dict(copy_1=60,copy_2=60,copy_3=60,address=500,contact=200,bank_name=160,account_title=160,account_no=100,iban=100,note=1500,footer=500)
 
 
@@ -68,7 +69,7 @@ def configure_challan_branding(app,db,Student):
             data=parse() if action!='reset' else None
             if action=='preview':
                 # Fictional preview only. Do not read or mutate a student's financial record.
-                return render_template('challan_branding_preview.html',title='Challan branding preview',config=data,school=app.extensions['branding_values']['school'](scope),campus=scope)
+                return render_template('challan_branding_preview.html',title='Challan branding preview',config=data,school=app.extensions['branding_values']['school'](scope),campus=scope,preview_reference_qr=reference_qr(type('PreviewBill',(),{'id':'DEMO'})(),'PREVIEW-SF-DEMO') if data['show_challan_qr'] else '')
             before=dict(row.data) if row else None
             if action=='reset':
                 if row:db.session.delete(row)
@@ -79,6 +80,26 @@ def configure_challan_branding(app,db,Student):
             except (IntegrityError,StaleDataError):db.session.rollback();raise ValueError('Another save changed these settings. Reload before retrying.')
             return redirect(url_for('challan_branding.index',campus=scope))
         return render_template('challan_branding.html',title='Challan branding',config=settings(scope),row=row,campus=scope,campuses=campuses(),flags=FLAGS)
+
+    def reference_qr(bill,consumer):
+        # Identifiers only; this QR grants no login or payment authority.
+        payload=json.dumps(dict(type='SchoolFlow fee challan',challan=str(bill.id),reference=consumer or ''),sort_keys=True,separators=(',',':'))
+        stream=io.BytesIO();qrcode.make(payload).save(stream,format='PNG')
+        return 'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode('ascii')
+
+    @bp.get('/student-photo/<int:bill_id>')
+    def student_photo(bill_id):
+        bill=db.get_or_404(ops['bill'],bill_id);student=db.get_or_404(Student,bill.student_id)
+        details=app.extensions['record_helpers']['raw_many']('student',[student]).get(student.id,{})
+        if not settings(details.get('campus',''))['show_photo']:abort(404)
+        fid=app.extensions['branding_values']['prefetch_photos']('student',[student]).get(('student',student.id))
+        if not fid:abort(404)
+        photo=db.get_or_404(rm['file'],fid)
+        if photo.mime not in ('image/jpeg','image/png','image/webp'):abort(404)
+        response=send_file(io.BytesIO(photo.content),mimetype=photo.mime)
+        response.headers['Cache-Control']='no-store';response.headers['X-Content-Type-Options']='nosniff'
+        response.headers['Content-Security-Policy']="default-src 'none'; sandbox"
+        return response
 
     def print_context(bills,action,form):
         students={s.id:s for s in Student.query.filter(Student.id.in_({b.student_id for b in bills})).all()}
@@ -96,8 +117,8 @@ def configure_challan_branding(app,db,Student):
                     for flag in ('hide_zero','hide_status','show_payment_qr'):config[flag]=bool(form.get(flag))
                 groups[key]=dict(config=config,school=brand['school'](campus),campus=campus,entries=[],family=d.get('family_no','') if action=='family' else '',total=0)
             photo=photos.get(('student',s.id))
-            groups[key]['entries'].append(dict(bill=bill,student=s,details=d,photo=url_for('records.record_file',id=photo) if photo else '',consumer=consumers.get(bill.id,''),payment_qr=url_for('challan_payment_qr',bill_id=bill.id) if app.extensions['challan_consumer_helpers']['payment_url'](bill,consumers.get(bill.id,''),groups[key]['config']) else ''))
+            groups[key]['entries'].append(dict(bill=bill,student=s,details=d,photo=url_for('challan_branding.student_photo',bill_id=bill.id) if photo else '',reference_qr=reference_qr(bill,consumers.get(bill.id,'')) if groups[key]['config']['show_challan_qr'] else '',consumer=consumers.get(bill.id,''),payment_qr=url_for('challan_payment_qr',bill_id=bill.id) if app.extensions['challan_consumer_helpers']['payment_url'](bill,consumers.get(bill.id,''),groups[key]['config']) else ''))
             groups[key]['total']+=bill.remaining
         return dict(sheets=list(groups.values()))
-    app.extensions['challan_branding_helpers']=dict(settings=settings,print_context=print_context)
+    app.extensions['challan_branding_helpers']=dict(settings=settings,print_context=print_context,reference_qr=reference_qr)
     app.register_blueprint(bp)

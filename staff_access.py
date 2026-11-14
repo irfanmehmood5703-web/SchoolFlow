@@ -309,6 +309,7 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep in ('challan_branding.student_photo','challan_payment_qr'):return 'fees.print'
         if ep.startswith('school_apps.'):
             return 'apps.'+('view' if request.method=='GET' else 'update')
         if ep.startswith('general_tools.'):
