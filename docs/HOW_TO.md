@@ -38,3 +38,12 @@ authentication, and staff destination permission boundaries. The existing
 isolated Chromium CI adds mobile/desktop guide navigation and independent-scroll
 checks. Local Chromium cannot run because its required process socket is denied;
 browser CI results must be checked separately before claiming visual validation.
+
+## Verified live release — 14 November 2026
+
+- Full local suite: 703 tests passed (82.429 seconds).
+- PostgreSQL, staff access, persistence and Chromium CI run 43563414103 passed at 098874863ea490ef272da2c00c260c386ec92d01.
+- Chromium passed at 390px and 1440px: catalogue coverage, independent scrolling, categories, search, article reader and empty state. The first check read an unfinished smooth scroll; the test now explicitly requests instant scrolling and waits for the scroll position.
+- Original Render service srv-dbi3dqks728c73c7snv0 deploy dep-dbrveimq1p3s73e84j30 is live at runtime commit 241925aca2a2f69554fd0c5cb7ce977fe648af68.
+- 19 hosted read-only checks passed on https://schoolflow-phase1.onrender.com/: demo entry, 97-guide catalogue, all seven category counts, search, five article readers, CSS, health and anonymous authentication redirect. No school records changed.
+- Initial error-level runtime log query returned no entries. No schema, credentials or storage settings changed. Physical-phone testing remains separate.
