@@ -5,6 +5,7 @@ for (const width of [390,1440]) {
 await page.setViewportSize({width,height:width===390?844:1000});
 await page.goto('http://127.0.0.1:5055/workspace/assistant');
 await page.waitForSelector('#assistant-dialog[open]');
+if(!(await page.textContent('[data-ai-disclosure]')).includes('No AI credits are needed'))throw Error('Guide-only disclosure missing');
 await page.fill('#assistant-question','Fee plan kaise banate hain?');await page.locator('[data-chat-form] button[type=submit]').click();
 await page.waitForSelector('.assistant-bubble:not(.mine)');
 if(!(await page.textContent('.assistant-bubble:not(.mine)')).includes('Guide'))throw Error('Guide reply mode missing');

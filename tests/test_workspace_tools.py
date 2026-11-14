@@ -7,7 +7,7 @@ from flask import g
 from werkzeug.security import generate_password_hash
 import test_messaging as messaging_tests
 from app import app,db,Student
-from assistant_service import ProviderUnavailable
+import urllib.request
 
 class WorkspaceToolsTests(unittest.TestCase):
     password=messaging_tests.MessagingTests.password
@@ -60,26 +60,23 @@ class WorkspaceToolsTests(unittest.TestCase):
         self.tenant(seed)
         r=self.ask(action='fees',question='Fee balance');self.assertIn('123.45',r.json['answer']['body']);self.assertIn('100.00',r.json['answer']['body']);self.assertIn('Net payable PKR: 120.00',r.json['answer']['body']);self.assertIn('Paid PKR: 20.00',r.json['answer']['body'])
         self.assertIn('Present: 1',self.ask(action='attendance',question='Today attendance').json['answer']['body'])
-    def test_ai_model_activation_is_central_and_checks_availability(self):
+    def test_guide_information_is_central_and_activation_is_disabled(self):
         self.assertEqual(self.c.get('/vendor/assistant').status_code,302);v=self.vendor()
-        with patch('assistant_service.provider_models',return_value=[]):
-            r=self.post('/vendor/assistant',dict(version='0',model='gpt-5-mini',enabled='1'),v);self.assertEqual(r.status_code,422);self.assertIn(b'credits',r.data)
+        page=v.get('/vendor/assistant');self.assertEqual(page.status_code,200);self.assertIn(b'No AI credits',page.data);self.assertNotIn(b'name="model"',page.data)
+        r=self.post('/vendor/assistant',dict(version='0',model='gpt-5-mini',enabled='1'),v);self.assertEqual(r.status_code,403)
         P=app.extensions['assistant_models']['policy'];self.assertIsNone(db.session.get(P,1))
-        with patch('assistant_service.provider_models',return_value=['gpt-5-mini']):
-            self.assertEqual(self.post('/vendor/assistant',dict(version='0',model='gpt-5-mini',enabled='1'),v).status_code,200)
-        self.assertTrue(db.session.get(P,1).enabled)
-    def enable(self):
-        app.config.update(AI_GATEWAY_TOKEN='fictional-not-a-real-key',AI_GATEWAY_BASE_URL='https://fictional.neon.tech');P=app.extensions['assistant_models']['policy'];db.session.add(P(id=1,enabled=True,model='gpt-5-mini'));db.session.commit();self.addCleanup(lambda:app.config.update(AI_GATEWAY_TOKEN='',AI_GATEWAY_BASE_URL=''))
-    def test_ai_input_has_only_guides_retry_single_call_and_fallback(self):
-        self.enable();token=secrets.token_urlsafe(32)
-        with patch('assistant_service.model_answer',return_value='Open the saved Fee Plans form.') as model:
-            r=self.ask(token=token);self.assertEqual(r.json['answer']['mode'],'AI');self.assertEqual(self.ask(token=token).json,r.json);self.assertEqual(model.call_count,1);self.assertNotIn('Fictional child',repr(model.call_args))
-        with patch('assistant_service.model_answer',side_effect=ProviderUnavailable):
-            r=self.ask();self.assertEqual(r.json['answer']['mode'],'Guide');self.assertIn('unavailable',r.json['answer']['body'])
-    def test_ai_budget_and_live_summary_never_call_model(self):
-        self.enable();B=app.extensions['assistant_models']['budget'];day=datetime.now(ZoneInfo('Asia/Karachi')).date().isoformat();db.session.add(B(key='all:'+day,count=100));db.session.commit()
-        with patch('assistant_service.model_answer') as model:
-            self.assertEqual(self.ask().json['answer']['mode'],'Guide');self.assertEqual(self.ask(action='students',question='counts').json['answer']['mode'],'Live summary');model.assert_not_called()
+    def legacy_policy(self):
+        P=app.extensions['assistant_models']['policy'];db.session.add(P(id=1,enabled=True,model='gpt-5-mini'));db.session.commit()
+    def test_guide_ignores_legacy_ai_policy_and_never_calls_network(self):
+        self.legacy_policy();token=secrets.token_urlsafe(32)
+        with patch('urllib.request.OpenerDirector.open',side_effect=AssertionError('External network is not permitted')) as network:
+            r=self.ask(token=token);self.assertEqual(r.json['answer']['mode'],'Guide');self.assertEqual(self.ask(token=token).json,r.json);network.assert_not_called()
+        self.assertEqual(self.c.get('/workspace/assistant/history').json['mode'],'Guide');self.assertFalse(self.c.get('/workspace/assistant/history').json['provider_enabled'])
+    def test_live_summary_and_guide_do_not_write_external_budgets(self):
+        self.legacy_policy();B=app.extensions['assistant_models']['budget']
+        with patch('urllib.request.OpenerDirector.open',side_effect=AssertionError('External network is not permitted')) as network:
+            self.assertEqual(self.ask().json['answer']['mode'],'Guide');self.assertEqual(self.ask(action='students',question='counts').json['answer']['mode'],'Live summary');network.assert_not_called()
+        self.assertEqual(B.query.count(),0)
     def test_support_real_owner_reply_files_read_and_no_stale_reply(self):
         path=self.ticket(attachments=(io.BytesIO(b'%PDF-1.4\nfictional'),'issue.pdf'));v=self.vendor();self.assertIn(b'Fictional issue',v.get('/vendor/support').data)
         tid=path.rsplit('/',1)[-1];S=app.extensions['support_models'];ticket=db.session.get(S['ticket'],tid);version=ticket.version;fid=S['file'].query.one().id

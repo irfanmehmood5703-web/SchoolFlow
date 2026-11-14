@@ -28,8 +28,6 @@ if _identity_url:
     app.config['SQLALCHEMY_BINDS']={'identity':dict(url=_identity_url,pool_pre_ping=True)}
 app.config['VENDOR_SETUP_HASH']=os.getenv('VENDOR_SETUP_HASH','')
 app.config['SCHOOL_APP_SIGNING_KEY']=os.getenv('SCHOOL_APP_SIGNING_KEY')
-app.config['AI_GATEWAY_TOKEN']=os.getenv('NEON_AI_GATEWAY_TOKEN','')
-app.config['AI_GATEWAY_BASE_URL']=os.getenv('NEON_AI_GATEWAY_BASE_URL','')
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
     app.config['SQLALCHEMY_ENGINE_OPTIONS']=dict(pool_pre_ping=True,pool_size=3,max_overflow=2,pool_recycle=300,connect_args={'connect_timeout':10})
 if os.getenv('SCHOOLFLOW_REQUIRE_POSTGRES')=='1' and not app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):

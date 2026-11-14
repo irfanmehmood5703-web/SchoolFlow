@@ -460,9 +460,9 @@ UTILITY_GUIDES = [
 ]
 
 TOOLS_GUIDES = [
- ('assistant-help','AI Assistant','assistant.page',{},'Ask about SchoolFlow options and review permitted live totals.',
-  ['Open AI Assistant in the header or the floating SchoolFlow Assistant button.','Type a question or use a suggestion. Guide mode uses saved instructions; AI mode is available only after the software owner activates a funded model.','Use read-only actions to review student counts, fee balances, attendance or employee counts within your own permissions.','Use Chat history to reopen your recent chats, New chat to start again, or Hide on this page to hide the floating launcher for this session.'],
-  'No records are changed from chat. Browser dictation and read aloud depend on device support. Questions sent in AI mode go to the model provider; do not include passwords or unnecessary personal information. School record summaries stay outside AI requests.'),
+ ('assistant-help','SchoolFlow Guide','assistant.page',{},'Ask about SchoolFlow options and review permitted live totals.',
+  ['Open SchoolFlow Guide in the header or the floating SchoolFlow Guide button.','Type a question or use a suggestion. Guide mode uses the instructions built into SchoolFlow and needs no AI credits.','Use read-only actions to review student counts, fee balances, attendance or employee counts within your own permissions.','Use Chat history to reopen your recent chats, New chat to start again, or Hide on this page to hide the floating launcher for this session.'],
+  'No records are changed from chat. Browser dictation and read aloud depend on device support. Questions and summaries stay within SchoolFlow; this guide does not send them to an external AI model. Do not include passwords or unnecessary personal information.'),
  ('support-help','Support tickets','support.inbox',{},'Send your own school issue to the software owner and track human replies.',
   ['Open Support in the header. Private school accounts can choose New ticket.','Enter a subject, category, priority, campus and a description of the problem. Add up to five photos or PDF files, each up to 5 MB.','Send the ticket, then reopen it to review replies, add details or resolve the case.','Mark displayed replies as read. A human reply from the software owner also appears under the notification bell.'],
   'Demo only previews the form. Each school user can access their own tickets. The software owner answers through the separate central Support inbox; a reply time is not guaranteed. Chat transcripts are never attached automatically.'),
