@@ -7,7 +7,7 @@ from flask import g
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 from app import app, db
 from module_catalog import MENUS
-from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES
+from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES, TOOLS_GUIDES
 
 
 class HowToTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class HowToTests(unittest.TestCase):
             from flask import session
             session['owner_id'] = 1
             articles = app.extensions['how_to_catalogue']()
-            self.assertEqual(len(articles), len(keys)+len(SETTINGS)+len(UTILITY_GUIDES)+1)
+            self.assertEqual(len(articles), len(keys)+len(SETTINGS)+len(UTILITY_GUIDES)+len(TOOLS_GUIDES)+1)
             self.assertEqual(len({a['slug'] for a in articles}), len(articles))
             for article in articles:
                 rule, _ = app.url_map.bind('localhost').match(urlsplit(article['target']).path)
@@ -59,7 +59,7 @@ class HowToTests(unittest.TestCase):
             self.assertIn(b'Step by step', page.data)
             self.assertIn(article['target'].encode().replace(b'&', b'&amp;'), page.data)
         page = self.client.get('/workspace/how-to')
-        for title in (b'Front Desk', b'Student 360', b'Canteen', b'School Shop', b'AI Assistant'):
+        for title in (b'Front Desk', b'Student 360', b'Canteen', b'School Shop'):
             self.assertNotIn(title, page.data)
         for slug in ('general-library', 'general-feedback', 'general-leaves', 'unknown', 'student-360'):
             self.assertEqual(self.client.get('/workspace/how-to/'+slug).status_code, 404)
