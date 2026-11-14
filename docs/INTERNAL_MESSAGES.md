@@ -106,3 +106,12 @@ exports, read state, resolve/flags and response timing. Chromium CI exercises
 390px/1440px forms, actual recipients, PDF/reply, fake-microphone WAV capture,
 report search/download and the existing How To/Diary/PTM workflows. The current installed Android portal APK denies direct microphone capture; users can attach recorded audio or record through the phone browser. Native microphone permission support requires a separate APK update. Fake-device
 Chromium is not a physical Android microphone or APK installation test.
+
+## Verified release — 14 November 2026
+
+- 720 local backend tests passed in 100.206 seconds.
+- PostgreSQL and Chromium workflow 43574759195 passed at source 289a1231758b62d4018ff644c52f5993af572421, including 17 messaging tests, existing identity/staff/accounting/parent/Diary/PTM checks and cross-process persistence.
+- Chromium passed at 390px and 1440px: actual available recipient selection, conversation creation, PDF attachment, replies, fake-microphone WAV recording/upload, responsive thread, report search and XLSX summary download. Existing How To and Diary/PTM browser checks also passed.
+- Original Render service srv-dbi3dqks728c73c7snv0 deploy dep-dbs1ifu7bikc73ei248g became live at runtime 67952c1f82229031fc2a504b3084b67b8de36f26.
+- 21 hosted checks passed on https://schoolflow-phase1.onrender.com/: inbox/settings/four report tabs, three new help readers, guide counts, static assets, health, preserved SMS Blaster, authentication redirect and actual summary/transcript XLSX downloads with required confirmation. These checks added no conversations, users or messages; only temporary workbooks were created in the shared fictional demo.
+- The initial error-level runtime log query returned no entries. No school credentials, signing keys or database settings were changed. Physical Android/file/microphone tests remain separate; the installed portal APK's direct microphone restriction is documented above.
