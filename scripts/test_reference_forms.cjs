@@ -3,6 +3,16 @@ const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE || 'playwright
 const browser=await chromium.launch({headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',e=>{throw e});
 for (const width of [390,1440]) {
 await page.setViewportSize({width,height:width===390?844:1000});
+await page.goto('http://127.0.0.1:5055/records/settings');
+await page.selectOption('#category','class_name');await page.fill('#value','Browser class '+width);await page.locator('button').filter({hasText:'Add option'}).click();await page.waitForLoadState('networkidle');
+if(await page.inputValue('#category')!=='class_name')throw Error('saving a class reset category to Session');
+await page.selectOption('#category','academic_session');await page.fill('#value','Browser unused session '+width);await page.locator('button').filter({hasText:'Add option'}).click();await page.waitForLoadState('networkidle');
+const removeSession=page.getByRole('button',{name:'Delete session Browser unused session '+width,exact:true});if(await removeSession.count()!==1)throw Error('session delete control missing');
+page.once('dialog',dialog=>dialog.accept());await removeSession.click();await page.waitForLoadState('networkidle');
+if(await page.getByRole('button',{name:'Delete session Browser unused session '+width,exact:true}).count())throw Error('unused session not removed');
+if(!(await page.textContent('#options-class_name')).includes('Browser class '+width))throw Error('session deletion changed class catalog');
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('catalog overflow at '+width);
+console.log('PASS Catalog '+width+'px: selected category retained, confirmed unused-session removal, classes preserved');
 await page.goto('http://127.0.0.1:5055/workspace/register/teacher-classes');
 for(const name of ['employee_id','campus','class_name','section','subject'])if(!(await page.locator('select[name='+name+']').count()))throw Error('configured choice lost its select: '+name);
 await page.goto('http://127.0.0.1:5055/workspace/core/roll-number-series');
@@ -55,6 +65,16 @@ await page.setViewportSize({width:390,height:844});
 await page.context().grantPermissions(['microphone'],{origin:'http://127.0.0.1:5055'});
 for(const width of [390,1440]) {
 await page.setViewportSize({width,height:width===390?844:1000});
+await page.goto('http://127.0.0.1:5055/records/settings');
+await page.selectOption('#category','class_name');await page.fill('#value','Browser class '+width);await page.locator('button').filter({hasText:'Add option'}).click();await page.waitForLoadState('networkidle');
+if(await page.inputValue('#category')!=='class_name')throw Error('saving a class reset category to Session');
+await page.selectOption('#category','academic_session');await page.fill('#value','Browser unused session '+width);await page.locator('button').filter({hasText:'Add option'}).click();await page.waitForLoadState('networkidle');
+const removeSession=page.getByRole('button',{name:'Delete session Browser unused session '+width,exact:true});if(await removeSession.count()!==1)throw Error('session delete control missing');
+page.once('dialog',dialog=>dialog.accept());await removeSession.click();await page.waitForLoadState('networkidle');
+if(await page.getByRole('button',{name:'Delete session Browser unused session '+width,exact:true}).count())throw Error('unused session not removed');
+if(!(await page.textContent('#options-class_name')).includes('Browser class '+width))throw Error('session deletion changed class catalog');
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('catalog overflow at '+width);
+console.log('PASS Catalog '+width+'px: selected category retained, confirmed unused-session removal, classes preserved');
 await page.goto('http://127.0.0.1:5055/workspace/conversations');
 await page.locator('[data-new-conversation]').click();
 await page.locator('#new-conversation [name=campus]').selectOption('North');
