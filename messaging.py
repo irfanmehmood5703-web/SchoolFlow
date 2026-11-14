@@ -79,7 +79,15 @@ def configure_messaging(app,db,Student,Employee):
         key=db.Column(db.String(120),primary_key=True)
         count=db.Column(db.Integer,nullable=False,default=0)
         expires=db.Column(db.Float,nullable=False)
-    app.extensions['message_models']=dict(policy=Policy,conversation=Conversation,message=Message,file=File,seen=Seen,submission=Submission,rate=Rate)
+    class Export(db.Model):
+        __tablename__='conversation_export'
+        id=db.Column(db.String(43),primary_key=True)
+        actor=db.Column(db.String(80),nullable=False)
+        campuses=db.Column(db.JSON,nullable=False)
+        filename=db.Column(db.String(100),nullable=False)
+        content=db.deferred(db.Column(db.LargeBinary,nullable=False))
+        expires=db.Column(db.Float,nullable=False,index=True)
+    app.extensions['message_models']=dict(policy=Policy,conversation=Conversation,message=Message,file=File,seen=Seen,submission=Submission,rate=Rate,export=Export)
     def config():
         row=db.session.get(Policy,1);return {**DEFAULTS,**(row.data if row else {})}
     def audit(action,**data):db.session.add(Audit(action=action,data={**data,'actor':g.message_actor['key']}))
@@ -409,6 +417,8 @@ def configure_messaging(app,db,Student,Employee):
         if len(rows)>500:raise ValueError('Narrow the report to at most 500 conversations.')
         if request.values.get('from') and request.values.get('to') and request.values['from']>request.values['to']:raise ValueError('From date must not be after To date.')
         grouped={r.id:[] for r in rows};states={r.id:{} for r in rows}
+        text_size=db.session.query(func.sum(func.length(Message.body))).filter(Message.conversation_id.in_(list(grouped))).scalar() if rows else 0
+        if (text_size or 0)>5000000:raise ValueError('Narrow the report; selected message text exceeds five million characters.')
         messages=Message.query.filter(Message.conversation_id.in_(list(grouped))).order_by(Message.id).limit(20001).all() if rows else []
         if len(messages)>20000:raise ValueError('Narrow the report to 20,000 messages.')
         for message in messages:grouped[message.conversation_id].append(message)
@@ -448,7 +458,13 @@ def configure_messaging(app,db,Student,Employee):
                 else:
                     for m in item['messages']:values.append([r.id,r.campus,r.subject,m.id,m.label,m.role,stamp(m.created),m.body,m.blocked,m.flagged,m.severity])
             if len(values)>20000:raise ValueError('Narrow the transcript export to 20,000 messages.')
-            db.session.commit();return report_xlsx(headers,values,'conversation-'+kind)
+            response=report_xlsx(headers,values,'conversation-'+kind,filters={k:request.values.get(k,'') for k in ('from','to','campus','status','q','tab')})
+            content=response.get_data()
+            if len(content)>20*1024*1024:raise ValueError('Narrow this export to less than 20 MB.')
+            Export.query.filter(Export.expires<time.time()).delete(synchronize_session=False)
+            artifact=Export(id=secrets.token_urlsafe(32),actor=g.message_actor['key'],campuses=sorted({i['row'].campus for i in data}),filename='schoolflow-conversation-'+kind+'.xlsx',content=content,expires=time.time()+600)
+            db.session.add(artifact);db.session.commit()
+            return redirect(url_for('messages.export_file',eid=artifact.id),code=303)
         all_messages=[m for item in data for m in item['messages']];responses=[i['first'] for i in data if i['first'] is not None];media=File.query.filter(File.message_id.in_([m.id for m in all_messages])).all() if all_messages else []
         metrics=dict(conversations=len(data),active=sum(i['row'].updated>=time.time()-7*86400 for i in data),unresolved=sum(i['unresolved'] for i in data),never=sum(i['never'] for i in data),flagged=sum(i['flagged'] for i in data),unread_family=sum(i['unread_family'] for i in data),unread_school=sum(i['unread_school'] for i in data),messages=len(all_messages),blocked=sum(m.blocked for m in all_messages),median=__import__('statistics').median(responses) if responses else None,attachments=len(media))
         campus_stats=[];actor_stats=[]
@@ -458,5 +474,13 @@ def configure_messaging(app,db,Student,Employee):
         for key in sorted({i['first_key'] for i in data if i['first_key']}):
             matches=[i for i in data if i['first_key']==key];actor_stats.append(dict(label=matches[0]['first_actor'],role=matches[0]['first_role'],count=len(matches)))
         return render('message_report.html',title='Communication Report',data=data,tab=tab,metrics=metrics,campus_stats=campus_stats,actor_stats=actor_stats,campuses=sorted(allowed_campuses()))
+    @bp.get('/exports/<eid>')
+    def export_file(eid):
+        artifact=db.get_or_404(Export,eid)
+        if artifact.actor!=g.message_actor['key']:abort(404)
+        if artifact.expires<=time.time():abort(410,'Export expired. Run the report again.')
+        permitted=allowed_campuses()
+        if any(c not in permitted and not (not c and g.message_actor['role']=='Owner') for c in artifact.campuses):abort(403)
+        return send_file(io.BytesIO(artifact.content),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',download_name=artifact.filename,as_attachment=True,conditional=True)
     app.extensions['message_helpers']=dict(config=config,directory=directory,contact_spans=contact_spans)
     app.register_blueprint(bp);app.register_blueprint(parents)

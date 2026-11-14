@@ -11,7 +11,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 CURRENCY={'Payable','Discount','Paid','Remaining','Collected','Amount','Deducted','Earnings','Deductions','Net','Lecture amount'}
 
 
-def report_xlsx(headers,rows,name):
+def report_xlsx(headers,rows,name,filters=None):
     if len(rows)>50000:raise ValueError('Narrow this export to at most 50,000 report rows.')
     book=Workbook(write_only=True);sheet=book.create_sheet('Report');sheet.freeze_panes='A2';sheet.sheet_properties.pageSetUpPr.fitToPage=True
     sheet.page_setup.orientation='landscape';sheet.page_setup.paperSize=Worksheet.PAPERSIZE_A4;sheet.page_setup.fitToWidth=1;sheet.page_setup.fitToHeight=0
@@ -31,8 +31,12 @@ def report_xlsx(headers,rows,name):
             values.append(c)
         sheet.append(values)
     sheet.auto_filter.ref=f'A1:{get_column_letter(len(headers))}{len(rows)+1}'
+    supplied_filters=filters
     filters=book.create_sheet('Filters');filters.append([cell(filters,'Filter',True),cell(filters,'Value',True)]);filters.column_dimensions['A'].width=24;filters.column_dimensions['B'].width=60
     filters.append([cell(filters,'Report'),cell(filters,name)])
-    for key in sorted(request.args):filters.append([cell(filters,key),cell(filters,', '.join(request.args.getlist(key)))])
+    source_filters=request.args if supplied_filters is None else supplied_filters
+    for key in sorted(source_filters):
+        raw=source_filters.getlist(key) if hasattr(source_filters,'getlist') else [source_filters[key]]
+        filters.append([cell(filters,key),cell(filters,', '.join(str(v) for v in raw))])
     stream=io.BytesIO();book.save(stream)
     return Response(stream.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="schoolflow-{name}.xlsx"','Cache-Control':'no-store'})

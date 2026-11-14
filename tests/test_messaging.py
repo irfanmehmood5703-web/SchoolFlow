@@ -38,7 +38,7 @@ class MessagingTests(unittest.TestCase):
     def login(self,username='owner@example.invalid',code='MSG-ONE'):
         c=app.test_client();c.get('/auth/institute');c.post('/auth/institute',data={'_csrf':self.csrf(c),'code':code});r=c.post('/auth/login',data={'_csrf':self.csrf(c),'email':username,'password':self.password});self.assertEqual(r.status_code,302);return c
     def post(self,path,data=None,c=None):
-        c=c or self.c;return c.post(path,data={'_csrf':self.csrf(c),**(data or {})})
+        c=c or self.c;return c.post(path,data={'_csrf':self.csrf(c),**(data or {})},follow_redirects=bool(data and data.get('export')))
     def parent(self,fid=1):
         r=self.post('/workspace/general/parents/links/'+str(fid),{'action':'issue'});self.assertEqual(r.status_code,200)
         full=html.unescape(re.search(rb'<strong>(.*?)</strong>',r.data)[1].decode());p=app.test_client();p.get('/parents/MSG-ONE/enter');r=self.post('/parents/MSG-ONE/enter',{'credential':full.split('#')[1]},p);self.assertEqual(r.status_code,302);return p
@@ -185,3 +185,18 @@ class MessagingTests(unittest.TestCase):
             return client.post('/workspace/conversations/new',data={'_csrf':self.csrf(),**data}).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(lambda _:send(),range(2)))
         self.assertEqual(statuses,[302,302]);self.assertEqual(self.tenant(lambda:self.M['message'].query.count()),1)
+
+    def test_export_download_is_actor_bound_expiring_and_preserves_filters(self):
+        self.create()
+        r=self.c.post('/workspace/conversations/report',data={'_csrf':self.csrf(),'export':'summary','campus':'North'})
+        self.assertEqual(r.status_code,303);url=r.location
+        download=self.c.get(url);self.assertEqual(download.status_code,200)
+        filters=list(load_workbook(io.BytesIO(download.data))['Filters'].values)
+        self.assertIn(('campus','North'),filters)
+        teacher=self.login('teacher1')
+        def grant():
+            staff=db.session.get(self.Staff,1);staff.data={**staff.data,'permissions':{**staff.data['permissions'],'messages.export':['North']}}
+        self.tenant(grant)
+        self.assertEqual(teacher.get(url).status_code,404)
+        self.tenant(lambda:setattr(self.M['export'].query.one(),'expires',time.time()-1))
+        self.assertEqual(self.c.get(url).status_code,410)

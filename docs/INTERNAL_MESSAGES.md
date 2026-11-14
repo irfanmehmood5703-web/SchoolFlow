@@ -81,7 +81,7 @@ unread or replies.
 Summary and full transcript exports are XLSX. Transcript export requires an
 explicit confirmation and an export permission; each exported conversation is
 audited. Cell text is forced to spreadsheet strings, including formula-like
-message text. The Flagged tab exports only flagged conversations in the current
+message text. Confirmed exports redirect to an actor-bound, authenticated ten-minute GET download so existing Android clients can download the actual workbook. Expired workbook bytes are removed during later exports. The Flagged tab exports only flagged conversations in the current
 filter. Reports are bounded to 500 conversations / 20,000 messages; narrower
 filters are required beyond that. Message/state queries are batched rather than
 one query per report row.
@@ -92,7 +92,7 @@ How To now has three Communication guides for inbox, settings and reports:
 ## Deployment and checks
 
 New tables only: conversation_policy, conversation, conversation_message,
-conversation_file, conversation_seen, conversation_submission, conversation_rate.
+conversation_file, conversation_seen, conversation_submission, conversation_rate, conversation_export.
 Existing private workspaces use the established additive upgrade path. No
 existing data, secrets, signing keys or database URLs are replaced. Attachment
 bytes use the same tenant database storage model as existing Diary files.
@@ -104,5 +104,5 @@ blocked file privacy, exact/changed/concurrent retries, invalid uploads, decoded
 voice duration, retention expiry, settings versions, audited/formula-safe
 exports, read state, resolve/flags and response timing. Chromium CI exercises
 390px/1440px forms, actual recipients, PDF/reply, fake-microphone WAV capture,
-report search/download and the existing How To/Diary/PTM workflows. Fake-device
+report search/download and the existing How To/Diary/PTM workflows. The current installed Android portal APK denies direct microphone capture; users can attach recorded audio or record through the phone browser. Native microphone permission support requires a separate APK update. Fake-device
 Chromium is not a physical Android microphone or APK installation test.

@@ -445,7 +445,7 @@ UTILITY_GUIDES = [
      ['Open Messages in the header and choose New conversation.', 'Choose the campus, recipient type and person. Parents also choose their linked child.',
       'Enter a subject and message, add permitted files or record a voice note, then review and send.',
       'Open the conversation to reply, check saved/read state or resolve/reopen it where permitted.'],
-     'Only participants can open the chat. Teachers need staff Messages access and matching class assignments to contact a family. Student discussions use the verified family account; no independent Student login is implied. Messages stay in SchoolFlow, without SMS or push delivery.'),
+     'Only participants can open the chat. Teachers need staff Messages access and matching class assignments to contact a family. Student discussions use the verified family account; no independent Student login is implied. Messages stay in SchoolFlow, without SMS or push delivery. Direct microphone recording works in supported browsers; the current Android portal APK can attach recorded audio but does not yet allow microphone capture.'),
     ('message-settings', 'Communication Settings', 'messages.settings', {},
      'Control messaging pairs, account access, contact handling and attachments.',
      ['Open Messages → Settings with institute-wide management access.', 'Choose permitted role pairs and whether parents may start conversations.',

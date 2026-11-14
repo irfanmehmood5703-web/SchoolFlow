@@ -313,6 +313,7 @@ def configure_staff_access(app,db,Student,Employee):
         ep=request.endpoint or '';args=request.view_args or {};area=None
         if ep.startswith('messages.'):
             if ep=='messages.settings':return 'messages.manage'
+            if ep=='messages.export_file':return 'messages.export'
             if ep=='messages.report':return 'messages.export' if request.method=='POST' else 'messages.report'
             if ep in ('messages.new','messages.reply','messages.recipients'):return 'messages.create'
             return 'messages.update' if ep in ('messages.status','messages.flag') else 'messages.view'
