@@ -87,7 +87,7 @@ filters are required beyond that. Message/state queries are batched rather than
 one query per report row.
 
 How To now has three Communication guides for inbox, settings and reports:
-103 guides for private owners, 100 in demo/staff help catalogues.
+106 guides for private owners, 103 in demo/staff help catalogues after the Workspace tools release.
 
 ## Deployment and checks
 

@@ -31,3 +31,11 @@ A read mark is actor-specific and binds to the displayed source revision. Mark d
 ## Verification
 
 `tests/test_workspace_tools.py` covers private-school/actor isolation, central privilege and session expiry, real support replies and files, idempotency/CSRF, demo restrictions, read cursors without stale versions, notification revision races, staff campus scopes, absent permissions, fee units, actual model activation checks, mock-provider input boundaries, single-call retries, explicit fallback and spending caps. The PostgreSQL workflow runs these against a separate identity control database. Mobile/desktop browser checks cover the Guide reply, live action, history, modal layout, bell and demo Support boundary alongside the existing Messages/How To/Diary/PTM checks. No paid model invocation is needed by tests.
+
+## Release verification — 14 November 2026
+
+- 735 local backend tests passed in 108.836 seconds. The 15 workspace-tool tests passed again after the fee-summary label refinement.
+- PostgreSQL, control/tenant isolation, process persistence, and Chromium at 390/1440px passed in run `43592455351` on `3e0d5dac01a980e642a25bb8c633282285ead42b`.
+- PR #5 merged as `b7fa8eafa6e89e1828706e8df7e423dc8be6905d`. Original Render service `schoolflow-phase1` deploy `dep-dbs4rfu7bikc73el5su0` became live at 12:03:23 UTC. No new site was created.
+- 20 hosted checks passed: anonymous school/vendor gates, demo entry, header/modal, Guide disclosure, Support preview and rejected demo submission, notification schema, 103 demo How To guides and three readers, existing Messages, saved Guide reply/history and exact retry. `/healthz` returned 200. No error-level runtime logs were returned for the release window. Real school records were not modified by hosted verification.
+- **AI activation remains incomplete:** automatic approval review rejected persisting the AI gateway credential to this existing Render service because explicit permission to send the secret to that external destination is required. No Render environment variables were changed. A funded provider model is also required; Guide mode remains active. The software owner can verify/activate a model only after credential setup is authorised and credits are available. No paid plan, credits or model inference was purchased.
