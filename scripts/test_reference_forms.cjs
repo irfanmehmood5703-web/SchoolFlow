@@ -18,7 +18,7 @@ await page.locator('#assistant-dialog [data-close]').click();await page.locator(
 await page.locator('[data-notice-read-all]').click();await page.locator('#notices-dialog [data-close]').click();
 await page.goto('http://127.0.0.1:5055/workspace/support');
 if(!(await page.textContent('body')).includes('Demo preview only'))throw Error('support demo must disclose preview');
-if(!await page.locator('#new-ticket fieldset').isDisabled())throw Error('demo must not submit vendor tickets');
+if(!await page.locator('#new-ticket button').isDisabled())throw Error('demo must not submit vendor tickets');
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('support horizontal overflow at '+width);
 console.log('PASS Assistant/support/notices '+width+'px: guide, live summary, history, modal layout, bell and demo boundary');
 await page.goto('http://127.0.0.1:5055/workspace/how-to');
