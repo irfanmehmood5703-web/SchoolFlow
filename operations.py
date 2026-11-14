@@ -2,8 +2,9 @@
 import calendar, csv, hmac, io, json, re, secrets, hashlib
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
+from school_clock import school_today
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for, has_request_context
 from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -159,13 +160,21 @@ def configure_operations(app, db, Student, Employee):
             if family: data.update(family.data, family_no=family.number)
         return data
     def choices(kind):
+        # Scope-sensitive, request-local only: saved rows reuse the same choices
+        # rather than reloading every employee/catalog for every cell.
+        allowed=getattr(g,'access_campuses',None) if has_request_context() else None
+        key=(kind,None if allowed is None else tuple(sorted(allowed)))
+        cache=request.environ.setdefault('schoolflow.choice_cache',{}) if has_request_context() else {}
+        if key in cache:return list(cache[key])
         if kind in ('employee','teacher','student'):
             cls=Student if kind=='student' else Employee
-            return [(str(x.id),x.name) for x in cls.query.order_by(cls.name).all() if kind!='teacher' or 'teacher' in (x.role or '').lower()]
-        values=[(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
-        if kind=='subject' and app.extensions.get('school_settings_helpers'):
-            order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
-            values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
+            values=[(str(x.id),x.name) for x in cls.query.order_by(cls.name).all() if kind!='teacher' or 'teacher' in (x.role or '').lower()]
+        else:
+            values=[(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
+            if kind=='subject' and app.extensions.get('school_settings_helpers'):
+                order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
+                values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
+        cache[key]=tuple(values)
         return values
     def people(kind='student', active=True):
         cls=Student if kind=='student' else Employee
@@ -186,7 +195,7 @@ def configure_operations(app, db, Student, Employee):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
         db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context))))
     def render(name, **kw):
-        return render_template(name, choices=choices, today=date.today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
+        return render_template(name, choices=choices, today=school_today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
     @app.context_processor
     def nav_context(): return dict(module_menus=MENUS, menu_url=menu_url, build_label='Pre-test • fictional records only')
@@ -292,9 +301,11 @@ def configure_operations(app, db, Student, Employee):
                     if typ=='integer' and value and (not value.isdigit() or int(value)>100000): raise ValueError(label+' must be a non-negative integer.')
                     if typ in ('employee','teacher','student') and value and value not in dict(choices(typ)): raise ValueError('Choose a valid '+label+'.')
                     if '|' in typ and value not in typ.split('|'): raise ValueError('Invalid '+label+'.')
+                    if typ in ('campus','class_name','section','subject') and value and value not in dict(choices(typ)):raise ValueError('Choose a configured '+label+'.')
                     data[key]=bool(value) if typ=='checkbox' else value
                 if data.get('from_date') and data.get('to_date') and data['from_date']>data['to_date']: raise ValueError('End date must follow start date.')
                 if kind=='fee-plans' and not 1<=int(data['due_day'])<=28: raise ValueError('Due day must be between 1 and 28 for this pre-test build.')
+                if kind=='auto-reminders' and not 1<=int(data['day'])<=31:raise ValueError('Reminder day must be 1–31.')
                 if kind=='advances' and (money(data['amount'])==0 or money(data['return_amount'])==0 or money(data['return_amount'])>money(data['amount'])): raise ValueError('Monthly return must be positive and no greater than the advance.')
                 if kind=='increments' and not money(data['amount']):raise ValueError('Enter a positive manual salary increment amount.')
                 if kind=='increments':
@@ -473,7 +484,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/attendance/<kind>',methods=['GET','POST'])
     def take_attendance(kind):
         if kind not in ('student','staff'): abort(404)
-        d=day(request.values.get('day',date.today().isoformat()));people_kind='student' if kind=='student' else 'employee'
+        d=day(request.values.get('day',school_today().isoformat()));people_kind='student' if kind=='student' else 'employee'
         objs=people(people_kind)
         if request.method=='POST':
             app.extensions['admission_capacity']['lock']()
@@ -506,7 +517,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/attendance-report')
     def attendance_report():
         view=request.args.get('view','attendance-summary');kind='staff' if view=='staff-attendance-report' else 'student'
-        start=day(request.args.get('from',date.today().replace(day=1).isoformat()));end=day(request.args.get('to',date.today().isoformat()))
+        start=day(request.args.get('from',school_today().replace(day=1).isoformat()));end=day(request.args.get('to',school_today().isoformat()))
         if start>end: raise ValueError('Invalid date range.')
         cls=Student if kind=='student' else Employee
         rows=Daily.query.filter(Daily.kind==kind,Daily.day>=start,Daily.day<=end).order_by(Daily.day.desc(),Daily.person_id).all()
@@ -726,7 +737,7 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/payroll',methods=['GET','POST'])
     def payroll():
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
-        today=date.today();previous=today.replace(day=1).toordinal()-1;default_month=date.fromordinal(previous).strftime('%Y-%m')
+        today=school_today();previous=today.replace(day=1).toordinal()-1;default_month=date.fromordinal(previous).strftime('%Y-%m')
         m=month(request.values.get('month',default_month));view=request.values.get('view','generate-salary')
         if request.method=='POST':
             action=request.form.get('action')
@@ -952,13 +963,14 @@ def configure_operations(app, db, Student, Employee):
         return render('legacy_data.html',title='Starter Attendance / Exam Records',attendance=Attendance.query.order_by(Attendance.id.desc()).all(),results=ExamResult.query.order_by(ExamResult.id.desc()).all())
 
     @bp.route('/readiness')
-    def readiness(): return render('readiness.html',title='Pre-test Build Status',storage_backend=db.session.get_bind(mapper=Student.__mapper__).dialect.name)
+    def readiness():
+        return render('readiness.html',title='System Check & Testing',storage_backend=db.session.get_bind(mapper=Student.__mapper__).dialect.name,identity_backend=app.extensions['identity_helpers']['control_engine']().dialect.name)
 
     def dashboard_data():
         # Keep request work independent of pupil/score count: no per-row ORM
         # lookups, no attachment/salary/certificate payloads, and one pass over
         # scalar financial rows rather than rescanning receipts per month.
-        today=date.today();month_key=today.strftime('%Y-%m')
+        today=school_today();month_key=today.strftime('%Y-%m')
         student_count,active=db.session.query(db.func.count(Student.id),db.func.sum(case((Student.status=='Active',1),else_=0))).one()
         employee_count,active_employees=db.session.query(db.func.count(Employee.id),db.func.sum(case((Employee.status=='Active',1),else_=0))).one()
         class_label=db.func.coalesce(db.func.nullif(Student.class_name,''),'Unassigned')
@@ -999,7 +1011,7 @@ def configure_operations(app, db, Student, Employee):
         db.session.execute(db.text('SELECT 1'))
         if app.extensions.get('identity_bind_key'):
             with app.extensions['identity_helpers']['control_engine']().connect() as connection:connection.execute(db.text('SELECT 1'))
-        return jsonify(status='ok',build='schoolflow-private-accounts-v37')
+        return jsonify(status='ok',build='schoolflow-system-audit-v38')
 
     @app.route('/api/v1/summary')
     def summary_api():

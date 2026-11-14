@@ -11,6 +11,7 @@ import json
 import re
 import secrets
 from datetime import date, datetime, timezone
+from school_clock import school_today
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -131,7 +132,7 @@ def configure_records(app, db, Student, Employee):
 
     def defaults(kind, for_create=True):
         if kind == "student":
-            data = dict(admission_date=date.today().isoformat(), family_mode="new", religion="Islam",
+            data = dict(admission_date=school_today().isoformat(), family_mode="new", religion="Islam",
                 nationality="Pakistani", guardian_relation="Father", status="Active", subjects=[],
                 visitors=[{} for _ in range(3)], father_contact=True, app_sms=True, parent_notification=True)
         else:
@@ -142,7 +143,7 @@ def configure_records(app, db, Student, Employee):
                 while Employee.query.filter_by(employee_no=candidate).first():
                     highest += 1
                     candidate = str(highest + 1)
-            data = dict(employee_no=candidate, status="Active", marital_status="Married", joining_date=date.today().isoformat(),
+            data = dict(employee_no=candidate, status="Active", marital_status="Married", joining_date=school_today().isoformat(),
                 lecture_assigned="0", app_active=True, diary_approval="required", award_permission="update",
                 attendance_permission="update", contact_absentee="not_allowed", fee_access="not_allowed",
                 salary_access="not_allowed")

@@ -3,6 +3,14 @@ const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE || 'playwright
 const browser=await chromium.launch({headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',e=>{throw e});
 for (const width of [390,1440]) {
 await page.setViewportSize({width,height:width===390?844:1000});
+await page.goto('http://127.0.0.1:5055/workspace/register/teacher-classes');
+for(const name of ['employee_id','campus','class_name','section','subject'])if(!(await page.locator('select[name='+name+']').count()))throw Error('configured choice lost its select: '+name);
+await page.goto('http://127.0.0.1:5055/workspace/core/roll-number-series');
+if(await page.locator('a[href*="?fill="]').count())throw Error('disabled automatic roll review must not be offered');
+await page.goto('http://127.0.0.1:5055/workspace/readiness');
+if(!(await page.textContent('body')).includes('School-data testing order'))throw Error('missing ordered real-data test handoff');
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('system check overflow at '+width);
+console.log('PASS System audit '+width+'px: real selects, disabled review guard, testing order and responsive system check');
 await page.goto('http://127.0.0.1:5055/workspace/assistant');
 await page.waitForSelector('#assistant-dialog[open]');
 if(!(await page.textContent('[data-ai-disclosure]')).includes('No AI credits are needed'))throw Error('Guide-only disclosure missing');

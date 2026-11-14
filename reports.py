@@ -2,6 +2,7 @@
 import calendar,csv,io
 from collections import Counter,defaultdict
 from datetime import date,timedelta
+from school_clock import school_today
 from decimal import Decimal,InvalidOperation
 from flask import Blueprint,abort,redirect,render_template,request,url_for
 from module_catalog import TITLES
@@ -19,7 +20,7 @@ def configure_reports(app,db,Student,Employee):
         try:return date.fromisoformat(value)
         except (ValueError,TypeError):fail('Enter a valid date.')
     def bounds():
-        start=request.args.get('from',date.today().replace(day=1).isoformat());end=request.args.get('to',date.today().isoformat())
+        start=request.args.get('from',school_today().replace(day=1).isoformat());end=request.args.get('to',school_today().isoformat())
         if len(start)==7:start+='-01'
         if len(end)==7:
             try:end+='-'+str(calendar.monthrange(int(end[:4]),int(end[5:7]))[1])
@@ -48,7 +49,7 @@ def configure_reports(app,db,Student,Employee):
         if request.args.get('export')=='xlsx':
             try:return report_xlsx(headers,rows,view)
             except ValueError as error:fail(str(error))
-        return render_template('reports.html',title=TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=date.today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
+        return render_template('reports.html',title=TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=school_today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
     def cash(value):return f'{value/100:,.2f}'
 
     @bp.route('/fees/<view>')

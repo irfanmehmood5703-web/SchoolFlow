@@ -1,10 +1,27 @@
 # SchoolFlow
 
-Original green/white Flask school-management **pre-test** build. Top menus follow the supplied Admissions, Exam & Attendance and HRM reference sequence. Includes full student/employee record forms and initial fee, attendance, exam and payroll workflows.
+Original green/white school-management web software with horizontal menus, private institute login, campus permissions and separate school data. The current build is for controlled user acceptance testing; automated checks do not certify a production launch or physical Android/hardware behavior.
 
-**Not a completed reference-equivalent or production-ready release. Use fictional test records only.** Read [the build report](docs/PRETEST_BUILD.md) and the in-app Build Status page for incomplete workflows.
+## Implemented scope
 
-## Run
+- Dashboard and 37 configurable widgets.
+- Admissions: student/family records, reviewed imports, approvals, certificates, fee plans, discounts/increments, challans, payments/reversals and reports.
+- Exam & Attendance: attendance/registers/reports, date sheets, halls/roll slips, marks, results and teacher performance.
+- HRM: employees, shifts, leave, working calendars, salary plans, approved manual increments, lecture records, payroll and reports. Sandwich leave and recurring automatic annual increases stay disabled as requested.
+- Finance: chart/accounts/periods, balanced journals and reversals, trial balance, profit/loss, cash/shareholders, requisitions, historical fee audits and daily snapshots. Fee-receipt ledger posting is optional and requires explicit account mappings; payroll-to-GL automatic posting is not connected.
+- General: App Links, Widgets, family-scoped Parent portal, notices, PTM, subject diary, owner-only leave/feedback/Library workflows.
+- How To, built-in free SchoolFlow Guide, private Messages, central human Support tickets and the in-app notification bell. No external AI model, key or AI billing is needed by the Guide.
+- Institute/Exam/HRM configuration, staff grants and audit logs. Front Desk is deferred; Student 360° is excluded from the menu.
+
+Teacher/Parent/Owner Android portal test packages and an attended school-SIM SMS package are published under App Links. They share the existing backend and authentication. Actual phone installation, SIM/network behavior and owner-controlled production signing require device acceptance checks. The separately published attended Gate trial APK uses the isolated fictional Gate trial host; it is not automatically an original-host production app.
+
+## Private data versus demo
+
+**Use a private Institute Code for school data. Never enter real pupil/staff data in public DEMO.** Public demo/default SQLite storage can reset on Render restart or deployment. With `IDENTITY_DATABASE_URL` on PostgreSQL, private accounts and their isolated school schemas remain in PostgreSQL independently of the demo filesystem. The original Render service uses that separate private-account configuration; do not overwrite its database URLs or existing signing/session keys.
+
+The in-app **System Check** page shows the active workspace dialect, separate private-account dialect, current connections/limits and the order for testing one option at a time. Configure Institute Setup before adding school records. Test one student/family, fee cycle, attendance/result and employee/payroll cycle before a bulk import.
+
+## Run locally
 
 ```sh
 python -m venv .venv
@@ -14,29 +31,18 @@ export SECRET_KEY='replace-with-a-long-random-value'
 python app.py
 ```
 
-Open the public landing page and choose **Explore the test demo**, then click **Set up test dropdowns** on the dashboard. Create fictional student/staff records only. School choices are editable under School Settings. Provisioned institutes use a separate owner login and isolated SQLite workspace database; the public demo never selects an institute database. See [Institute login and isolation](docs/IDENTITY.md).
+Local defaults are development SQLite. Private-school login and central provisioning are documented in [IDENTITY.md](docs/IDENTITY.md) and [PRIVATE_ACCOUNT_PANEL.md](docs/PRIVATE_ACCOUNT_PANEL.md). No email mailbox or external notification is created by generating a login.
 
-## Tests
+## Verification
 
 ```sh
-python -m unittest discover -s tests -v
+python -W ignore -m unittest discover -s tests -q
 ```
 
-Tests use an isolated in-memory database. Deployment uses `DATABASE_URL` if configured, otherwise SQLite. Existing starter tables are retained; old attendance/exam rows are readable at `/workspace/legacy-data`. `GET /healthz` reports database readiness.
+Tests use disposable fictional schools and records. CI checks the complete backend suite, PostgreSQL identity/tenant behavior, menu/inner-form traversal, process restart persistence, typed logical recovery in an isolated QA schema, and mobile/desktop browser workflows. `scripts/verify_private_storage.py` refuses to run outside the exact disposable CI database; it is not a production backup command.
 
-The existing Render service uses free ephemeral SQLite storage; restarts/redeploys can reset test data. A durable database and authentication are required before real use. All communication requests are logged without delivery. Four mobile apps are not connected.
+See [SYSTEM_ACCEPTANCE_AUDIT.md](docs/SYSTEM_ACCEPTANCE_AUDIT.md) for audit findings and the option-by-option handoff. Earlier milestone documents retain historical statements; this README and the latest audit take precedence for current implementation scope.
 
+## External and operational checks
 
-### Campus cards and certificates
-
-Admissions → Student Card and Certificates → choose campus → Set up certificate templates. Use School heading, logo & colours for your own school details, then choose a document and students. Preview has no issuance side effects. Edit saves campus-specific Header/Body/Footer content. Generate & Print assigns references and saves immutable documents in Certificate Logs. Print / Save PDF opens the browser print flow. Student QR Code supports active-pupil filters, selected columns, CSV/Excel and printable QR sheets. Use fictional data only on the public pre-test service.
-
-### Client accounts and manual payroll rules
-
-SchoolFlow is the product; each client uses its own school name/code. Operator-generated logins/passwords are supported; see [private client provisioning](docs/IDENTITY.md#vendor-generated-client-credentials). Email-style login generation does not create an email mailbox.
-
-HRM salary plans and payroll link to the Payroll Working Calendar. Set actual working dates/holidays before joining-month salary or daily percentage deductions. Manual increments use the existing Increment form: choose an employee, amount and effective month, approve, then enable Apply approved manual salary increments on their salary plan. The plan’s Basic Salary excludes those approved amounts; no fixed increment or automatic annual repetition is assumed. Saved salary detail/slips retain the working-day calculation and increment sources.
-
-### Class seats and approvals
-
-Admissions → Admission Approvals → Change the seats for a class. Limits apply to a campus/class/session across all sections. Unconfigured classes have no automatic limit. A full class queues a new student as Waiting; selected Allow actions check all class capacities atomically. Refuse gives the distinct Refused status. Existing enrolled profiles can be edited, while transfers to full classes are rejected without moving the pupil. The Admission Capacity dashboard widget uses the same counts; add it to an existing custom layout via Add Widgets.
+Saving a message request does not send it. School-SIM delivery requires explicit owner release and phone confirmation. WhatsApp/branded SMS requires its actual provider; native push, automatic bank collection, offline synchronization and always-awake timers are not implied. No real SMS, payment, salary transfer or journal is performed by an audit. Production backup retention/recovery, protected release signing, physical device/face-recognition accuracy and final school acceptance remain operational launch work.
