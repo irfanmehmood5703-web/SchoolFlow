@@ -197,6 +197,7 @@ class MessagingTests(unittest.TestCase):
         def grant():
             staff=db.session.get(self.Staff,1);staff.data={**staff.data,'permissions':{**staff.data['permissions'],'messages.export':['North']}}
         self.tenant(grant)
+        teacher=self.login('teacher1')
         self.assertEqual(teacher.get(url).status_code,404)
         self.tenant(lambda:setattr(self.M['export'].query.one(),'expires',time.time()-1))
         self.assertEqual(self.c.get(url).status_code,410)
