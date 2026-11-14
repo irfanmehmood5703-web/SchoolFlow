@@ -14,8 +14,8 @@ from datetime import date, datetime, timezone
 from school_clock import school_today
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
-from sqlalchemy import or_
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
+from sqlalchemy import or_, cast, Text, JSON
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -114,7 +114,7 @@ def configure_records(app, db, Student, Employee):
             token = request.form.get("_csrf", "")
             if not hmac.compare_digest(session.get("record_csrf", "").encode(), token.encode()) or not token:
                 abort(400, "Your form session expired. Reload the page and try again.")
-            if request.endpoint in ('records.settings','records.add_option'):
+            if request.endpoint in ('records.settings','records.add_option','records.delete_session'):
                 app.extensions['admission_capacity']['lock']()
 
     def setup_choices():
@@ -611,6 +611,8 @@ def configure_records(app, db, Student, Employee):
     @bp.route("/settings", methods=["GET", "POST"])
     def settings():
         errors = {}
+        selected_category=request.form.get("category",request.args.get("category","academic_session"))
+        selected_class=request.form.get("class_name",request.args.get("class_name",""))
         if request.method == "POST":
             category = request.form.get("category", "")
             value = request.form.get("value", "").strip()[:160]
@@ -623,9 +625,52 @@ def configure_records(app, db, Student, Employee):
                 db.session.add(RecordSettings(category=category, value=value, class_name=class_name))
                 db.session.commit()
                 flash("Record option added.", "success")
-                return redirect(url_for("records.settings"))
+                return redirect(url_for("records.settings",category=category,**({"class_name":class_name} if class_name else {})))
         return render_template("record_settings.html", title="Record Settings", categories=CATEGORIES,
-            choices=setup_choices(), errors=errors), 422 if errors else 200
+            choices=setup_choices(), errors=errors,selected_category=selected_category,selected_class=selected_class,
+            saved_sessions={r.value:r for r in RecordSettings.query.filter_by(category="academic_session",class_name="").all()},
+            can_delete_sessions=not getattr(g,"staff_principal",None) or set(app.extensions["staff_access_helpers"]["grant"](g.staff_principal,"core.delete"))==set(app.extensions["staff_access_helpers"]["campuses"]())), 422 if errors else 200
+
+    def session_in_use(value):
+        # Search semantic session fields, not unrelated class names: a class
+        # called One must not prevent removing an accidental session called One.
+        keys={'academic_session','academic_sessions','current_session','session','sessions','session_name','session_names'}
+        def exact(item):
+            if isinstance(item,str):return item==value
+            if isinstance(item,dict):return any(exact(v) for v in item.values())
+            if isinstance(item,list):return any(exact(v) for v in item)
+            return False
+        def referenced(item):
+            if isinstance(item,dict):
+                return any((str(k).replace('-','_') in keys and exact(v)) or referenced(v) for k,v in item.items())
+            if isinstance(item,list):return any(referenced(v) for v in item)
+            return False
+        encoded=json.dumps(value,ensure_ascii=True)[1:-1]
+        for table in db.metadata.sorted_tables:
+            if table.info.get('identity_control') or table is RecordSettings.__table__ or 'audit' in table.name:continue
+            columns=[c for c in table.columns if isinstance(c.type,JSON) or c.name in keys]
+            if not columns:continue
+            filters=[or_(cast(c,Text).contains(value,autoescape=True),cast(c,Text).contains(encoded,autoescape=True)) if isinstance(c.type,JSON) else c==value for c in columns]
+            for row in db.session.execute(db.select(*columns).where(or_(*filters))).yield_per(100):
+                if any(referenced(v) if isinstance(c.type,JSON) else v==value for c,v in zip(columns,row)):
+                    return True
+        return False
+
+    @bp.post('/settings/sessions/<int:option_id>/delete')
+    def delete_session(option_id):
+        # The shared setup/admission lock is acquired by validate_csrf above.
+        row=db.session.get(RecordSettings,option_id)
+        if not row or row.category!='academic_session' or row.class_name:abort(404)
+        if request.form.get('confirm_value')!=row.value:abort(409,'This session changed. Reload before deleting.')
+        if session_in_use(row.value):
+            db.session.rollback()
+            flash('This session is used in saved school settings or records and cannot be deleted.','error')
+            return redirect(url_for('records.settings',category='academic_session')+'#options-academic_session')
+        Audit=app.extensions['ops_models']['audit']
+        db.session.add(Audit(action='Delete unused catalog session',data=dict(category=row.category,value=row.value,owner_id=session.get('owner_id'),staff_id=session.get('staff_id'))))
+        db.session.delete(row);db.session.commit()
+        flash('Unused session deleted. Saved school records were not changed.','success')
+        return redirect(url_for('records.settings',category='academic_session')+'#options-academic_session')
 
     app.extensions['record_helpers']=dict(raw_many=raw_many,read_many=read_many,validate=validate_form,choices=setup_choices)
     app.register_blueprint(bp)
