@@ -292,9 +292,11 @@ def configure_operations(app, db, Student, Employee):
                     if typ=='integer' and value and (not value.isdigit() or int(value)>100000): raise ValueError(label+' must be a non-negative integer.')
                     if typ in ('employee','teacher','student') and value and value not in dict(choices(typ)): raise ValueError('Choose a valid '+label+'.')
                     if '|' in typ and value not in typ.split('|'): raise ValueError('Invalid '+label+'.')
+                    if typ in ('campus','class_name','section','subject') and value and value not in dict(choices(typ)):raise ValueError('Choose a configured '+label+'.')
                     data[key]=bool(value) if typ=='checkbox' else value
                 if data.get('from_date') and data.get('to_date') and data['from_date']>data['to_date']: raise ValueError('End date must follow start date.')
                 if kind=='fee-plans' and not 1<=int(data['due_day'])<=28: raise ValueError('Due day must be between 1 and 28 for this pre-test build.')
+                if kind=='auto-reminders' and not 1<=int(data['day'])<=31:raise ValueError('Reminder day must be 1–31.')
                 if kind=='advances' and (money(data['amount'])==0 or money(data['return_amount'])==0 or money(data['return_amount'])>money(data['amount'])): raise ValueError('Monthly return must be positive and no greater than the advance.')
                 if kind=='increments' and not money(data['amount']):raise ValueError('Enter a positive manual salary increment amount.')
                 if kind=='increments':
@@ -952,7 +954,8 @@ def configure_operations(app, db, Student, Employee):
         return render('legacy_data.html',title='Starter Attendance / Exam Records',attendance=Attendance.query.order_by(Attendance.id.desc()).all(),results=ExamResult.query.order_by(ExamResult.id.desc()).all())
 
     @bp.route('/readiness')
-    def readiness(): return render('readiness.html',title='Pre-test Build Status',storage_backend=db.session.get_bind(mapper=Student.__mapper__).dialect.name)
+    def readiness():
+        return render('readiness.html',title='System Check & Testing',storage_backend=db.session.get_bind(mapper=Student.__mapper__).dialect.name,identity_backend=app.extensions['identity_helpers']['control_engine']().dialect.name)
 
     def dashboard_data():
         # Keep request work independent of pupil/score count: no per-row ORM
@@ -999,7 +1002,7 @@ def configure_operations(app, db, Student, Employee):
         db.session.execute(db.text('SELECT 1'))
         if app.extensions.get('identity_bind_key'):
             with app.extensions['identity_helpers']['control_engine']().connect() as connection:connection.execute(db.text('SELECT 1'))
-        return jsonify(status='ok',build='schoolflow-private-accounts-v37')
+        return jsonify(status='ok',build='schoolflow-system-audit-v38')
 
     @app.route('/api/v1/summary')
     def summary_api():
