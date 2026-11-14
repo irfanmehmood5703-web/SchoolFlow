@@ -11,9 +11,9 @@ a separate, printable article with steps, relevant limitations, a workspace
 link and related guides. Empty searches offer a reset.
 
 Content covers all 82 current module-menu entries, 17 Configuration entries and
-the Dashboard: 100 guides for a private institute owner. Demo/staff sessions
+the Dashboard, plus three Communication guides: 103 guides for a private institute owner. Demo/staff sessions
 exclude the three owner-only General Library/Leaves/Feedback articles, matching
-the current menu: 97 guides. Front Desk, Student 360, AI Assistant, Canteen,
+the current menu: 100 guides. Front Desk, Student 360, AI Assistant, Canteen,
 Shop, Transport and other absent modules are not invented as help categories.
 The existing top navigation remains intact; the help category column is inside
 the documentation page only.
@@ -47,3 +47,7 @@ browser CI results must be checked separately before claiming visual validation.
 - Original Render service srv-dbi3dqks728c73c7snv0 deploy dep-dbrveimq1p3s73e84j30 is live at runtime commit 241925aca2a2f69554fd0c5cb7ce977fe648af68.
 - 19 hosted read-only checks passed on https://schoolflow-phase1.onrender.com/: demo entry, 97-guide catalogue, all seven category counts, search, five article readers, CSS, health and anonymous authentication redirect. No school records changed.
 - Initial error-level runtime log query returned no entries. No schema, credentials or storage settings changed. Physical-phone testing remains separate.
+
+## Messages documentation update
+
+The Messages release adds Communication guides for the inbox, settings and reports. The current catalogue contains 103 guides for a private owner and 100 for demo/staff contexts. PostgreSQL/browser run 43574759195 and the hosted Messages release verified the new catalogue, filters and reader pages alongside the existing How To behavior.
