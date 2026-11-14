@@ -15,3 +15,12 @@ Location: Admissions → Fee Challans → Print settings → Configure copies, c
 19 challan tests and 38 staff tests passed locally. They include bank placement and escaped text, missing/hidden photos, exact saved amounts, campus overrides, PNG/payload validation, optional payment QR and campus-specific fee-print permission. Full regression and hosted deployment evidence are recorded below after verification.
 
 An isolated sample was rendered through the actual print route and stylesheet to a one-page A4 landscape PDF. All three QR codes were decoded independently from the rendered page; each matched the same saved sample bill/reference. The three-copy image was visually inspected for clipping and overlaps. Bank details and the photo in the shared preview are explicitly labelled samples. No bank data was guessed or saved into a real school.
+
+
+## Verified release — 14 November 2026
+
+- Full backend suite: **698 tests passed** (79.492 seconds). Diff checks passed.
+- PostgreSQL private-account, tenant-isolation, 19 challan and 38 staff-scope checks, restart persistence and existing browser regression checks passed in Actions run **43555212269**.
+- Runtime commit `24f6da9b86c34c66a6d5a3b2a33242fc0e572d96`; original Render service `srv-dbi3dqks728c73c7snv0`, deployment `dep-dbrtvfc9v7es73b9v6l0`: **live**.
+- The provided sample PDF has one A4 landscape page; all three printed QR codes decoded successfully from its raster image. It is a print preview from the actual print route and stylesheet, not a live-browser screenshot or physical-device test.
+- **9 hosted checks passed**: demo entry, live settings, all three unsaved preview copies, bank-above-student layout, embedded QR copies, missing-photo label, unchanged saved account/version after preview, new stylesheet and HTTP200 health. Hosted verification used only the unsaved preview and did not save sample bank details or change student bills.
