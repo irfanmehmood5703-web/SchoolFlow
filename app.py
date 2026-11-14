@@ -240,8 +240,17 @@ def favicon(): return '',204
 @app.after_request
 def headers(response):
     response.headers['X-Content-Type-Options']='nosniff'
-    response.headers['Referrer-Policy']='same-origin'
+    # Keep stricter policies on private files, Messages and owner pages.
+    response.headers.setdefault('Referrer-Policy','same-origin')
     response.headers['X-Frame-Options']='SAMEORIGIN'
+    response.headers.setdefault('Content-Security-Policy',
+        "base-uri 'self'; object-src 'none'; frame-ancestors 'self'")
+    response.headers.setdefault('Permissions-Policy',
+        'camera=(self), microphone=(self), geolocation=(self), payment=(), usb=()')
+    # Only advertise HTTPS persistence on an actually secure request. Keep
+    # child/custom domains independent; no preload or includeSubDomains.
+    if request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security','max-age=31536000')
     if request.path.startswith(('/workspace','/records','/api','/auth','/vendor')):
         response.headers['Cache-Control']='no-store'
     return response
