@@ -196,4 +196,5 @@ def configure_vendor_admin(app, db):
                 flash('Your software owner password was changed.','success');return redirect(url_for('vendor.schools'))
         return render_template('vendor_login.html',title='Change software owner password',mode='password',error=error),422 if error else 200
 
+    app.extensions['vendor_helpers']=dict(current=current,required=required,lock=lock)
     app.register_blueprint(bp)

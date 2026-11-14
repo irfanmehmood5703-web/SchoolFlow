@@ -458,3 +458,15 @@ UTILITY_GUIDES = [
       'Review Overview, Conversations, Flagged and Response times.', 'Export the summary, or explicitly confirm the full transcript export; exports require separate permission and are audited per conversation.'],
      'Read state comes from the participant opening messages, not native push delivery. Blocked messages are retained for authorised review and transcript exports. Response times measure actual recorded school replies to family messages.'),
 ]
+
+TOOLS_GUIDES = [
+ ('assistant-help','AI Assistant','assistant.page',{},'Ask about SchoolFlow options and review permitted live totals.',
+  ['Open AI Assistant in the header or the floating SchoolFlow Assistant button.','Type a question or use a suggestion. Guide mode uses saved instructions; AI mode is available only after the software owner activates a funded model.','Use read-only actions to review student counts, fee balances, attendance or employee counts within your own permissions.','Use Chat history to reopen your recent chats, New chat to start again, or Hide on this page to hide the floating launcher for this session.'],
+  'No records are changed from chat. Browser dictation and read aloud depend on device support. Questions sent in AI mode go to the model provider; do not include passwords or unnecessary personal information. School record summaries stay outside AI requests.'),
+ ('support-help','Support tickets','support.inbox',{},'Send your own school issue to the software owner and track human replies.',
+  ['Open Support in the header. Private school accounts can choose New ticket.','Enter a subject, category, priority, campus and a description of the problem. Add up to five photos or PDF files, each up to 5 MB.','Send the ticket, then reopen it to review replies, add details or resolve the case.','Mark displayed replies as read. A human reply from the software owner also appears under the notification bell.'],
+  'Demo only previews the form. Each school user can access their own tickets. The software owner answers through the separate central Support inbox; a reply time is not guaranteed. Chat transcripts are never attached automatically.'),
+ ('notification-help','Notification bell','notices.page',{},'Review recent unread conversations, Support replies and pending approvals.',
+  ['Open the bell in the header.','Review events available under your current account permissions. Open an event to mark that displayed revision read and visit its source.','Choose Mark displayed as read to acknowledge the events currently shown. A newer message stays unread.','Refresh for new activity. Open source reports to review the full history beyond the recent event list.'],
+  'This bell is an in-app view. It does not send SMS, native push notifications or browser push alerts. Empty lists contain no sample notifications.'),
+]

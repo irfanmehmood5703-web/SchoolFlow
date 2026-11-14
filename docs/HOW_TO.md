@@ -11,9 +11,9 @@ a separate, printable article with steps, relevant limitations, a workspace
 link and related guides. Empty searches offer a reset.
 
 Content covers all 82 current module-menu entries, 17 Configuration entries and
-the Dashboard, plus three Communication guides: 103 guides for a private institute owner. Demo/staff sessions
+the Dashboard, plus three Communication and three Workspace tools guides: 106 guides for a private institute owner. Demo/staff sessions
 exclude the three owner-only General Library/Leaves/Feedback articles, matching
-the current menu: 100 guides. Front Desk, Student 360, AI Assistant, Canteen,
+the current menu: 103 guides. Front Desk, Student 360, Canteen,
 Shop, Transport and other absent modules are not invented as help categories.
 The existing top navigation remains intact; the help category column is inside
 the documentation page only.
@@ -51,3 +51,5 @@ browser CI results must be checked separately before claiming visual validation.
 ## Messages documentation update
 
 The Messages release adds Communication guides for the inbox, settings and reports. The current catalogue contains 103 guides for a private owner and 100 for demo/staff contexts. PostgreSQL/browser run 43574759195 and the hosted Messages release verified the new catalogue, filters and reader pages alongside the existing How To behavior.
+
+The Assistant/Support/notification release adds three Workspace tools guides (106 private-owner / 103 demo/staff). See `ASSISTANT_SUPPORT_NOTIFICATIONS.md` for activation and delivery limits.

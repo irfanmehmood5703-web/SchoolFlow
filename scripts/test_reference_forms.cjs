@@ -3,8 +3,26 @@ const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE || 'playwright
 const browser=await chromium.launch({headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});const page=await browser.newPage({viewport:{width:390,height:844}});page.on('pageerror',e=>{throw e});
 for (const width of [390,1440]) {
 await page.setViewportSize({width,height:width===390?844:1000});
+await page.goto('http://127.0.0.1:5055/workspace/assistant');
+await page.waitForSelector('#assistant-dialog[open]');
+await page.fill('#assistant-question','Fee plan kaise banate hain?');await page.locator('[data-chat-form] button[type=submit]').click();
+await page.waitForSelector('.assistant-bubble:not(.mine)');
+if(!(await page.textContent('.assistant-bubble:not(.mine)')).includes('Guide'))throw Error('Guide reply mode missing');
+if(!(await page.textContent('.assistant-bubble:not(.mine)')).includes('Fee Plan'))throw Error('Fee plan guide reply missing');
+await page.locator('[data-chat-action=students]').click();await page.waitForFunction(()=>document.querySelectorAll('.assistant-bubble:not(.mine)').length===2);
+if(!(await page.locator('.assistant-bubble:not(.mine)').last().textContent()).includes('Active: 1'))throw Error('live student summary missing');
+await page.locator('[data-chat-history]').click();await page.waitForSelector('[data-chat-history-list] button');await page.locator('[data-chat-history-list] button').first().click();
+await page.waitForFunction(()=>document.querySelector('[data-chat-history-list]').hidden);
+if(await page.locator('#assistant-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+1))throw Error('assistant modal overflow at '+width);
+await page.locator('#assistant-dialog [data-close]').click();await page.locator('[data-notices-open]').click();await page.waitForSelector('#notices-dialog[open]');
+await page.locator('[data-notice-read-all]').click();await page.locator('#notices-dialog [data-close]').click();
+await page.goto('http://127.0.0.1:5055/workspace/support');
+if(!(await page.textContent('body')).includes('Demo preview only'))throw Error('support demo must disclose preview');
+if(!await page.locator('#new-ticket button').isDisabled())throw Error('demo must not submit vendor tickets');
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('support horizontal overflow at '+width);
+console.log('PASS Assistant/support/notices '+width+'px: guide, live summary, history, modal layout, bell and demo boundary');
 await page.goto('http://127.0.0.1:5055/workspace/how-to');
-if(await page.locator('.help-card').count()!==100)throw Error('How To guide coverage');
+if(await page.locator('.help-card').count()!==103)throw Error('How To guide coverage');
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('How To horizontal overflow at '+width);
 const navY=await page.locator('.help-categories').evaluate(el=>el.getBoundingClientRect().top);
 await page.locator('.help-results').evaluate(el=>el.scrollTo({top:400,behavior:'instant'}));

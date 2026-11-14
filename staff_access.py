@@ -11,7 +11,7 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'messages':'Internal Messages','apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'assistant':'AI Assistant','support':'Support','messages':'Internal Messages','apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
 PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
@@ -311,6 +311,8 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('assistant.'):return 'assistant.view'
+        if ep.startswith('support.'):return 'support.create' if request.method=='POST' and ep!='support.read' else 'support.view'
         if ep.startswith('messages.'):
             if ep=='messages.settings':return 'messages.manage'
             if ep=='messages.export_file':return 'messages.export'
@@ -405,6 +407,8 @@ def configure_staff_access(app,db,Student,Employee):
     def enforce():
         p=getattr(g,'staff_principal',None)
         if p is None:return
+        # Notices apply each source module's grants and actor ownership themselves.
+        if request.blueprint=='notices':return
         # Static instructions contain no school records and grant no target-page
         # access. Institute authentication above still applies to these GETs.
         if request.blueprint == 'how_to' and request.method in ('GET', 'HEAD'):return
