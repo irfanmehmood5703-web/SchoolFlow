@@ -14,4 +14,9 @@ with app.app_context():
   for v in vs:db.session.add(rm['settings'](category=cat,value=v,class_name=''))
  s=Student(admission_no='UI-1',name='Fictional UI Child',class_name='One',status='Active');db.session.add(s);db.session.flush();db.session.add(rm['student'](student_id=s.id,data=dict(campus='North',section='A',academic_session='2026-27')))
  e=Employee(employee_no='UI-E1',name='Fictional Teacher',role='Teacher',status='Active');db.session.add(e);db.session.flush();db.session.add(rm['employee'](employee_id=e.id,data=dict(campus='North')));db.session.commit()
+ # An employee-linked, non-production recipient for internal chat UI tests.
+ from werkzeug.security import generate_password_hash
+ Staff=app.extensions['staff_account_model']
+ db.session.add(Staff(employee_id=e.id,username='fictional-ui-teacher',password_hash=generate_password_hash('fictional-ui-password-only'),data=dict(role='Teacher',campuses=['North'],permissions={'messages.view':['North'],'messages.create':['North'],'messages.update':['North']})))
+ db.session.commit()
 app.run(host='127.0.0.1',port=5055,use_reloader=False)

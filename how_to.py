@@ -1,7 +1,7 @@
 """Read-only help for the actual SchoolFlow menu; no school records are loaded."""
 from flask import Blueprint, abort, g, render_template, request, session, url_for
 from module_catalog import MENUS, SCHEMAS
-from how_to_content import GUIDES, SETTINGS
+from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES
 
 
 def configure_how_to(app):
@@ -33,6 +33,8 @@ def configure_how_to(app):
             articles.append(dict(slug=slug, category='Configuration', title=title,
                                  location='Configuration → '+title, summary=summary,
                                  steps=steps, note=note, fields=[], target=url_for(endpoint, **args)))
+        for slug, title, endpoint, args, summary, steps, note in UTILITY_GUIDES:
+            articles.append(dict(slug=slug, category='Communication', title=title, location='Messages → '+title, summary=summary, steps=steps, note=note, fields=[], target=url_for(endpoint, **args)))
         articles.insert(0, dict(slug='dashboard', category='Dashboard', title='Dashboard & widgets',
             location='Dashboard', summary='Read school summaries and choose your dashboard widgets.',
             steps=['Open Dashboard to view the summaries available to your account.',

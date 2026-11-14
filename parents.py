@@ -489,4 +489,5 @@ def configure_parents(app,db,Student):
     @public.after_request
     def private_headers(response):
         response.headers['Cache-Control']='no-store';response.headers['Referrer-Policy']='no-referrer';return response
+    app.extensions['parent_portal_helpers']=dict(scope=public_scope,principal=principal)
     app.register_blueprint(bp);app.register_blueprint(public)

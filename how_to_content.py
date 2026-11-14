@@ -438,3 +438,23 @@ SETTINGS = [
       'Review the recorded plan, dates and status before any available request.'],
      'The shared demo and ordinary staff accounts cannot manage the private school subscription.'),
 ]
+
+UTILITY_GUIDES = [
+    ('internal-messages', 'Messages: start and reply to a conversation', 'messages.inbox', {},
+     'Talk privately with available school staff, owners or verified families.',
+     ['Open Messages in the header and choose New conversation.', 'Choose the campus, recipient type and person. Parents also choose their linked child.',
+      'Enter a subject and message, add permitted files or record a voice note, then review and send.',
+      'Open the conversation to reply, check saved/read state or resolve/reopen it where permitted.'],
+     'Only participants can open the chat. Teachers need staff Messages access and matching class assignments to contact a family. Student discussions use the verified family account; no independent Student login is implied. Messages stay in SchoolFlow, without SMS or push delivery. Direct microphone recording works in supported browsers; the current Android portal APK can attach recorded audio but does not yet allow microphone capture.'),
+    ('message-settings', 'Communication Settings', 'messages.settings', {},
+     'Control messaging pairs, account access, contact handling and attachments.',
+     ['Open Messages → Settings with institute-wide management access.', 'Choose permitted role pairs and whether parents may start conversations.',
+      'Review staff account switches, photo/PDF/audio permissions, file size, voice duration and attachment availability.',
+      'Choose Warn, Block or Hide for detected contact details, review follow-up settings and save.'],
+     'Turning messaging off preserves reading. Disabling one staff account removes its Messages access. Attachment contents are not scanned for spoken/written contacts. Support escalation intent is recorded; external support delivery is not connected.'),
+    ('message-reports', 'Communication Report', 'messages.report', {},
+     'Review conversation totals, flags, read counts and response times.',
+     ['Open Messages → Report with the relevant campus-report permission.', 'Choose date, campus, status and subject/message search filters.',
+      'Review Overview, Conversations, Flagged and Response times.', 'Export the summary, or explicitly confirm the full transcript export; exports require separate permission and are audited per conversation.'],
+     'Read state comes from the participant opening messages, not native push delivery. Blocked messages are retained for authorised review and transcript exports. Response times measure actual recorded school replies to family messages.'),
+]

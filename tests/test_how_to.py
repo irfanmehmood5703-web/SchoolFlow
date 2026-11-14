@@ -7,7 +7,7 @@ from flask import g
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 from app import app, db
 from module_catalog import MENUS
-from how_to_content import GUIDES, SETTINGS
+from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES
 
 
 class HowToTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class HowToTests(unittest.TestCase):
             from flask import session
             session['owner_id'] = 1
             articles = app.extensions['how_to_catalogue']()
-            self.assertEqual(len(articles), len(keys)+len(SETTINGS)+1)
+            self.assertEqual(len(articles), len(keys)+len(SETTINGS)+len(UTILITY_GUIDES)+1)
             self.assertEqual(len({a['slug'] for a in articles}), len(articles))
             for article in articles:
                 rule, _ = app.url_map.bind('localhost').match(urlsplit(article['target']).path)
