@@ -1,8 +1,8 @@
 name: Fee schedule scope UI
 on:
   push:
-    branches: [main, feature/fee-scope-checkboxes]
-    paths: ['templates/fee_schedules.html', 'static/fee_setup.js', 'static/fee_scope.css', 'fee_setup.py', 'requirements.txt', 'scripts/fee_scope_ui_server.py', 'scripts/test_fee_schedule_scope.cjs', '.github/workflows/fee-scope-ui.yml']
+    branches: [main, feature/fee-scope-checkboxes, feature/setup-map-checkboxes]
+    paths: ['templates/institute_setup.html', 'institute_setup.py', 'scripts/test_setup_map_scope.cjs', 'templates/fee_schedules.html', 'static/fee_setup.js', 'static/fee_scope.css', 'fee_setup.py', 'requirements.txt', 'scripts/fee_scope_ui_server.py', 'scripts/test_fee_schedule_scope.cjs', '.github/workflows/fee-scope-ui.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,6 +20,10 @@ jobs:
         env:
           IDENTITY_DATABASE_URL: ''
         run: python -W ignore -m unittest discover -s tests -p test_fee_setup.py -q
+      - name: Existing institute setup and admission integration
+        env:
+          IDENTITY_DATABASE_URL: ''
+        run: python -W ignore -m unittest discover -s tests -p test_institute_setup.py -q
       - name: Mobile and desktop explicit scope selection
         env:
           SCHOOLFLOW_UI_QA: '1'
@@ -31,6 +35,7 @@ jobs:
           qa_pid=$!
           trap 'kill "$qa_pid" 2>/dev/null || true' EXIT
           node scripts/test_fee_schedule_scope.cjs
+          node scripts/test_setup_map_scope.cjs
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
         with:

@@ -162,6 +162,7 @@ def configure_institute_setup(app, db):
                 db.session.add(row);add_catalog('campus',name);commit('Update campus',campus=name,active=row.active)
             elif action=='map':
                 catalog=choices();campus=text('campus',True);cls=text('class_name',True)
+                if len(request.form.getlist('class_name'))!=1:raise ValueError('Choose exactly one class for this map.')
                 if campus not in catalog.get('campus',[]) or cls not in catalog.get('class_name',[]):raise ValueError('Configure the campus and class first.')
                 row=db.session.get(SchoolClassMap,(campus,cls));version(row)
                 before=dict(data=copy.deepcopy(row.data),active=row.active) if row else None
