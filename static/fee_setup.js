@@ -1,5 +1,32 @@
 'use strict';
 document.addEventListener('DOMContentLoaded',()=>{
+ const groups=[...document.querySelectorAll('[data-fee-scope]')];
+ const updateScope=group=>{
+  const boxes=[...group.querySelectorAll('input[type=checkbox]')],count=boxes.filter(box=>box.checked).length;
+  const error=group.querySelector('[data-scope-error]');
+  group.querySelector('[data-scope-count]').textContent=count+' selected';
+  boxes.forEach(box=>box.closest('label').classList.toggle('is-selected',box.checked));
+  if(boxes.length){boxes[0].setCustomValidity(count?'':error.textContent.trim());if(count)boxes[0].removeAttribute('aria-invalid');}
+  if(count){error.hidden=true;group.classList.remove('has-error');}
+  return count;
+ };
+ const showScopeError=group=>{
+  group.querySelector('[data-scope-error]').hidden=false;group.classList.add('has-error');
+  const first=group.querySelector('input[type=checkbox]');if(first)first.setAttribute('aria-invalid','true');
+ };
+ groups.forEach(group=>{
+  updateScope(group);
+  group.addEventListener('change',()=>updateScope(group));
+  group.addEventListener('invalid',()=>showScopeError(group),true);
+  group.querySelectorAll('[data-scope-action]').forEach(button=>button.addEventListener('click',()=>{
+   group.querySelectorAll('input[type=checkbox]').forEach(box=>{box.checked=button.dataset.scopeAction==='all';});updateScope(group);
+  }));
+ });
+ [...new Set(groups.map(group=>group.closest('form')))].forEach(form=>form.addEventListener('submit',event=>{
+  if(event.submitter?.formNoValidate)return;
+  const missing=groups.filter(group=>group.closest('form')===form&&!updateScope(group));
+  if(missing.length){event.preventDefault();missing.forEach(showScopeError);missing[0].focus();}
+ }));
  document.querySelectorAll('[data-fee-schedule-line]').forEach(row=>{
   const amount=row.querySelector('input[name^="amount_"]'),first=row.querySelector('input[name^="first_"]'),override=row.querySelector('input[name^="override_"]'),includeFirst=row.querySelector('input[name^="include_first_"]');
   const update=()=>{
