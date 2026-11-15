@@ -19,4 +19,12 @@ with app.app_context():
  Staff=app.extensions['staff_account_model']
  db.session.add(Staff(employee_id=e.id,username='fictional-ui-teacher',password_hash=generate_password_hash('fictional-ui-password-only'),data=dict(role='Teacher',campuses=['North'],permissions={'messages.view':['North'],'messages.create':['North'],'messages.update':['North']})))
  db.session.commit()
-app.run(host='127.0.0.1',port=5055,use_reloader=False)
+with app.app_context():
+ from datetime import date
+ Bill=app.extensions['ops_models']['bill'];Receipt=app.extensions['ops_models']['receipt']
+ for n,paid in [(1,0),(2,100000),(3,350000),(4,0)]:
+  bill=Bill(student_id=1,month='2027-0'+str(n),due=date(2027,n,10),lines=[dict(particular='Tuition Fee',amount=350000)],paid=paid,discount=0,frozen=n==4)
+  db.session.add(bill);db.session.flush()
+  if paid:db.session.add(Receipt(student_id=1,bill_id=bill.id,amount=paid,discount=0,day=date(2027,n,2),account='Cash',token='fictional-ui-receipt-'+str(n)))
+ db.session.commit()
+app.run(host='127.0.0.1' ,port=5055,use_reloader=False)

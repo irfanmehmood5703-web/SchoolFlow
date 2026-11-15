@@ -14,6 +14,7 @@ from werkzeug.datastructures import MultiDict
 MODULES={'assistant':'SchoolFlow Guide','support':'Support','messages':'Internal Messages','apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
+PERMISSIONS['fees.adjust']='Student fees · Change generated challan amounts'
 PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
 PERMISSIONS['widgets.manage']='Widgets · Manage role visibility'
 PERMISSIONS['parents.codes']='Parents App · View sensitive login codes'
@@ -311,6 +312,8 @@ def configure_staff_access(app,db,Student,Employee):
 
     def required_permission():
         ep=request.endpoint or '';args=request.view_args or {};area=None
+        if ep.startswith('challan_amounts.'):
+            return 'fees.adjust' if request.method=='POST' else 'fees.export' if request.args.get('export') else 'fees.view'
         if ep.startswith('assistant.'):return 'assistant.view'
         if ep.startswith('support.'):return 'support.create' if request.method=='POST' and ep!='support.read' else 'support.view'
         if ep.startswith('messages.'):
@@ -418,7 +421,9 @@ def configure_staff_access(app,db,Student,Employee):
         if not code or not grant(p,code):abort(403,'This action is not granted to this staff account.')
         if request.method=='POST':
             if not request.form.get('_csrf') or not hmac.compare_digest(request.form['_csrf'],session.get('record_csrf','')):abort(400,'Reload this form.')
-            app.extensions['admission_capacity']['lock']()
+            # Adjustment previews are read-only. Applies lock the selected bill
+            # rows, matching receipt updates without a reversed lock order.
+            if request.blueprint!='challan_amounts':app.extensions['admission_capacity']['lock']()
             db.session.refresh(p)
             if not resolve(p.id,session.get('staff_version')) or not grant(p,code):abort(403,'Your access changed. Sign in again.')
         allowed=grant(p,code);g.access_campuses=allowed
