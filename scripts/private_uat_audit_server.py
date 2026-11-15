@@ -6,16 +6,21 @@ root=tempfile.TemporaryDirectory(prefix='sf-private-uat-')
 os.environ['DATABASE_URL']='sqlite:///'+str(Path(root.name)/'control.db')
 os.environ.pop('IDENTITY_DATABASE_URL',None);os.environ.pop('SCHOOLFLOW_PRIVATE_STORAGE_QA',None)
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]));sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
-from test_messaging import MessagingTests
 from app import app,db,Student
+from test_messaging import MessagingTests
 from flask import g,jsonify,session
 from datetime import date
+targets=[]
+@app.get('/qa/targets')
+def audit_targets():return jsonify(targets)
 fixture=MessagingTests();fixture.setUp()
 def seed():
  R=app.extensions['record_models'];M=app.extensions['institute_setup_models'];F=app.extensions['fee_setup_models'];O=app.extensions['ops_models']
  for category,values in {'group_name':['General','Science'],'academic_session':['2027'],'fee_plan':['Common 2027'],'subject':['Math','English']}.items():
   for value in values:db.session.add(R['settings'](category=category,value=value,class_name=''))
- db.session.add(M['profile'](id=1,data=dict(name='Fictional audit school',current_session='2027',year_start='2027-01-01',year_end='2027-12-31',ui_mode='light')))
+ profile=db.session.get(M['profile'],1)
+ if profile is None:profile=M['profile'](id=1,data={});db.session.add(profile)
+ profile.data={**profile.data,'name':'Fictional audit school','current_session':'2027','year_start':'2027-01-01','year_end':'2027-12-31','ui_mode':'light'}
  for campus in ['North','South']:
   db.session.add(M['campus'](name=campus,active=True))
   for cls in ['One','Two']:
@@ -29,6 +34,4 @@ fixture.tenant(seed)
 with app.test_request_context('/workspace/how-to'):
  g.school_identity=dict(scope='fictional-audit',demo=False);session['owner_id']=1
  targets=[dict(label=x['title'],url=x['target']) for x in app.extensions['how_to_catalogue']()]
-@app.get('/qa/targets')
-def audit_targets():return jsonify(targets)
 app.run(host='127.0.0.1',port=5058,use_reloader=False)
