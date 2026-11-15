@@ -16,12 +16,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  };
  groups.forEach(group=>{
   updateScope(group);
-  group.addEventListener('change',event=>{
-   if(group.dataset.scopeSingle&&event.target.matches('input[type=checkbox]')&&event.target.checked){
-    group.querySelectorAll('input[type=checkbox]').forEach(box=>{if(box!==event.target)box.checked=false;});
-   }
-   updateScope(group);
-  });
+  group.addEventListener('change',()=>updateScope(group));
   group.addEventListener('invalid',()=>showScopeError(group),true);
   group.querySelectorAll('[data-scope-action]').forEach(button=>button.addEventListener('click',()=>{
    group.querySelectorAll('input[type=checkbox]').forEach(box=>{box.checked=button.dataset.scopeAction==='all';});updateScope(group);

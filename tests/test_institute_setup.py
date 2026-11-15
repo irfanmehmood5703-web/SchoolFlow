@@ -1,5 +1,5 @@
 """Real setup/admission integration with fictional school data only."""
-import io,os,re,unittest
+import io,os,re,unittest,json,html,copy
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from PIL import Image
 from app import app,db,Student
@@ -226,3 +226,58 @@ class InstituteSetupTests(unittest.TestCase):
         self.concurrent_saves('/workspace/core/institute',[
             dict(action='profile',version='1',name='Updated fictional school'),
             dict(action='academic',version='1',current_session='2027-28',year_start='2027-04-01',year_end='2028-03-31')],check)
+
+    def map_snapshot(self):
+        page=self.c.get('/workspace/core/institute')
+        return html.unescape(re.search(rb"name=\"map_versions\" value='([^']*)'",page.data)[1].decode())
+
+    def test_bulk_classes_share_one_plan_and_do_not_create_student_fees(self):
+        response=self.mapping(class_name=['Class A','Class B'],map_versions=self.map_snapshot())
+        self.assertEqual(response.status_code,302)
+        Map=self.models['mapping'];rows=Map.query.order_by(Map.class_name).all();self.assertEqual(len(rows),2)
+        for row in rows:
+            self.assertEqual(row.data,dict(sections=['A'],groups=['General'],fee_plans=['Plan A'],academic_session='2026-27'));self.assertTrue(row.active)
+        self.assertEqual(Student.query.count(),0);self.assertEqual(app.extensions['ops_models']['bill'].query.count(),0)
+        self.assertEqual(app.extensions['ops_models']['workflow'].query.count(),0)
+        self.assertEqual(app.extensions['ops_models']['audit'].query.filter_by(action='Update class map').count(),2)
+        payload=self.c.get('/workspace/core/admission-options').json;self.assertEqual({r['class_name'] for r in payload['maps']['Campus A']},{'Class A','Class B'})
+
+    def test_bulk_updates_existing_and_new_rows_and_keeps_other_campus(self):
+        self.mapping();self.mapping(campus='Campus B',sections=['B'])
+        Map=self.models['mapping'];other=copy.deepcopy(db.session.get(Map,('Campus B','Class A')).data)
+        self.assertEqual(self.mapping(class_name=['Class A','Class B'],sections=['B'],fee_plans=['Plan B'],map_versions=self.map_snapshot()).status_code,302)
+        for cls in ['Class A','Class B']:
+            row=db.session.get(Map,('Campus A',cls));self.assertEqual(row.data['sections'],['B']);self.assertEqual(row.data['fee_plans'],['Plan B'])
+        self.assertEqual(db.session.get(Map,('Campus B','Class A')).data,other)
+        self.assertEqual(db.session.get(Map,('Campus A','Class A')).version,2)
+
+    def test_stale_one_row_blocks_the_entire_bulk_save(self):
+        self.mapping();snapshot=self.map_snapshot();self.mapping(version='1',sections=['B'])
+        r=self.mapping(class_name=['Class B','Class A'],fee_plans=['Plan B'],map_versions=snapshot)
+        self.assertEqual(r.status_code,422);Map=self.models['mapping'];self.assertIsNone(db.session.get(Map,('Campus A','Class B')))
+        self.assertEqual(db.session.get(Map,('Campus A','Class A')).data['sections'],['B']);self.assertEqual(db.session.get(Map,('Campus A','Class A')).data['fee_plans'],['Plan A'])
+
+    def test_bulk_rejects_invalid_selection_and_version_snapshot_atomically(self):
+        for changes in [dict(class_name=[]),dict(class_name=['Class A','Class A']),dict(class_name=['Class A','Missing']),dict(class_name=['Class A','Class B']),dict(class_name=['Class A','Class B'],map_versions='{}'),dict(class_name=['Class A','Class B'],map_versions='invalid'),dict(class_name=['Class A','Class B'],map_versions='[["Campus A","Class A",true]]'),dict(class_name=['Class A','Class B'],map_versions='[]',fee_plans=['Missing'])]:
+            self.assertEqual(self.mapping(**changes).status_code,422,changes);self.assertEqual(self.models['mapping'].query.count(),0)
+
+    def test_single_edit_after_bulk_preserves_unselected_classes(self):
+        self.mapping(class_name=['Class A','Class B'],map_versions=self.map_snapshot());Map=self.models['mapping']
+        before=copy.deepcopy(db.session.get(Map,('Campus A','Class B')).data)
+        self.assertEqual(self.mapping(class_name=['Class A'],map_versions=self.map_snapshot(),fee_plans=['Plan B']).status_code,302)
+        self.assertEqual(db.session.get(Map,('Campus A','Class B')).data,before);self.assertEqual(db.session.get(Map,('Campus A','Class B')).version,1)
+
+    def test_bulk_history_undo_restores_existing_and_removes_only_new_map(self):
+        self.mapping();self.mapping(class_name=['Class A','Class B'],map_versions=self.map_snapshot(),fee_plans=['Plan B'])
+        Audit=app.extensions['ops_models']['audit'];events=Audit.query.filter_by(action='Update class map').order_by(Audit.id.desc()).limit(2).all()
+        for event in events:self.assertEqual(self.post(action='undo_map',event_id=str(event.id)).status_code,302)
+        Map=self.models['mapping'];self.assertIsNone(db.session.get(Map,('Campus A','Class B')));self.assertEqual(db.session.get(Map,('Campus A','Class A')).data['fee_plans'],['Plan A'])
+
+    def test_concurrent_bulk_submissions_do_not_partially_overwrite_each_other(self):
+        from sqlalchemy import select
+        table=self.models['mapping'].__table__
+        def check(statuses,connection):
+            self.assertEqual(sorted(statuses),[302,422]);rows=connection.execute(select(table)).mappings().all();self.assertEqual(len(rows),2)
+            self.assertEqual(rows[0]['data'],rows[1]['data']);self.assertEqual([r['version'] for r in rows],[1,1])
+        common=dict(action='map',class_name=['Class A','Class B'],campus='Campus A',map_versions='[]',sections=['A'],groups=['General'],academic_session='2026-27',active='1')
+        self.concurrent_saves('/workspace/core/institute',[dict(common,fee_plans=['Plan A']),dict(common,fee_plans=['Plan B'])],check)

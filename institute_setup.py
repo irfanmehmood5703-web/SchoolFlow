@@ -3,7 +3,7 @@
 Catalog choices remain in RecordSettings; mappings constrain new admissions.
 Unmapped legacy campuses keep their existing behavior until explicitly configured.
 """
-import copy, hmac, io, re
+import copy, hmac, io, json, re
 from datetime import date
 from PIL import Image, UnidentifiedImageError
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -83,7 +83,7 @@ def configure_institute_setup(app, db):
         if request.form.get('version','0')!=str(row.version if row else 0):raise ValueError('This setup changed. Reload the page before saving.')
 
     def commit(action,**data):
-        db.session.add(Audit(action=action,data={**data,'owner_id':session.get('owner_id')}))
+        if action:db.session.add(Audit(action=action,data={**data,'owner_id':session.get('owner_id')}))
         try:db.session.commit()
         except (IntegrityError,StaleDataError):
             db.session.rollback();raise ValueError('Another user saved this setup. Reload before retrying.')
@@ -161,11 +161,26 @@ def configure_institute_setup(app, db):
                 row.short_name=text('short_name',limit=50);row.city=text('city');row.active=request.form.get('active')=='1'
                 db.session.add(row);add_catalog('campus',name);commit('Update campus',campus=name,active=row.active)
             elif action=='map':
-                catalog=choices();campus=text('campus',True);cls=text('class_name',True)
-                if len(request.form.getlist('class_name'))!=1:raise ValueError('Choose exactly one class for this map.')
-                if campus not in catalog.get('campus',[]) or cls not in catalog.get('class_name',[]):raise ValueError('Configure the campus and class first.')
-                row=db.session.get(SchoolClassMap,(campus,cls));version(row)
-                before=dict(data=copy.deepcopy(row.data),active=row.active) if row else None
+                catalog=choices();campus=text('campus',True);classes=request.form.getlist('class_name')
+                if not classes or len(classes)>100 or len(classes)!=len(set(classes)):raise ValueError('Tick 1–100 different classes for this campus.')
+                if campus not in catalog.get('campus',[]) or any(cls not in catalog.get('class_name',[]) for cls in classes):raise ValueError('Configure the campus and every selected class first.')
+                # One page snapshot covers existing targets independently; a
+                # stale row rejects the complete batch before any map changes.
+                raw_versions=request.form.get('map_versions')
+                expected=None
+                if raw_versions is not None:
+                    try:saved=json.loads(raw_versions)
+                    except (ValueError,TypeError):raise ValueError('Reload the class map form before saving.')
+                    if not isinstance(saved,list) or len(saved)>10000 or any(not isinstance(v,list) or len(v)!=3 or not isinstance(v[0],str) or not isinstance(v[1],str) or type(v[2]) is not int or v[2]<1 for v in saved):raise ValueError('Reload the class map form before saving.')
+                    expected={(v[0],v[1]):v[2] for v in saved}
+                    if len(expected)!=len(saved):raise ValueError('Reload the class map form before saving.')
+                elif len(classes)>1:raise ValueError('Reload the page before saving multiple class maps.')
+                targets=[]
+                for cls in classes:
+                    row=db.session.get(SchoolClassMap,(campus,cls))
+                    if expected is None:version(row)
+                    elif expected.get((campus,cls),0)!=(row.version if row else 0):raise ValueError('A selected class map changed. Reload the page; no class maps were saved.')
+                    targets.append((cls,row,dict(data=copy.deepcopy(row.data),active=row.active) if row else None))
                 data={}
                 for source,category in [('sections','section'),('groups','group_name'),('fee_plans','fee_plan')]:
                     values=list(dict.fromkeys(request.form.getlist(source)))
@@ -174,8 +189,14 @@ def configure_institute_setup(app, db):
                 data['academic_session']=text('academic_session',True)
                 if data['academic_session'] not in catalog.get('academic_session',[]):raise ValueError('Choose a configured session.')
                 for name in data['fee_plans']:add_catalog('fee_plan',name)
-                row=row or SchoolClassMap(campus=campus,class_name=cls)
-                row.data=data;row.active=request.form.get('active')=='1';db.session.add(row);db.session.flush();commit('Update class map',campus=campus,class_name=cls,active=row.active,before=before,after=dict(data=copy.deepcopy(row.data),active=row.active),saved_version=row.version)
+                changed=[]
+                for cls,row,before in targets:
+                    row=row or SchoolClassMap(campus=campus,class_name=cls)
+                    row.data=copy.deepcopy(data);row.active=request.form.get('active')=='1';db.session.add(row);changed.append((row,before))
+                db.session.flush()
+                for row,before in changed:
+                    db.session.add(Audit(action='Update class map',data=dict(campus=campus,class_name=row.class_name,active=row.active,before=before,after=dict(data=copy.deepcopy(row.data),active=row.active),saved_version=row.version,owner_id=session.get('owner_id'))))
+                commit(None)
             elif action=='copy_maps':
                 source=text('source_campus',True);target=text('target_campus',True);classes=request.form.getlist('copy_classes');catalog=choices()
                 if source==target or source not in catalog.get('campus',[]) or target not in catalog.get('campus',[]) or not classes or len(classes)!=len(set(classes)):raise ValueError('Choose distinct configured campuses and at least one class.')
@@ -221,13 +242,13 @@ def configure_institute_setup(app, db):
                 data=dict(row.data or {}) if row else {};data.update(current_session=current,year_start=start.isoformat(),year_end=end.isoformat())
                 row=row or SchoolSetup(id=1);row.data=data;db.session.add(row);commit('Update academic year',current_session=current)
             else:raise ValueError('Choose a supported setup action.')
-            flash('School setup saved. Admission choices use the saved class map.','success')
+            flash((str(len(classes))+' class map(s) saved. The selected fee plans are linked to every ticked class.') if action=='map' else 'School setup saved. Admission choices use the saved class map.','success')
             return redirect(url_for('institute_setup.index'))
         profile=db.session.get(SchoolSetup,1);campuses=SchoolCampus.query.order_by(SchoolCampus.name).all();maps=SchoolClassMap.query.order_by(SchoolClassMap.campus,SchoolClassMap.class_name).all()
         edit_campus=db.session.get(SchoolCampus,request.args['campus_edit']) if request.args.get('campus_edit') else None
         edit_map=db.session.get(SchoolClassMap,(request.args.get('campus'),request.args.get('class_name'))) if request.args.get('edit')=='map' else None
         readiness=app.extensions['setup_readiness_helpers']['snapshot']()
-        return render_template('institute_setup.html',readiness=readiness,setup_review_token=app.extensions['setup_readiness_helpers']['token'](readiness),setup_history=Audit.query.filter(Audit.action.in_(['Update class map','Undo class map','Update institute profile','Update campus','Update academic year','Update advanced settings default','Copy class maps','Complete institute setup'])).order_by(Audit.id.desc()).limit(30).all(),copy_maps=SchoolClassMap.query.filter_by(campus=request.args.get('copy_from',''),active=True).all(),copy_from=request.args.get('copy_from',''),title='Institute Setup',profile=profile,config=profile.data if profile else {},campuses=campuses,mappings=maps,options=choices(),edit_campus=edit_campus,edit_map=edit_map)
+        return render_template('institute_setup.html',map_versions=[[row.campus,row.class_name,row.version] for row in maps],readiness=readiness,setup_review_token=app.extensions['setup_readiness_helpers']['token'](readiness),setup_history=Audit.query.filter(Audit.action.in_(['Update class map','Undo class map','Update institute profile','Update campus','Update academic year','Update advanced settings default','Copy class maps','Complete institute setup'])).order_by(Audit.id.desc()).limit(30).all(),copy_maps=SchoolClassMap.query.filter_by(campus=request.args.get('copy_from',''),active=True).all(),copy_from=request.args.get('copy_from',''),title='Institute Setup',profile=profile,config=profile.data if profile else {},campuses=campuses,mappings=maps,options=choices(),edit_campus=edit_campus,edit_map=edit_map)
 
     @bp.get('/admission-options')
     def admission_options():return jsonify(payload())
