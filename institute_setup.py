@@ -186,6 +186,7 @@ def configure_institute_setup(app, db):
                     values=list(dict.fromkeys(request.form.getlist(source)))
                     if not values or any(v not in catalog.get(category,[]) for v in values):raise ValueError('Choose configured '+source.replace('_',' ')+'.')
                     data[source]=values
+                if len(request.form.getlist('academic_session'))!=1:raise ValueError('Choose exactly one class session.')
                 data['academic_session']=text('academic_session',True)
                 if data['academic_session'] not in catalog.get('academic_session',[]):raise ValueError('Choose a configured session.')
                 for name in data['fee_plans']:add_catalog('fee_plan',name)

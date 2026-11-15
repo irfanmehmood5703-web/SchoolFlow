@@ -290,3 +290,8 @@ class InstituteSetupTests(unittest.TestCase):
         mapping=self.mapping();self.assertEqual(mapping.status_code,302);self.assertTrue(mapping.location.endswith('#class-map'))
         profile=self.models['profile'].query.one()
         mode=self.post(action='ui_mode',version=str(profile.version),mode='light');self.assertTrue(mode.location.endswith('#display-mode'))
+
+    def test_class_map_rejects_multiple_sessions_without_saving(self):
+        response=self.mapping(academic_session=['2026-27','2027-28'])
+        self.assertEqual(response.status_code,422);self.assertIn(b'Choose exactly one class session',response.data)
+        self.assertEqual(self.models['mapping'].query.count(),0)
