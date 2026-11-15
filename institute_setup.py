@@ -242,8 +242,13 @@ def configure_institute_setup(app, db):
                 data=dict(row.data or {}) if row else {};data.update(current_session=current,year_start=start.isoformat(),year_end=end.isoformat())
                 row=row or SchoolSetup(id=1);row.data=data;db.session.add(row);commit('Update academic year',current_session=current)
             else:raise ValueError('Choose a supported setup action.')
-            flash((str(len(classes))+' class map(s) saved. The selected fee plans are linked to every ticked class.') if action=='map' else 'School setup saved. Admission choices use the saved class map.','success')
-            return redirect(url_for('institute_setup.index'))
+            message=('Institute setup completed. You can now try the admission form.' if action=='complete_setup' else (str(len(classes))+' class map(s) saved. The selected fee plans are linked to every ticked class.') if action=='map' else 'School setup saved. Admission choices use the saved class map.')
+            flash(message,'success')
+            # An absent redirect fragment inherits the submitted URL's old hash
+            # in browsers. Send the saved section explicitly, so a prior
+            # #class-map cannot hide setup completion or academic-year feedback.
+            anchor={'complete_setup':'setup-readiness','profile':'school-profile','campus':'campuses','map':'class-map','copy_maps':'class-map','undo_map':'class-map','academic':'academic-year','ui_mode':'display-mode'}[action]
+            return redirect(url_for('institute_setup.index',_anchor=anchor))
         profile=db.session.get(SchoolSetup,1);campuses=SchoolCampus.query.order_by(SchoolCampus.name).all();maps=SchoolClassMap.query.order_by(SchoolClassMap.campus,SchoolClassMap.class_name).all()
         edit_campus=db.session.get(SchoolCampus,request.args['campus_edit']) if request.args.get('campus_edit') else None
         edit_map=db.session.get(SchoolClassMap,(request.args.get('campus'),request.args.get('class_name'))) if request.args.get('edit')=='map' else None

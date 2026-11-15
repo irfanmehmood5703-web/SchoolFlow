@@ -147,7 +147,9 @@ class InstituteSetupTests(unittest.TestCase):
         self.make_ready();page=self.c.get('/workspace/core/institute');self.assertIn(b'Setup readiness',page.data);self.assertNotIn(b'<td>Needs attention</td>',page.data)
     def test_complete_setup_requires_fresh_review_and_preserves_operational_records(self):
         self.make_ready();page=self.c.get('/workspace/core/institute');token=self.setup_token(page)
-        self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=token).status_code,302)
+        response=self.post(action='complete_setup',version='1',setup_review_token=token)
+        self.assertEqual(response.status_code,302);self.assertTrue(response.location.endswith('#setup-readiness'))
+        completed=self.c.get(response.location);self.assertIn(b'data-setup-completed',completed.data);self.assertIn(b'Institute setup completed.',completed.data)
         profile=self.models['profile'].query.one();self.assertTrue(profile.data['setup_activated_at']);self.assertEqual(profile.data['name'],'Fictional ready school')
         self.assertEqual(Student.query.count(),0);self.assertEqual(app.extensions['ops_models']['bill'].query.count(),0);self.assertEqual(app.extensions['ops_models']['salary'].query.count(),0)
         self.assertEqual(self.post(action='complete_setup',version='1',setup_review_token=token).status_code,422)
@@ -281,3 +283,10 @@ class InstituteSetupTests(unittest.TestCase):
             self.assertEqual(rows[0]['data'],rows[1]['data']);self.assertEqual([r['version'] for r in rows],[1,1])
         common=dict(action='map',class_name=['Class A','Class B'],campus='Campus A',map_versions='[]',sections=['A'],groups=['General'],academic_session='2026-27',active='1')
         self.concurrent_saves('/workspace/core/institute',[dict(common,fee_plans=['Plan A']),dict(common,fee_plans=['Plan B'])],check)
+
+    def test_setup_saves_redirect_to_their_own_section(self):
+        academic=self.post(action='academic',version='0',current_session='2026-27',year_start='2026-01-01',year_end='2026-12-31')
+        self.assertEqual(academic.status_code,302);self.assertTrue(academic.location.endswith('#academic-year'))
+        mapping=self.mapping();self.assertEqual(mapping.status_code,302);self.assertTrue(mapping.location.endswith('#class-map'))
+        profile=self.models['profile'].query.one()
+        mode=self.post(action='ui_mode',version=str(profile.version),mode='light');self.assertTrue(mode.location.endswith('#display-mode'))
