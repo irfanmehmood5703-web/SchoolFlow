@@ -1,0 +1,21 @@
+'use strict';
+const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE||'playwright');
+const base='http://127.0.0.1:5056',url=base+'/workspace/core/institute';
+const assert=(yes,message)=>{if(!yes)throw Error(message);};
+(async()=>{const browser=await chromium.launch({headless:true});try{
+ for(const width of [390,1440]){
+  const page=await browser.newPage({viewport:{width,height:width===390?844:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url+'#class-map');
+  const form=page.locator('#class-map form'),classes=form.locator('[data-fee-scope=class_name]'),plans=form.locator('[data-fee-scope=fee_plans]');
+  assert(!await form.locator('select[name=class_name],select[name=fee_plans]').count(),'Ambiguous class/fee-plan list remains');
+  assert(!await classes.locator('input:checked').count()&&!await plans.locator('input:checked').count(),'Create has an implicit selection');
+  const campus=width===390?'North':'South';await page.selectOption('#setup-campus',campus);await page.selectOption('#setup-academic_session','2027');await page.selectOption('#setup-sections',['A']);await page.selectOption('#setup-groups',['General']);
+  await classes.locator('input[value=Montessori]').check();await classes.locator('input[value=One]').check();assert(await classes.locator('input:checked').count()===1,'Single class not enforced');assert(!await classes.locator('input[value=Montessori]').isChecked(),'Previous class remains checked');
+  await classes.getByRole('button',{name:'Clear class',exact:true}).click();assert(!await form.evaluate(el=>el.checkValidity()),'Empty class accepted');await classes.locator('input[value=Montessori]').check();assert(!await form.evaluate(el=>el.checkValidity()),'Empty fee-plan accepted');
+  await plans.locator('input[value="Plan A"]').check();await plans.locator('input[value="Plan B"]').check();assert((await plans.locator('[data-scope-count]').textContent()).includes('2 selected'),'Count missing');await plans.getByRole('button',{name:'Clear fee plans',exact:true}).click();assert(!await plans.locator('input:checked').count(),'Clear failed');await plans.locator('input[value="Plan A"]').check();
+  await classes.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/sf-fee-scope-map-'+width+'.png',fullPage:true});assert(!await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),'Map page overflows '+width);
+  await form.getByRole('button',{name:'Save class map',exact:true}).click();await page.waitForLoadState('networkidle');const row=page.locator('#class-map tr').filter({hasText:campus+' / Montessori'});assert(await row.count()===1,'Map not saved');await row.getByRole('link',{name:'Edit',exact:true}).click();await page.waitForLoadState('networkidle');
+  assert(await classes.locator('input[value=Montessori]').isChecked(),'Edit class not restored');assert(await plans.locator('input[value="Plan A"]').isChecked(),'Edit fee plan not restored');assert(!await plans.locator('input[value="Plan B"]').isChecked(),'Unselected plan restored incorrectly');
+  await plans.locator('input[value="Plan B"]').check();await form.getByRole('button',{name:'Save class map',exact:true}).click();await page.waitForLoadState('networkidle');assert((await row.textContent()).includes('Plan A, Plan B'),'Fee plan edit lost selections');
+  assert(!errors.length,errors.join('\n'));console.log('PASS Institute map '+width+'px: explicit class/fee-plan ticks, class exclusivity, empty validation, counts, save and edit restoration');await page.close();
+ }
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1);});
