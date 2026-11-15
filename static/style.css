@@ -25,3 +25,5 @@ main{margin-left:0}.app-header{background:var(--dark);color:#fff;position:relati
 .configuration-menu .core-main{font-weight:700;background:#edf6f0;margin-bottom:4px}
 
 .configuration-menu .core-menu-separator{border:0;border-top:1px solid #cfddd4;margin:12px 0}
+/* The shared button display rule must not reveal an unused advanced toggle. */
+.advanced-page-control [data-advanced-toggle][hidden]{display:none!important}

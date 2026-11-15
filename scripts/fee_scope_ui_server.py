@@ -6,7 +6,7 @@ root=tempfile.TemporaryDirectory(prefix='sf-fee-scope-ui-')
 os.environ['DATABASE_URL']='sqlite:///'+str(Path(root.name)/'fictional.db')
 os.environ.pop('IDENTITY_DATABASE_URL',None)
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from app import app,db
+from app import app,db,Student
 app.config.update(TESTING=True,SECRET_KEY='fictional-fee-scope-only',IDENTITY_ENFORCE_IN_TESTS=False)
 with app.app_context():
  db.create_all();S=app.extensions['record_models']['settings'];H=app.extensions['fee_setup_models']['head']
@@ -14,5 +14,6 @@ with app.app_context():
   for value in values:db.session.add(S(category=category,value=value,class_name=''))
  for key,timing,months in [('Tuition Fee','monthly',[]),('Annual Charges','months',[3]),('Tie and Badge Amount','first',[])]:
   db.session.add(H(key=key,label=key,timing=timing,months=months,custom=False))
+ student=Student(admission_no='QA-ONLY-1',name='Fictional visibility child',class_name='One',status='Active');db.session.add(student);db.session.flush();db.session.add(app.extensions['record_models']['student'](student_id=student.id,data={'campus':'North','section':'A'}))
  db.session.commit()
 app.run(host='127.0.0.1',port=5056,use_reloader=False)

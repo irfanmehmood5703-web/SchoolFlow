@@ -1,8 +1,8 @@
 name: Fee schedule scope UI
 on:
   push:
-    branches: [main, feature/fee-scope-checkboxes, feature/setup-map-checkboxes, feature/bulk-class-maps, feature/setup-save-feedback, feature/setup-all-tick-choices]
-    paths: ['scripts/setup_completion_ui_server.py', 'scripts/test_setup_completion.cjs', 'tests/test_institute_setup.py', 'templates/institute_setup.html', 'institute_setup.py', 'scripts/test_setup_map_scope.cjs', 'templates/fee_schedules.html', 'static/fee_setup.js', 'static/fee_scope.css', 'fee_setup.py', 'requirements.txt', 'scripts/fee_scope_ui_server.py', 'scripts/test_fee_schedule_scope.cjs', '.github/workflows/fee-scope-ui.yml']
+    branches: [main, feature/fee-scope-checkboxes, feature/setup-map-checkboxes, feature/bulk-class-maps, feature/setup-save-feedback, feature/setup-all-tick-choices, feature/advanced-toggle-visibility]
+    paths: ['static/style.css', 'scripts/test_advanced_toggle.cjs', 'scripts/setup_completion_ui_server.py', 'scripts/test_setup_completion.cjs', 'tests/test_institute_setup.py', 'templates/institute_setup.html', 'institute_setup.py', 'scripts/test_setup_map_scope.cjs', 'templates/fee_schedules.html', 'static/fee_setup.js', 'static/fee_scope.css', 'fee_setup.py', 'requirements.txt', 'scripts/fee_scope_ui_server.py', 'scripts/test_fee_schedule_scope.cjs', '.github/workflows/fee-scope-ui.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,6 +36,7 @@ jobs:
           trap 'kill "$qa_pid" 2>/dev/null || true' EXIT
           node scripts/test_fee_schedule_scope.cjs
           node scripts/test_setup_map_scope.cjs
+          node scripts/test_advanced_toggle.cjs
           python scripts/setup_completion_ui_server.py > /tmp/sf-fee-scope-completion-server.log 2>&1 &
           completion_pid=$!
           trap 'kill "$qa_pid" "$completion_pid" 2>/dev/null || true' EXIT
