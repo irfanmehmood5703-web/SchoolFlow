@@ -378,6 +378,32 @@ def configure_operations(app, db, Student, Employee):
             return redirect(url_for('ops.fees',mode='payments'))
         return render('generate_fees.html',title='Generate Fee Challans',plans=plans,students=people(active=False))
 
+    def payment_particulars(b):
+        """Allocate historical receipts deterministically; preserve new per-line allocations."""
+        remaining=[int(line['amount']) for line in b.lines]
+        receipts=Receipt.query.filter_by(bill_id=b.id,voided=False).order_by(Receipt.id).all()
+        for receipt in receipts:
+            allocation=None
+            if (receipt.notes or '').startswith('[SF-LINES]'):
+                try:
+                    allocation=json.loads(receipt.notes.split('\\n',1)[0][10:])
+                except (ValueError,TypeError): allocation=None
+            if isinstance(allocation,list) and len(allocation)==len(remaining) and all(isinstance(x,list) and len(x)==2 and all(isinstance(v,int) and v>=0 for v in x) for x in allocation) and sum(x[0] for x in allocation)==receipt.amount and sum(x[1] for x in allocation)==receipt.discount:
+                for i,(paid,discount) in enumerate(allocation): remaining[i]-=paid+discount
+            else:
+                # Old receipts did not record particulars. Display a stable estimate.
+                old=receipt.amount+receipt.discount
+                for i in range(len(remaining)):
+                    applied=min(max(0,remaining[i]),old)
+                    remaining[i]-=applied;old-=applied
+        if sum(remaining)!=b.remaining or any(v<0 for v in remaining):
+            # Legacy records can have no receipts; never overstate the total outstanding.
+            remaining=[int(line['amount']) for line in b.lines]
+            used=max(0,b.total-b.remaining)
+            for i in range(len(remaining)):
+                take=min(remaining[i],used);remaining[i]-=take;used-=take
+        return remaining
+
     @bp.route('/pay',methods=['GET','POST'])
     def pay():
         sid=request.values.get('student_id')
@@ -397,22 +423,33 @@ def configure_operations(app, db, Student, Employee):
             count=0;changes=[]
             locked=Bill.query.filter(Bill.id.in_([b.id for b in rows])).with_for_update().all()
             for b in locked:
-                amount=money(request.form.get('amount_'+str(b.id)))
-                discount=money(request.form.get('discount_'+str(b.id)))
+                if b.frozen: 
+                    if any(money(request.form.get('line_amount_'+str(b.id)+'_'+str(i))) or money(request.form.get('line_discount_'+str(b.id)+'_'+str(i))) for i in range(len(b.lines))): raise ValueError('Unfreeze this challan before changing it.')
+                    continue
+                available=payment_particulars(b)
+                allocations=[]
+                for i,left in enumerate(available):
+                    paid=money(request.form.get('line_amount_'+str(b.id)+'_'+str(i)))
+                    discount_line=money(request.form.get('line_discount_'+str(b.id)+'_'+str(i)))
+                    if paid+discount_line>left: raise ValueError('Payment and discount cannot exceed the remaining amount for '+str(b.lines[i].get('particular','fee'))+'.')
+                    allocations.append([paid,discount_line])
+                amount=sum(x[0] for x in allocations)
+                discount=sum(x[1] for x in allocations)
                 if not amount and not discount: continue
-                if b.frozen: raise ValueError('Unfreeze this challan before changing it.')
-                if amount+discount>b.remaining: raise ValueError('Payment and discount cannot exceed the remaining amount.')
+                if amount+discount>b.remaining: raise ValueError('Payment and discount cannot exceed the remaining challan amount.')
                 before=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)
                 b.paid+=amount;b.discount+=discount
-                changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining)))
-                receipt=Receipt(student_id=s.id,bill_id=b.id,amount=amount,discount=discount,day=paid_day,account=account,discount_account=request.form.get('discount_account','Discounts'),notes=request.form.get('notes','')[:5000],token=token+':'+str(b.id));db.session.add(receipt)
+                changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining),particulars=allocations))
+                user_notes=request.form.get('notes','')[:3500]
+                receipt_notes='[SF-LINES]'+json.dumps(allocations,separators=(',',':'))+'\\n'+user_notes
+                receipt=Receipt(student_id=s.id,bill_id=b.id,amount=amount,discount=discount,day=paid_day,account=account,discount_account=request.form.get('discount_account','Discounts'),notes=receipt_notes,token=token+':'+str(b.id));db.session.add(receipt)
                 app.extensions['fee_ledger_helpers']['post'](receipt)
                 count+=1
             if not count: raise ValueError('Enter a payment or discount amount.')
             if request.form.get('action')=='send': queue('Fee receipt',[s.id])
             audit('Fee payment',student=s.id,count=count,changes=changes);commit();flash('Payment saved. Requested messages are recorded, but no provider is connected.','success')
             return redirect(url_for('ops.history',student_id=s.id,detail='1'))
-        return render('pay.html',title='Pay all dues' if mode=='all' else 'Pay this challan',student=s,rows=rows,token=secrets.token_urlsafe(24),mode=mode)
+        return render('pay.html',title='Pay all dues' if mode=='all' else 'Pay this challan',student=s,rows=rows,token=secrets.token_urlsafe(24),mode=mode,particulars=payment_particulars)
 
     @bp.route('/fee-action',methods=['POST'])
     def fee_action():
