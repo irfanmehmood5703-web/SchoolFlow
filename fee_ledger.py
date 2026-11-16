@@ -106,6 +106,44 @@ def configure_fee_ledger(app,db,Student):
     @bp.errorhandler(IntegrityError)
     @bp.errorhandler(StaleDataError)
     def conflict(error):db.session.rollback();return render_template('operation_error.html',title='Check fee ledger settings',error='Concurrent settings/posting changed. Reload; no partial payment was posted.'),422
+    def provision_defaults(conn):
+        """Seed only a newly provisioned school's private workspace transaction."""
+        from sqlalchemy import select
+        from sqlalchemy.sql import func
+        now=datetime.now(timezone.utc).replace(tzinfo=None)
+        actor_name='SchoolFlow provisioning'
+        group_table=Group.__table__;account_table=Account.__table__
+        period_table=Period.__table__;config_table=Config.__table__
+        group_ids={}
+        for name,cls in STANDARD_GROUPS:
+            result=conn.execute(group_table.insert().values(
+                name=name,account_class=cls,active=True,created_at=now,updated_at=now,
+                created_by=actor_name,updated_by=actor_name,version=1))
+            group_ids[name]=result.inserted_primary_key[0]
+        defaults=[
+            (1001,'Cash in Hand','Current Assets'),
+            (1002,'Bank Account','Current Assets'),
+            (1101,'Student Fee Receivable','Current Assets'),
+            (4101,'Fee Income','Fee Collection'),
+            (5501,'Fee Discounts and Bad Debts','Discounts and Bad Debts')]
+        account_ids={}
+        for code,name,group_name in defaults:
+            result=conn.execute(account_table.insert().values(
+                code=code,name=name,group_id=group_ids[group_name],inactive=False,
+                created_at=now,updated_at=now,created_by=actor_name,
+                updated_by=actor_name,version=1))
+            account_ids[name]=result.inserted_primary_key[0]
+        year=date.today().year
+        conn.execute(period_table.insert().values(
+            begin=date(year,1,1),end=date(year,12,31),closed=False,
+            created_at=now,updated_at=now,created_by=actor_name,
+            updated_by=actor_name,version=1))
+        conn.execute(config_table.insert().values(
+            id=1,enabled=True,income_account=account_ids['Fee Income'],
+            discount_account=account_ids['Fee Discounts and Bad Debts'],
+            receiving={'Cash in Hand':account_ids['Cash in Hand']},version=1))
+    app.extensions['fee_ledger_provision_defaults']=provision_defaults
+
     @bp.post('/initialize-defaults')
     def initialize_defaults():
         """Idempotent institute-local chart setup; never creates/replays receipts."""
