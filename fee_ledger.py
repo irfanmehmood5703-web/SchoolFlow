@@ -1,5 +1,7 @@
 """Opt-in cash-basis fee receipts and atomic, append-only ledger reversals."""
 import hashlib,hmac,json,secrets
+from datetime import date,datetime,timezone
+from finance_setup import STANDARD_GROUPS
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,session,url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -104,6 +106,67 @@ def configure_fee_ledger(app,db,Student):
     @bp.errorhandler(IntegrityError)
     @bp.errorhandler(StaleDataError)
     def conflict(error):db.session.rollback();return render_template('operation_error.html',title='Check fee ledger settings',error='Concurrent settings/posting changed. Reload; no partial payment was posted.'),422
+    @bp.post('/initialize-defaults')
+    def initialize_defaults():
+        """Idempotent institute-local chart setup; never creates/replays receipts."""
+        who,_=actor()
+        now=datetime.now(timezone.utc).replace(tzinfo=None)
+        def stamp(obj):
+            obj.created_at=now;obj.updated_at=now
+            obj.created_by=who;obj.updated_by=who
+        for name,cls in STANDARD_GROUPS:
+            existing=Group.query.filter(db.func.lower(Group.name)==name.lower()).first()
+            if existing:
+                if existing.account_class!=cls:raise ValueError('Existing GL group has an incompatible class: '+name)
+                continue
+            group=Group(name=name,account_class=cls,active=True);stamp(group);db.session.add(group)
+        db.session.flush()
+        defaults=[
+            (1001,'Cash in Hand','Current Assets'),
+            (1002,'Bank Account','Current Assets'),
+            (1101,'Student Fee Receivable','Current Assets'),
+            (4101,'Fee Income','Fee Collection'),
+            (5501,'Fee Discounts and Bad Debts','Discounts and Bad Debts')]
+        mapped={}
+        for code,name,group_name in defaults:
+            group=Group.query.filter_by(name=group_name).first()
+            if not group or not group.active:raise ValueError('Activate standard group '+group_name+' first.')
+            by_name=Account.query.filter(db.func.lower(Account.name)==name.lower()).first()
+            by_code=Account.query.filter_by(code=code).first()
+            if by_name or by_code:
+                if not by_name or by_name.code!=code or by_name.group_id!=group.id or by_name.inactive:
+                    raise ValueError('GL account code/name conflict for '+name+'. Review accounts manually; nothing was saved.')
+                mapped[name]=by_name
+                continue
+            row=Account(code=code,name=name,group_id=group.id,inactive=False)
+            stamp(row);db.session.add(row);mapped[name]=row
+        db.session.flush()
+        today=date.today()
+        if not Period.query.filter(Period.begin<=today,Period.end>=today).first():
+            period_row=Period(begin=date(today.year,1,1),end=date(today.year,12,31),closed=False)
+            # Never overlap another period.
+            if Period.query.filter(Period.begin<=period_row.end,Period.end>=period_row.begin).first():
+                raise ValueError('An existing Accounting Period overlaps this year. Review periods before setup.')
+            stamp(period_row);db.session.add(period_row)
+        row=db.session.get(Config,1)
+        if row and row.enabled:
+            # Preserve existing active custom mappings.
+            pass
+        elif row and (row.receiving or row.income_account or row.discount_account):
+            # Never overwrite a school's partially configured mapping.
+            pass
+        else:
+            row=row or Config(id=1)
+            db.session.add(row)
+            row.enabled=True
+            row.income_account=mapped['Fee Income'].id
+            row.discount_account=mapped['Fee Discounts and Bad Debts'].id
+            row.receiving={'Cash in Hand':mapped['Cash in Hand'].id}
+        db.session.add(Audit(action='Initialize default fee ledger accounts',data={'actor':who,'accounts':[x[1] for x in defaults]}))
+        db.session.commit()
+        flash('Default GL accounts and current-year period prepared. Existing receipts were not changed. Review mappings before taking new payments.','success')
+        return redirect(url_for('fee_ledger.settings'))
+
     @bp.route('',methods=['GET','POST'])
     def settings():
         row=db.session.get(Config,1)
