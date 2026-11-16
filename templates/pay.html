@@ -13,6 +13,14 @@
 .particular-fee-table input.particular-paid,.particular-fee-table input.particular-discount{box-sizing:border-box;width:100%;min-width:75px;padding:8px 6px;border:1px solid #a9c8ba;border-radius:6px;background:#fff}
 .particular-fee-table input:focus{outline:2px solid #1b7655;outline-offset:1px}
 @media(max-width:700px){.particular-fee-table th,.particular-fee-table td{padding:9px 7px;font-size:12px}.particular-fee-table table{min-width:650px}}
+
+/* Clearly boxed left-hand particulars and adjacent amounts, even with global table rules. */
+.particular-fee-table table tbody tr.particular-payment-row > td{border:1px solid #b9d0c5 !important;background-clip:padding-box !important}
+.particular-fee-table table tbody tr.particular-payment-row > td:nth-last-child(6),
+.particular-fee-table table tbody tr.particular-payment-row > td:nth-last-child(5){background:#f1f8f4 !important;box-shadow:inset 0 0 0 1px #b9d0c5}
+.particular-fee-table table tbody tr.particular-payment-row > td:nth-last-child(6){font-weight:650;color:#204d3a}
+.particular-fee-table table tbody tr.particular-payment-row > td[rowspan]{border:1px solid #9bbfae !important;background:#e5f2eb !important}
+.particular-fee-table table thead th{border:1px solid #b9d0c5 !important}
 </style>
 <div class="table particular-fee-table"><table><thead><tr><th>Challan / Month</th><th>Fee Particular</th><th>Payable</th><th>Remaining</th><th>Current Payment</th><th>Discount / Bad Debt</th><th>Balance After Entry</th></tr></thead><tbody>
 {% for b in rows %}{% set balance=particulars(b) %}
