@@ -10,4 +10,9 @@
 .installment-fee-table input[type=number]{box-sizing:border-box;width:100%;min-width:95px;padding:9px;border:1px solid #a9c8ba;border-radius:6px;background:#fff}
 .installment-fee-table input:focus{outline:2px solid #1b7655;outline-offset:1px}
 @media(max-width:700px){.installment-fee-table th,.installment-fee-table td{padding:10px;font-size:12px}}
+
+/* Explicit visible boxes for each particular and payable amount. */
+.installment-fee-table table th,.installment-fee-table table td{border:1px solid #b9d0c5 !important}
+.installment-fee-table table tr:not(:first-child) td:first-child,.installment-fee-table table tr:not(:first-child) td:nth-child(2){background:#f1f8f4 !important;box-shadow:inset 0 0 0 1px #b9d0c5}
+.installment-fee-table table tr:not(:first-child) td:first-child{font-weight:650;color:#204d3a}
 </style><div class="installment-fee-table"><table><tr><th>Particular</th><th>Payable</th><th>Installment Amount</th></tr>{% for line in bill.lines %}<tr><td>{{line.particular}}</td><td>{{line.amount|cash}}</td><td><input type="number" min="0" max="{{line.amount/100}}" step="0.01" name="amount_{{loop.index0}}" value="0"></td></tr>{% endfor %}</table></div><button>Create installment</button></form>{% endblock %}
