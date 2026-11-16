@@ -386,7 +386,7 @@ def configure_operations(app, db, Student, Employee):
             allocation=None
             if (receipt.notes or '').startswith('[SF-LINES]'):
                 try:
-                    allocation=json.loads(receipt.notes.split('\\n',1)[0][10:])
+                    allocation=json.loads(receipt.notes.split('\n',1)[0][10:])
                 except (ValueError,TypeError): allocation=None
             if isinstance(allocation,list) and len(allocation)==len(remaining) and all(isinstance(x,list) and len(x)==2 and all(isinstance(v,int) and v>=0 for v in x) for x in allocation) and sum(x[0] for x in allocation)==receipt.amount and sum(x[1] for x in allocation)==receipt.discount:
                 for i,(paid,discount) in enumerate(allocation): remaining[i]-=paid+discount
@@ -441,7 +441,7 @@ def configure_operations(app, db, Student, Employee):
                 b.paid+=amount;b.discount+=discount
                 changes.append(dict(student_id=b.student_id,bill_id=b.id,before=before,after=dict(paid_paisa=b.paid,discount_paisa=b.discount,remaining_paisa=b.remaining),particulars=allocations))
                 user_notes=request.form.get('notes','')[:3500]
-                receipt_notes='[SF-LINES]'+json.dumps(allocations,separators=(',',':'))+'\\n'+user_notes
+                receipt_notes='[SF-LINES]'+json.dumps(allocations,separators=(',',':'))+'\n'+user_notes
                 receipt=Receipt(student_id=s.id,bill_id=b.id,amount=amount,discount=discount,day=paid_day,account=account,discount_account=request.form.get('discount_account','Discounts'),notes=receipt_notes,token=token+':'+str(b.id));db.session.add(receipt)
                 app.extensions['fee_ledger_helpers']['post'](receipt)
                 count+=1
