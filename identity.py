@@ -141,6 +141,16 @@ def configure_identity(app, db):
                 finally:connection.execution_options(schema_translate_map=None)
             else:
                 with engine.begin() as tenant_connection:tenant_connection.execute(Profile.__table__.insert().values(**values))
+        # Initialize the private school's accounting chart as part of provisioning.
+        # Never seed existing institutes or touch the shared demo database.
+        seed_finance=app.extensions['fee_ledger_provision_defaults']
+        if connection is not None:
+            schema=engine.get_execution_options()['schema_translate_map']
+            try:seed_finance(connection.execution_options(schema_translate_map=schema))
+            finally:connection.execution_options(schema_translate_map=None)
+        else:
+            with engine.begin() as tenant_connection:
+                seed_finance(tenant_connection)
         db.session.add(Owner(institute_id=institute.id, email=email, password_hash=generate_password_hash(password)))
         db.session.commit()
         return institute
