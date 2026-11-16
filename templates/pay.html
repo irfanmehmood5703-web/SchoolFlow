@@ -25,7 +25,7 @@
 <div class="table particular-fee-table"><table><thead><tr><th>Challan / Month</th><th>Fee Particular</th><th>Payable</th><th>Remaining</th><th>Current Payment</th><th>Discount / Bad Debt</th><th>Balance After Entry</th></tr></thead><tbody>
 {% for b in rows %}{% set balance=particulars(b) %}
 {% for line in b.lines %}{% set i=loop.index0 %}
-<tr class="particular-payment-row" data-remaining="{{balance[i]/100}}">
+<tr class="particular-payment-row" data-bill="{{b.id}}" data-remaining="{{balance[i]/100}}">
 {% if loop.first %}<td rowspan="{{b.lines|length}}"><strong>#{{b.id}}</strong><div>{{b.month}}</div></td>{% endif %}
 <td>{{line.get('display_name') or line.get('particular') or 'Fee'}}</td>
 <td>{{line.amount|cash}}</td><td>{{balance[i]|cash}}</td>
@@ -33,13 +33,33 @@
 <td><input class="particular-discount" aria-label="Discount for {{line.get('particular','Fee')}} challan {{b.id}}" type="number" min="0" step="0.01" max="{{balance[i]/100}}" name="line_discount_{{b.id}}_{{i}}" value="0" {{'disabled' if b.frozen or balance[i]<=0 else ''}}></td>
 <td class="particular-balance">{{balance[i]|cash}}</td>
 </tr>{% endfor %}
-<tr class="challan-total"><td colspan="3"><strong>Challan #{{b.id}} total</strong></td><td>{{b.remaining|cash}}</td><td class="bill-paid">0.00</td><td class="bill-discount">0.00</td><td class="bill-balance">{{b.remaining|cash}}</td></tr>
+<tr class="challan-total" data-bill="{{b.id}}" data-remaining="{{b.remaining/100}}"><td colspan="3"><strong>Challan #{{b.id}} total</strong></td><td>{{b.remaining|cash}}</td><td class="bill-paid">0.00</td><td class="bill-discount">0.00</td><td class="bill-balance">{{b.remaining|cash}}</td></tr>
 {% else %}<tr><td colspan="7">No unpaid challans.</td></tr>{% endfor %}
 </tbody></table></div>
 <p id="particular-validation" role="alert" style="color:#a12727" hidden>Payment plus discount must not exceed the remaining amount for any particular.</p>
 <script>
 (function(){const form=document.currentScript.closest('form');if(!form)return;
-function calculate(){let invalid=false;let paidTotal=0,discountTotal=0;form.querySelectorAll('.particular-payment-row').forEach(row=>{const left=Number(row.dataset.remaining),p=Number(row.querySelector('.particular-paid').value||0),d=Number(row.querySelector('.particular-discount').value||0),bad=!Number.isFinite(p)||!Number.isFinite(d)||p<0||d<0||p+d>left+0.00001;invalid=invalid||bad;row.querySelector('.particular-balance').textContent=(left-p-d).toFixed(2);row.style.background=bad?'#fff0f0':'';paidTotal+=p;discountTotal+=d;});form.querySelector('#particular-validation').hidden=!invalid;form.querySelectorAll('button[type=submit],button[name=action]').forEach(btn=>btn.disabled=invalid);return !invalid;}
+function calculate(){
+ let invalid=false;const totals=new Map();
+ form.querySelectorAll('.particular-payment-row').forEach(row=>{
+  const left=Number(row.dataset.remaining),p=Number(row.querySelector('.particular-paid').value||0),d=Number(row.querySelector('.particular-discount').value||0);
+  const bad=!Number.isFinite(p)||!Number.isFinite(d)||p<0||d<0||p+d>left+0.00001;
+  invalid=invalid||bad;
+  row.querySelector('.particular-balance').textContent=(left-p-d).toFixed(2);
+  row.style.background=bad?'#fff0f0':'';
+  const key=row.dataset.bill,t=totals.get(key)||{paid:0,discount:0};
+  t.paid+=p;t.discount+=d;totals.set(key,t);
+ });
+ form.querySelectorAll('.challan-total').forEach(row=>{
+  const t=totals.get(row.dataset.bill)||{paid:0,discount:0};
+  row.querySelector('.bill-paid').textContent=t.paid.toFixed(2);
+  row.querySelector('.bill-discount').textContent=t.discount.toFixed(2);
+  row.querySelector('.bill-balance').textContent=(Number(row.dataset.remaining)-t.paid-t.discount).toFixed(2);
+ });
+ form.querySelector('#particular-validation').hidden=!invalid;
+ form.querySelectorAll('button[type=submit],button[name=action]').forEach(btn=>btn.disabled=invalid);
+ return !invalid;
+}
 form.addEventListener('input',calculate);form.addEventListener('submit',e=>{if(!calculate())e.preventDefault()});calculate();})();
 </script>
 {{m.communication()}}<div class="form-actions"><a class="button secondary" href="/workspace/fees/payments">Cancel</a><button name="action" value="save">Submit payment</button><button name="action" value="send">Submit & request receipt message</button></div></form>{% endblock %}
