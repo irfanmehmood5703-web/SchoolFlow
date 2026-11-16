@@ -1,4 +1,20 @@
-{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}<p><a href="{{url_for('fee_ledger.settings')}}">Fee ledger posting settings</a></p>{{m.heading(title,student.name)}}{{m.fee_tabs()}}<form method="post" class="form-card">{{m.csrf()}}<input type="hidden" name="student_id" value="{{student.id}}"><input type="hidden" name="bill_id" value="{{request.args.get('bill_id','')}}"><input type="hidden" name="mode" value="{{mode}}"><input type="hidden" name="token" value="{{token}}"><div class="fields-grid">{{m.input('paid_date','Paid Date','date',today,true)}}{{m.input('account','Receiving Account','text','Cash in Hand',true)}}{{m.input('discount_account','Discount / Bad Debt Account','text','Discounts')}}{{m.input('notes','Challan Notes','textarea')}}</div><div class="table"><table><thead><tr><th>Challan / Month</th><th>Fee Particular</th><th>Payable</th><th>Remaining</th><th>Current Payment</th><th>Discount / Bad Debt</th><th>Balance After Entry</th></tr></thead><tbody>
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}<p><a href="{{url_for('fee_ledger.settings')}}">Fee ledger posting settings</a></p>{{m.heading(title,student.name)}}{{m.fee_tabs()}}<form method="post" class="form-card">{{m.csrf()}}<input type="hidden" name="student_id" value="{{student.id}}"><input type="hidden" name="bill_id" value="{{request.args.get('bill_id','')}}"><input type="hidden" name="mode" value="{{mode}}"><input type="hidden" name="token" value="{{token}}"><div class="fields-grid">{{m.input('paid_date','Paid Date','date',today,true)}}{{m.input('account','Receiving Account','text','Cash in Hand',true)}}{{m.input('discount_account','Discount / Bad Debt Account','text','Discounts')}}{{m.input('notes','Challan Notes','textarea')}}</div><style>
+/* Fee-particular grid: visual-only styling, existing input names and payment logic unchanged. */
+.particular-fee-table{overflow-x:auto;border:1px solid #cadbd4;border-radius:10px;background:#fff;margin-top:14px}
+.particular-fee-table table{border-collapse:separate;border-spacing:0;width:100%;min-width:650px}
+.particular-fee-table th,.particular-fee-table td{border-right:1px solid #d5e2dc;border-bottom:1px solid #d5e2dc;padding:11px 10px;vertical-align:middle;line-height:1.45}
+.particular-fee-table th:last-child,.particular-fee-table td:last-child{border-right:0}
+.particular-fee-table tbody tr:last-child td{border-bottom:0}
+.particular-fee-table thead th{background:#e4f1eb;color:#145b43;font-weight:700;text-align:left;white-space:normal}
+.particular-fee-table tbody tr.particular-payment-row:nth-child(even) td{background:#f7fbf9}
+.particular-fee-table tbody tr.particular-payment-row td:nth-child(2){font-weight:600;color:#263e35}
+.particular-fee-table tbody td[rowspan]{background:#edf6f1!important;color:#174e3c;font-weight:600;text-align:center;border-right:1px solid #c5d9ce}
+.particular-fee-table .challan-total td{background:#dceee5;font-weight:700;color:#174e3c;border-top:2px solid #a8cbbb}
+.particular-fee-table input.particular-paid,.particular-fee-table input.particular-discount{box-sizing:border-box;width:100%;min-width:75px;padding:8px 6px;border:1px solid #a9c8ba;border-radius:6px;background:#fff}
+.particular-fee-table input:focus{outline:2px solid #1b7655;outline-offset:1px}
+@media(max-width:700px){.particular-fee-table th,.particular-fee-table td{padding:9px 7px;font-size:12px}.particular-fee-table table{min-width:650px}}
+</style>
+<div class="table particular-fee-table"><table><thead><tr><th>Challan / Month</th><th>Fee Particular</th><th>Payable</th><th>Remaining</th><th>Current Payment</th><th>Discount / Bad Debt</th><th>Balance After Entry</th></tr></thead><tbody>
 {% for b in rows %}{% set balance=particulars(b) %}
 {% for line in b.lines %}{% set i=loop.index0 %}
 <tr class="particular-payment-row" data-remaining="{{balance[i]/100}}">
