@@ -125,6 +125,7 @@ def configure_fee_ledger(app,db,Student):
             (1002,'Bank Account','Current Assets'),
             (1101,'Student Fee Receivable','Current Assets'),
             (4101,'Fee Income','Fee Collection'),
+            (4201,'Other Income','Other Revenues'),
             (5501,'Fee Discounts and Bad Debts','Discounts and Bad Debts')]
         account_ids={}
         for code,name,group_name in defaults:
@@ -164,6 +165,7 @@ def configure_fee_ledger(app,db,Student):
             (1002,'Bank Account','Current Assets'),
             (1101,'Student Fee Receivable','Current Assets'),
             (4101,'Fee Income','Fee Collection'),
+            (4201,'Other Income','Other Revenues'),
             (5501,'Fee Discounts and Bad Debts','Discounts and Bad Debts')]
         mapped={}
         for code,name,group_name in defaults:
