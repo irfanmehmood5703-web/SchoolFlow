@@ -470,8 +470,12 @@ def configure_operations(app, db, Student, Employee):
             audit('Delete unpaid challans',ids=ids);commit();return redirect(url_for('ops.fees',mode='payments'))
         raise ValueError('Choose an available action.')
 
-    @bp.route('/reverse-receipts',methods=['POST'])
+    @bp.route('/reverse-receipts',methods=['GET','POST'])
     def reverse_receipts():
+        # A direct GET must never fall through to the generic unfinished-menu page.
+        # Reversal itself is POST-only, with CSRF and explicit confirmation.
+        if request.method=='GET':
+            return redirect(url_for('ops.fees',mode='paid-challans'))
         if request.form.get('confirm')!='yes': raise ValueError('Confirm the receipt reversal.')
         rows=Receipt.query.filter(Receipt.id.in_(selected()),Receipt.voided==False).with_for_update().all()
         if not rows: raise ValueError('Select receipts.')
