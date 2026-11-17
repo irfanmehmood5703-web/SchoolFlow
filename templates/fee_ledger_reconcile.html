@@ -8,7 +8,7 @@
 {% if rows %}
 <div class="table"><table><thead><tr><th>Receipt</th><th>Student ID</th><th>Original date</th><th>Amount (Rs)</th><th>Discount (Rs)</th><th>Receiving account</th><th>Action</th></tr></thead><tbody>
 {% for r in rows %}
-<tr><td>#{{r.id}}</td><td>{{r.student_id}}</td><td>{{r.day}}</td><td>{{'%.2f'|format(r.amount)}}</td><td>{{'%.2f'|format(r.discount)}}</td><td>{{r.account}}</td><td><form method="post" action="{{url_for('fee_ledger.reconcile')}}">{{m.csrf()}}<input type="hidden" name="receipt_id" value="{{r.id}}"><label class="check"><input type="checkbox" name="confirm" value="1" required>Confirm</label><button type="submit">Post to ledger</button></form></td></tr>
+<tr><td>#{{r.id}}</td><td>{{r.student_id}}</td><td>{{r.day}}</td><td>{{'%.2f'|format(r.amount / 100)}}</td><td>{{'%.2f'|format(r.discount / 100)}}</td><td>{{r.account}}</td><td><form method="post" action="{{url_for('fee_ledger.reconcile')}}">{{m.csrf()}}<input type="hidden" name="receipt_id" value="{{r.id}}"><label class="check"><input type="checkbox" name="confirm" value="1" required>Confirm</label><button type="submit">Post to ledger</button></form></td></tr>
 {% endfor %}
 </tbody></table></div>
 {% else %}<p>No unposted active receipts found.</p>{% endif %}
