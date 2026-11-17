@@ -54,7 +54,7 @@ def configure_fee_ledger(app,db,Student):
         for aid,d,c,snapshot in lines:
             if d or c:db.session.add(Line(journal_id=row.id,account_id=aid,debit=d,credit=c,memo='Fee receipt #'+str(receipt_id),snapshot=snapshot))
         return row
-    def post(receipt):
+    def post(receipt, posting_day=None):
         with db.session.no_autoflush:app.extensions['admission_capacity']['lock']()
         config=db.session.get(Config,1)
         if not config or not config.enabled:return None
@@ -75,7 +75,7 @@ def configure_fee_ledger(app,db,Student):
         if asset:lines.append((asset.id,receipt.amount,0,snap(asset)))
         if discount:lines.append((discount.id,receipt.discount,0,snap(discount)))
         lines.append((income.id,0,receipt.amount+receipt.discount,snap(income)))
-        row=journal(receipt.day,campus,'fee_receipt',lines,receipt.id)
+        row=journal(posting_day or receipt.day,campus,'fee_receipt',lines,receipt.id)
         link=Posting(receipt_id=receipt.id,student_id=receipt.student_id,campus=campus,journal_id=row.id,source=dict(amount=receipt.amount,discount=receipt.discount,day=receipt.day.isoformat(),receiving=receipt.account,bill_id=receipt.bill_id));db.session.add(link)
         db.session.add(Audit(action='Post fee receipt to ledger',data=dict(receipt_id=receipt.id,journal_id=row.id,campus=campus)))
         return link
@@ -247,14 +247,10 @@ def configure_fee_ledger(app,db,Student):
             # Catch-up is recorded today, not backdated into a potentially closed period.
             # The source receipt's original date is preserved in the immutable snapshot.
             original_day=receipt.day
-            receipt.day=app.extensions['ledger_helpers']['today']()
-            try:
-                link=post(receipt)
-                link.source=dict(link.source,original_receipt_day=original_day.isoformat(),reconciled=True)
-                db.session.add(Audit(action='Reconcile historical fee receipt',data=dict(receipt_id=receipt.id,journal_id=link.journal_id,original_day=original_day.isoformat(),posting_day=receipt.day.isoformat())))
-                db.session.flush()
-            finally:
-                receipt.day=original_day
+            posting_day=app.extensions['ledger_helpers']['today']()
+            link=post(receipt,posting_day=posting_day)
+            link.source=dict(link.source,original_receipt_day=original_day.isoformat(),reconciled=True,posting_day=posting_day.isoformat())
+            db.session.add(Audit(action='Reconcile historical fee receipt',data=dict(receipt_id=receipt.id,journal_id=link.journal_id,original_day=original_day.isoformat(),posting_day=posting_day.isoformat())))
             db.session.commit()
             flash('Historical receipt linked to a balanced journal dated today. Original payment date and amount remain unchanged.','success')
             return redirect(url_for('fee_ledger.reconcile'))
