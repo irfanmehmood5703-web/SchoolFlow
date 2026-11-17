@@ -34,7 +34,7 @@ frame.addEventListener('load',()=>{
     // Keep the payment form usable if a browser restricts frame inspection.
   }
 });
-document.querySelectorAll('[data-payment-url]').forEach(btn=>btn.addEventListener('click',()=>{heading.textContent=btn.dataset.paymentTitle;initialPaymentPath=new URL(btn.dataset.paymentUrl,window.location.href).pathname;frame.src=btn.dataset.paymentUrl;modal.hidden=false;document.body.classList.add('challan-modal-open');close.focus();}));
+document.querySelectorAll('[data-payment-url]').forEach(btn=>btn.addEventListener('click',()=>{heading.textContent=btn.dataset.paymentTitle;initialPaymentPath=new URL(btn.dataset.paymentUrl,window.location.href).pathname;const popupUrl=new URL(btn.dataset.paymentUrl,window.location.href);popupUrl.searchParams.set('payment_popup','1');frame.src=popupUrl.href;modal.hidden=false;document.body.classList.add('challan-modal-open');close.focus();}));
 close.addEventListener('click',()=>{hide();window.location.reload();});modal.addEventListener('click',e=>{if(e.target===modal){hide();window.location.reload();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden){hide();window.location.reload();}});
 })();
