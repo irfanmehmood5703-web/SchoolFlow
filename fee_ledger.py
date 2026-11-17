@@ -227,5 +227,39 @@ def configure_fee_ledger(app,db,Student):
         accounts=Account.query.join(Group).order_by(Account.code).all()
         mapped=row.receiving if row else {};receipts=Receipt.query.filter_by(voided=False).count();linked=Posting.query.count()
         return render_template('fee_ledger_settings.html',title='Automatic Fee Ledger Posting',config=row,accounts=accounts,mappings=list(mapped.items())+[('',''),('','')],receipts=receipts,linked=linked)
+    @bp.route('/reconcile',methods=['GET','POST'])
+    def reconcile():
+        """Explicit, idempotent catch-up for unlinked historical receipts."""
+        if getattr(g,'staff_principal',None) is not None or not session.get('owner_id'):
+            abort(403,'Only the institute owner may reconcile historical receipts.')
+        if request.method=='POST':
+            if request.form.get('confirm')!='1':
+                raise ValueError('Confirm the selected historical receipt before posting.')
+            raw=request.form.get('receipt_id','')
+            if not raw.isdecimal():raise ValueError('Select a valid receipt.')
+            receipt=Receipt.query.filter_by(id=int(raw),voided=False).with_for_update().first()
+            if not receipt:raise ValueError('Receipt is missing or reversed. Reload.')
+            if Posting.query.filter_by(receipt_id=receipt.id).first():
+                raise ValueError('Receipt already has a ledger link. Nothing was posted.')
+            config=db.session.get(Config,1)
+            if not config or not config.enabled:
+                raise ValueError('Enable automatic fee posting and review mappings first.')
+            # Catch-up is recorded today, not backdated into a potentially closed period.
+            # The source receipt's original date is preserved in the immutable snapshot.
+            original_day=receipt.day
+            receipt.day=app.extensions['ledger_helpers']['today']()
+            try:
+                link=post(receipt)
+                link.source=dict(link.source,original_receipt_day=original_day.isoformat(),reconciled=True)
+                db.session.add(Audit(action='Reconcile historical fee receipt',data=dict(receipt_id=receipt.id,journal_id=link.journal_id,original_day=original_day.isoformat(),posting_day=receipt.day.isoformat())))
+                db.session.flush()
+            finally:
+                receipt.day=original_day
+            db.session.commit()
+            flash('Historical receipt linked to a balanced journal dated today. Original payment date and amount remain unchanged.','success')
+            return redirect(url_for('fee_ledger.reconcile'))
+        linked=db.select(Posting.receipt_id)
+        rows=Receipt.query.filter(Receipt.voided==False,~Receipt.id.in_(linked)).order_by(Receipt.id).limit(100).all()
+        return render_template('fee_ledger_reconcile.html',title='Fee Ledger Reconciliation',rows=rows)
     app.extensions['fee_ledger_helpers']=dict(post=post,reverse=reverse)
     app.register_blueprint(bp)
