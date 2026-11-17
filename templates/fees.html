@@ -19,8 +19,22 @@ body.challan-modal-open{overflow:hidden}
 <script>
 (function(){
 const modal=document.getElementById('challan-payment-modal'),frame=document.getElementById('challan-payment-frame'),heading=document.getElementById('challan-payment-title'),close=document.getElementById('challan-payment-close');if(!modal)return;
-function hide(){modal.hidden=true;document.body.classList.remove('challan-modal-open');frame.removeAttribute('src');}
-document.querySelectorAll('[data-payment-url]').forEach(btn=>btn.addEventListener('click',()=>{heading.textContent=btn.dataset.paymentTitle;frame.src=btn.dataset.paymentUrl;modal.hidden=false;document.body.classList.add('challan-modal-open');close.focus();}));
+let initialPaymentPath='';
+function hide(){modal.hidden=true;document.body.classList.remove('challan-modal-open');frame.removeAttribute('src');initialPaymentPath='';}
+frame.addEventListener('load',()=>{
+  if(modal.hidden||!initialPaymentPath)return;
+  try{
+    const destination=new URL(frame.contentWindow.location.href);
+    // A successful payment redirects to Payment History. Show that page in
+    // the main window instead of nesting the entire site inside the popup.
+    if(destination.origin===window.location.origin&&destination.pathname!==initialPaymentPath){
+      window.location.assign(destination.href);
+    }
+  }catch(error){
+    // Keep the payment form usable if a browser restricts frame inspection.
+  }
+});
+document.querySelectorAll('[data-payment-url]').forEach(btn=>btn.addEventListener('click',()=>{heading.textContent=btn.dataset.paymentTitle;initialPaymentPath=new URL(btn.dataset.paymentUrl,window.location.href).pathname;frame.src=btn.dataset.paymentUrl;modal.hidden=false;document.body.classList.add('challan-modal-open');close.focus();}));
 close.addEventListener('click',()=>{hide();window.location.reload();});modal.addEventListener('click',e=>{if(e.target===modal){hide();window.location.reload();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden){hide();window.location.reload();}});
 })();
