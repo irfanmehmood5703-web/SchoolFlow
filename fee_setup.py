@@ -151,7 +151,7 @@ def configure_fee_setup(app,db,Student):
         return [dict(particular=k,actual=bykey[k]['amount'] if k in bykey else 0,discount=0,arrears=0,fee_rules=rules(bykey[k]) if k in bykey else {}) for k in keys]
     def snapshot(schedule):return dict(schedule_id=schedule.id,schedule_version=schedule.version,due_day=schedule.due_day)
     def effective_rule(key,line=None):
-        row=head_map().get(key);mode=row.timing if row else 'manual';override=(line or {}).get('fee_rules',line or {})
+        row=head_map().get(key);override=(line or {}).get('fee_rules',line or {});mode=override.get('timing','manual') if (line or {}).get('student_custom') else (row.timing if row else 'manual')
         chosen=override.get('months',[]) if override.get('month_override') else (row.months if row and mode=='months' else list(range(1,13)))
         return dict(timing=mode,months=list(chosen),first_only=mode=='first' or bool(override.get('first_only')),include_first=bool(override.get('include_first')),head_version=row.version if row else 0,label=row.label if row else key)
     def eligible(rule,at,first,selected):
