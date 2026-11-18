@@ -29,3 +29,30 @@
  body.sf-print-vertical .sf-fee-portrait .sf-fee-bank{margin-top:2px;padding:2px}
  body.sf-print-vertical .sf-fee-portrait .sf-fee-copy footer{margin-top:2px}
 }
+
+/* Professional A4 challan typography and balanced print spacing. */
+@media print {
+ .sf-fee-copy{border:1px solid var(--fee-primary);box-shadow:none}
+ .sf-fee-copy header{border-bottom:1.5px solid var(--fee-primary)}
+ .sf-fee-copy .sf-fee-balance{font-weight:700}
+ body.sf-print-vertical .sf-fee-sheet.sf-fee-portrait{gap:3mm!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy{font-size:9px!important;line-height:1.2!important;padding:2mm 3mm!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy h2{font-size:12px!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy h3{font-size:10px!important;margin:3px 0!important;padding-bottom:2px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy table,body.sf-print-vertical .sf-fee-portrait .sf-fee-copy .sf-fee-data{font-size:9px!important;line-height:1.2!important;margin:3px 0!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy th,body.sf-print-vertical .sf-fee-portrait .sf-fee-copy td{padding:2px 4px!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy .sf-fee-data thead th{font-size:9px!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-student{grid-template-columns:minmax(0,1fr) 60px;gap:6px;margin:4px 0}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-qr{width:54px;height:54px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-photo{width:42px;height:48px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-logo{width:38px;height:38px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-media figcaption{font-size:7px;max-width:60px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy footer{margin-top:4px}
+ body.sf-print-horizontal .sf-fee-landscape{gap:3mm!important}
+ body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy{padding:2.5mm!important;font-size:10px;line-height:1.25}
+ body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy h2{font-size:13px}
+ body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy h3{font-size:11px;margin:5px 0}
+ body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy .sf-fee-data{font-size:9px;line-height:1.25}
+ body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy .sf-fee-data th,body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy .sf-fee-data td{padding:3px 4px}
+ body.sf-print-horizontal .sf-fee-landscape .sf-fee-copy footer{margin-top:8px}
+}
