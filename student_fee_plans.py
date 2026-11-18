@@ -153,6 +153,11 @@ def configure_student_fee_plans(app, db, Student):
                 if f'discount_{i}' not in request.form or f'arrears_{i}' not in request.form: raise ValueError('The fee rows are incomplete. Reload the form.')
                 line['discount']=money(request.form.get(f'discount_{i}'))
                 line['arrears']=money(request.form.get(f'arrears_{i}'))
+            # Exclusions apply to this student's snapshot, never to the shared schedule.
+            excluded=request.form.getlist('exclude_fee_head')
+            valid_keys={str(i) for i in range(len(lines))}
+            if any(key not in valid_keys for key in excluded):raise ValueError('Invalid fee head selection. Reload the plan.')
+            lines=[line for i,line in enumerate(lines) if str(i) not in excluded]
             # Student-only fee heads are kept on this student's plan snapshot.
             # Never mutate the class schedule or other students' plans.
             custom_count=request.form.get('custom_count','0')
