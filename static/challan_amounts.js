@@ -4,6 +4,30 @@ document.addEventListener('DOMContentLoaded',()=>{
  const form=dialog.querySelector('form'),open=document.querySelector('[data-change-open]'),counter=document.querySelector('[data-amount-selected]'),all=document.querySelector('[data-amount-all]');
  const choices=[...document.querySelectorAll('[data-amount-id]:not(:disabled)')],preview=dialog.querySelector('[data-change-preview]'),error=dialog.querySelector('[data-change-error]'),token=form.elements.review_token,apply=form.querySelector('[value=apply]'),previewButton=form.querySelector('[value=preview]');
  const key=form.dataset.pendingKey,csrf=form.elements._csrf.value;let busy=false,serial=0,pending=null;
+ const quick=dialog.querySelector('[data-quick-head]'),quickInput=dialog.querySelector('#amount-new-head'),quickButton=dialog.querySelector('[data-create-head]'),quickMessage=dialog.querySelector('[data-create-head-message]');
+ quickButton.addEventListener('click',async()=>{
+  if(busy||pending)return;
+  const label=quickInput.value.trim();
+  if(!label){quickMessage.textContent='Enter a fee head name first.';return;}
+  busy=true;quickButton.disabled=true;quickMessage.textContent='Saving fee head…';
+  try{
+   const data=new FormData();data.set('_csrf',csrf);data.set('label',label);
+   const response=await fetch(quick.dataset.createUrl,{method:'POST',body:data,credentials:'same-origin',headers:{Accept:'application/json'}});
+   if(response.redirected)throw Error('Your session changed. Reload and sign in again.');
+   const type=response.headers.get('content-type')||'';
+   if(!type.includes('application/json'))throw Error('Could not confirm the new fee head. Reload and check Manage fee heads.');
+   const result=await response.json();
+   if(!response.ok)throw Error(result.error||'Could not create this fee head.');
+   const select=form.elements.head;
+   let option=[...select.options].find(item=>item.value===result.key);
+   if(!option){option=new Option(result.label,result.key);select.add(option);}
+   select.value=result.key;select.dispatchEvent(new Event('change',{bubbles:true}));
+   quickInput.value='';
+   quickMessage.textContent=result.existing?'Existing fee head selected. Enter the amount and preview.':'Fee head saved and selected. Enter the amount and preview before applying.';
+  }catch(e){quickMessage.textContent=e.message||'Could not create fee head.';}
+  finally{busy=false;quickButton.disabled=false;}
+ });
+
  try{pending=JSON.parse(sessionStorage.getItem(key)||'null');if(pending&&(!Array.isArray(pending)||pending.length>110||pending.some(item=>!Array.isArray(item)||item.length!==2||item.some(v=>typeof v!=='string'))))pending=null;}catch{}
  const remember=fields=>{pending=fields;try{sessionStorage.setItem(key,JSON.stringify(fields));}catch{}};
  const forget=()=>{pending=null;try{sessionStorage.removeItem(key);}catch{}};
