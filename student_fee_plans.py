@@ -269,6 +269,10 @@ def configure_student_fee_plans(app, db, Student):
             db.session.add(Audit(action='Generate assigned fee challans',data=dict(month=at,count=count,skipped=skipped,mode=mode,particulars=sorted(heads))))
             commit();flash(f'{count} challans generated; {skipped} students had no due charges. Existing student/month combinations skipped.','success')
             return redirect(url_for('ops.fees',mode='payments'))
+        # Show only students who still need a challan for the selected month.
+        selected_month=month(request.args.get('month') or date.today().strftime('%Y-%m'))
+        already_billed={sid for (sid,) in db.session.query(Bill.student_id).filter(Bill.month==selected_month).distinct().all()}
+        eligible_students=[s for s in students if s.id not in already_billed and current(s.id,selected_month)]
         fine_helper=app.extensions.get('fine_queue_helpers');pending_fines=fine_helper['rows']() if fine_helper else []
-        return render('student_fee_plan_generate.html',pending_fines=pending_fines,fine_review_token=fine_helper['token'](pending_fines) if fine_helper else '',title='Generate from Student Fee Plans',students=[s for s in students if current(s.id)],heads=all_heads,today=date.today().isoformat())
+        return render('student_fee_plan_generate.html',pending_fines=pending_fines,fine_review_token=fine_helper['token'](pending_fines) if fine_helper else '',title='Generate from Student Fee Plans',students=eligible_students,heads=all_heads,today=date.today().isoformat(),selected_month=selected_month)
     app.register_blueprint(bp)
