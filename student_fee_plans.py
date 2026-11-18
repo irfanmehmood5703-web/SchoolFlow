@@ -166,7 +166,7 @@ def configure_student_fee_plans(app, db, Student):
             for i in range(int(custom_count)):
                 label=request.form.get(f'custom_name_{i}','').strip()
                 if not label:continue
-                if len(label)>120 or not re.fullmatch(r'[\\w][\\w .&()/+-]*',label,re.UNICODE):raise ValueError('Enter a valid additional fee head name.')
+                if len(label)>120 or not any(ch.isalnum() for ch in label) or any(ord(ch)<32 or ord(ch)==127 for ch in label):raise ValueError('Enter a valid additional fee head name.')
                 if label.casefold() in existing:raise ValueError('Fee head already exists on this plan: '+label)
                 timing=request.form.get(f'custom_timing_{i}','first')
                 if timing not in ('first','monthly'):raise ValueError('Choose One Time or Monthly for the additional head.')
