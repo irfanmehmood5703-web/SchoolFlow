@@ -1,7 +1,7 @@
 """Tenant fee heads and scoped schedules; billing keeps immutable money snapshots."""
 import calendar,hmac,re
 from datetime import date
-from flask import Blueprint,abort,flash,redirect,render_template,request,session,url_for
+from flask import Blueprint,abort,flash,redirect,render_template,request,session,url_for,jsonify
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from operations import money
@@ -115,6 +115,23 @@ def configure_fee_setup(app,db,Student):
                 any(any(x['particular']==key for x in r.data['lines']) for r in P.query.all()) or
                 any(any(x.get('particular')==key for x in r.lines) for r in Bill.query.all()) or
                 any(r.data.get('particular')==key for r in W.query.filter_by(kind='fee-plans').all()))
+    @bp.post('/heads/quick-add')
+    def quick_add_head():
+        """Create a reusable tenant fee head without leaving the challan editor."""
+        display=text('label',True)
+        if not re.fullmatch(r"[\\w][\\w .,&()/'-]{0,159}",display,re.UNICODE):
+            raise ValueError('Use a valid fee head name (letters, numbers and ordinary punctuation).')
+        existing=next((h for h in heads() if h['label'].casefold()==display.casefold() or h['key'].casefold()==display.casefold()),None)
+        if existing:
+            if existing['timing']=='fine':raise ValueError('Fine-policy heads cannot be used here.')
+            return jsonify(key=existing['key'],label=existing['label'],existing=True)
+        key=display
+        if len(key)>200:raise ValueError('Fee head name is too long.')
+        db.session.add(FeeHead(key=key,label=display,timing='manual',months=[],custom=True))
+        audit('Save fee head',key=key,label=display,timing='manual',months=[],source='challan amount editor')
+        commit()
+        return jsonify(key=key,label=display,existing=False)
+
     @bp.route('/heads',methods=['GET','POST'])
     def head_settings():
         if request.method=='POST':
