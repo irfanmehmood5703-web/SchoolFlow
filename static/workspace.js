@@ -16,10 +16,18 @@ document.addEventListener('DOMContentLoaded',()=>{
    const samePeriod=form.dataset.effective===form.querySelector('[name=effective]').value,pct=Number(form.querySelector('[name=percentage]').value)||0;
    form.querySelectorAll('[data-fee-line]').forEach(row=>{
     const base=Number(samePeriod?row.dataset.baseActual:row.dataset.actual),input=row.querySelector('[data-discount]'),d=Math.round((Number(input.value)||0)*100),a=Math.round((Number(row.querySelector('[data-arrears]').value)||0)*100);
+    const excluded=Boolean(row.querySelector('[data-exclude-fee]')?.checked);
     const baseNet=base-d,increment=Math.round(baseNet*pct/100),actual=base+increment;
-    input.max=String(base/100);arrears+=a;discount+=d;net+=baseNet+increment;actualTotal+=actual;
+    input.max=String(base/100);if(!excluded){arrears+=a;discount+=d;net+=baseNet+increment;actualTotal+=actual;}
     row.querySelector('[data-net]').textContent=fmt(baseNet+increment);row.querySelector('[data-adjusted-actual]').textContent=fmt(actual);
     row.querySelector('[data-increment-note]').textContent=increment?' Includes increment '+fmt(increment)+' on net '+fmt(baseNet):'';
+   });
+   form.querySelectorAll('#student-custom-rows > div').forEach(row=>{
+    const name=row.querySelector('[name^=custom_name_]');if(!name||!name.value.trim())return;
+    const amount=row.querySelector('[name^=custom_amount_]'),rebate=row.querySelector('[name^=custom_discount_]'),owed=row.querySelector('[name^=custom_arrears_]');
+    const base=Math.round((Number(amount?.value)||0)*100),d=Math.round((Number(rebate?.value)||0)*100),a=Math.round((Number(owed?.value)||0)*100);
+    const inc=Math.round((base-d)*pct/100);actualTotal+=base+inc;discount+=d;net+=base-d+inc;arrears+=a;
+    const preview=row.querySelector('[data-custom-net]');if(preview)preview.textContent=fmt(base-d+inc);
    });
    for(const [key,value] of Object.entries({arrears,discount,net,actual:actualTotal}))form.querySelector('[data-total-'+key+']').textContent=fmt(value);
   };
