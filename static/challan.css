@@ -7,3 +7,25 @@
 
 .sf-fee-bank{padding:0;border:0;background:transparent}.sf-fee-copy .sf-fee-data{table-layout:fixed;width:100%;margin:0;border-collapse:collapse;font-size:10px;line-height:1.35}.sf-fee-data th,.sf-fee-data td{overflow-wrap:anywhere;vertical-align:top}.sf-fee-copy .sf-fee-data th,.sf-fee-copy .sf-fee-data td{padding:5px 6px;text-align:left}.sf-fee-data tbody th{width:42%;background:var(--fee-secondary);font-weight:600}.sf-fee-copy .sf-fee-data thead th{background:var(--fee-primary);color:var(--fee-paper);font-size:11px;text-align:left}.sf-fee-bank .sf-fee-data tbody th{width:36%}.sf-fee-identity .sf-fee-data{margin-top:0}.sf-fee-data tbody tr{break-inside:avoid}
 @media print{.sf-fee-copy .sf-fee-data{font-size:9px;line-height:1.25}.sf-fee-copy .sf-fee-data th,.sf-fee-copy .sf-fee-data td{padding:3px 4px}.sf-fee-copy .sf-fee-data thead th{font-size:10px}}
+
+/* Three compact vertically stacked challan copies on one A4 portrait sheet. */
+@media print {
+ body.sf-print-vertical .sf-fee-sheet.sf-fee-portrait{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:2mm!important;page:fee-portrait;break-after:page;align-content:start}
+ body.sf-print-vertical .sf-fee-sheet.sf-fee-portrait:last-child{break-after:auto}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy{padding:1.5mm 2.5mm!important;font-size:7px!important;line-height:1.1!important;break-inside:avoid;min-width:0}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy header{padding-bottom:2px;gap:5px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy h2{font-size:10px;margin:0}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy h3{font-size:8px;margin:2px 0;padding-bottom:1px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy p{margin:1px 0}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy table,body.sf-print-vertical .sf-fee-portrait .sf-fee-copy .sf-fee-data{font-size:7px!important;line-height:1.1!important;margin:2px 0!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy th,body.sf-print-vertical .sf-fee-portrait .sf-fee-copy td{padding:1px 3px!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy .sf-fee-data thead th{font-size:7px!important}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-student{grid-template-columns:minmax(0,1fr) 48px;gap:4px;margin:3px 0}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-qr{width:44px;height:44px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-media{gap:2px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-media figcaption{font-size:6px;max-width:48px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-logo{width:32px;height:32px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-photo{width:34px;height:38px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-bank{margin-top:2px;padding:2px}
+ body.sf-print-vertical .sf-fee-portrait .sf-fee-copy footer{margin-top:2px}
+}
