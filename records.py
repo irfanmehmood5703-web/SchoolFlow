@@ -503,11 +503,11 @@ def configure_records(app, db, Student, Employee):
             number = model.admission_no if kind == "student" else model.employee_no
             search_fields = [model.name.ilike(pattern, escape="\\"), number.ilike(pattern, escape="\\"), model.phone.ilike(pattern, escape="\\")]
             if kind == "student":
-                # Match the family's stored number without changing unrelated student records.
-                family_match = db.session.query(RecordFamily.id).filter(RecordFamily.number.ilike(pattern, escape="\\")).subquery()
-                search_fields.append(db.session.query(StudentDetails.id).filter(
-                    StudentDetails.student_id == model.id, StudentDetails.family_id.in_(family_match)
-                ).exists())
+                # Independent family lookup: avoid correlated EXISTS compiler failures.
+                matching_student_ids = db.session.query(StudentDetails.student_id).join(
+                    RecordFamily, StudentDetails.family_id == RecordFamily.id
+                ).filter(RecordFamily.number.ilike(pattern, escape="\\")).subquery()
+                search_fields.append(model.id.in_(matching_student_ids))
             query = query.filter(or_(*search_fields))
         status = request.args.get("status", "Active")
         if status == 'non-active':
