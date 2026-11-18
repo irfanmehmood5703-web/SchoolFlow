@@ -153,6 +153,24 @@ def configure_student_fee_plans(app, db, Student):
                 if f'discount_{i}' not in request.form or f'arrears_{i}' not in request.form: raise ValueError('The fee rows are incomplete. Reload the form.')
                 line['discount']=money(request.form.get(f'discount_{i}'))
                 line['arrears']=money(request.form.get(f'arrears_{i}'))
+            # Student-only fee heads are kept on this student's plan snapshot.
+            # Never mutate the class schedule or other students' plans.
+            custom_count=request.form.get('custom_count','0')
+            if not custom_count.isdigit() or int(custom_count)>20:raise ValueError('Too many additional fee heads.')
+            existing={x['particular'].casefold() for x in lines}
+            for i in range(int(custom_count)):
+                label=request.form.get(f'custom_name_{i}','').strip()
+                if not label:continue
+                if len(label)>120 or not re.fullmatch(r'[\\w][\\w .&()/+-]*',label,re.UNICODE):raise ValueError('Enter a valid additional fee head name.')
+                if label.casefold() in existing:raise ValueError('Fee head already exists on this plan: '+label)
+                timing=request.form.get(f'custom_timing_{i}','first')
+                if timing not in ('first','monthly'):raise ValueError('Choose One Time or Monthly for the additional head.')
+                amount=money(request.form.get(f'custom_amount_{i}','0'))
+                discount=money(request.form.get(f'custom_discount_{i}','0'))
+                arrears=money(request.form.get(f'custom_arrears_{i}','0'))
+                if amount<=0 or discount>amount:raise ValueError('Enter a positive amount and a valid discount for '+label)
+                lines.append(dict(particular=label,actual=amount,discount=discount,arrears=arrears,student_custom=True,fee_rules=dict(timing=timing)))
+                existing.add(label.casefold())
             # Same-period saves recalculate the original base; later months carry forward.
             same_period=latest and effective==latest.effective and name==latest.data['schedule'] and not refresh
             lines=increment_lines(lines,pct,same_period)
