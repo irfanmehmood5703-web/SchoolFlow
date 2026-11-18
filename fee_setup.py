@@ -119,7 +119,7 @@ def configure_fee_setup(app,db,Student):
     def quick_add_head():
         """Create a reusable tenant fee head without leaving the challan editor."""
         display=text('label',True)
-        if not re.fullmatch(r"[\\w][\\w .,&()/'-]{0,159}",display,re.UNICODE):
+        if not re.fullmatch(r"[\w][\w .,&()/'-]{0,159}",display,re.UNICODE):
             raise ValueError('Use a valid fee head name (letters, numbers and ordinary punctuation).')
         existing=next((h for h in heads() if h['label'].casefold()==display.casefold() or h['key'].casefold()==display.casefold()),None)
         if existing:
