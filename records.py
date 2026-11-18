@@ -501,7 +501,14 @@ def configure_records(app, db, Student, Employee):
         if q:
             pattern = "%"+q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")+"%"
             number = model.admission_no if kind == "student" else model.employee_no
-            query = query.filter(or_(model.name.ilike(pattern, escape="\\"), number.ilike(pattern, escape="\\"), model.phone.ilike(pattern, escape="\\")))
+            search_fields = [model.name.ilike(pattern, escape="\\"), number.ilike(pattern, escape="\\"), model.phone.ilike(pattern, escape="\\")]
+            if kind == "student":
+                # Match the family's stored number without changing unrelated student records.
+                family_match = db.session.query(RecordFamily.id).filter(RecordFamily.number.ilike(pattern, escape="\\")).subquery()
+                search_fields.append(db.session.query(StudentDetails.id).filter(
+                    StudentDetails.student_id == model.id, StudentDetails.family_id.in_(family_match)
+                ).exists())
+            query = query.filter(or_(*search_fields))
         status = request.args.get("status", "Active")
         if status == 'non-active':
             query = query.filter(or_(model.status != 'Active', model.status.is_(None)))
