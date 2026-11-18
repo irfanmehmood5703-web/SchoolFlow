@@ -983,7 +983,7 @@ def configure_operations(app, db, Student, Employee):
             if not saved: raise ValueError('Enter at least one payment amount.')
             if request.form.get('action')=='send': queue('Fee receipt',list(set(saved)))
             audit('Family payment' if family_mode else 'Direct payment',students=saved,changes=changes);commit();flash('Payments saved.','success');return redirect(url_for('ops.history'))
-        return render('batch_payment.html',title='Family-wise Payment' if family_mode else 'Direct Payment',family_mode=family_mode,number=query,lookup=lookup,rows=rows,student=lambda id:db.session.get(Student,id),token=secrets.token_urlsafe(24))
+        return render('batch_payment.html',title='Family-wise Payment' if family_mode else 'Direct Payment',family_mode=family_mode,number=query,lookup=lookup,rows=rows,student=lambda id:db.session.get(Student,id),line_remaining={b.id:payment_particulars(b) for b in rows},token=secrets.token_urlsafe(24))
 
     @bp.route('/setup-demo',methods=['POST'])
     def setup_demo():
