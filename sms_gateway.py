@@ -110,6 +110,39 @@ def configure_sms_gateway(app,db,Student):
         flash('SMS queued for the school SMS App. Delivery is not yet confirmed.','success')
         return redirect(url_for('ops.register',kind='queries'))
 
+    @bp.route('/workspace/admission-query-bulk-sms',methods=['POST'])
+    def admission_query_bulk_sms():
+        owner();csrf()
+        try:ids=list(dict.fromkeys(int(x) for x in request.form.getlist('ids')))
+        except ValueError:raise ValueError('Invalid inquiry selection.')
+        if not ids or len(ids)>100:raise ValueError('Select 1 to 100 admission inquiries.')
+        device=db.get_or_404(Device,request.form.get('device_id',type=int))
+        if not device.active:raise ValueError('Select an active school SMS device.')
+        template=request.form.get('bulk_message','').strip()
+        if not 1<=len(template)<=1000:raise ValueError('Enter a message of 1 to 1,000 characters.')
+        token=request.form.get('sms_token','')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}',token):raise ValueError('Reload the page before queueing SMS.')
+        rows=Workflow.query.filter(Workflow.kind=='queries',Workflow.id.in_(ids),Workflow.status.notin_(['Voided','Closed'])).all()
+        if len(rows)!=len(ids):raise ValueError('A selected inquiry is unavailable or closed.')
+        items=[]
+        for row in rows:
+            if not row.data.get('sms_consent'):raise ValueError('SMS consent is missing for inquiry #'+str(row.id))
+            if row.data.get('campus') and row.data['campus']!=device.campus:raise ValueError('Select a device in the inquiry campus.')
+            recipient=phone(row.data.get('phone',''))
+            body=template.replace('{student_name}',str(row.data.get('name',''))).replace('{class_name}',str(row.data.get('class_name',''))).replace('{school_name}',str(request.form.get('school_name','SchoolFlow'))[:120])
+            if not 1<=len(body)<=1000:raise ValueError('Personalized SMS exceeds 1,000 characters.')
+            source='admission-bulk:'+token+':'+str(row.id)
+            items.append((row,recipient,body,source))
+        count=0
+        for row,recipient,body,source in items:
+            if Job.query.filter_by(source=source).first():continue
+            db.session.add(Job(source=source,device_id=device.id,phone=recipient,text=body,generation=device.generation,detail='Bulk admission inquiry #'+str(row.id)))
+            count+=1
+        audit('Queue manual bulk admission SMS',query_ids=ids,device_id=device.id,count=count)
+        db.session.commit()
+        flash(str(count)+' personalized SMS queued. Phone submission and delivery are not confirmed.','success')
+        return redirect(url_for('ops.register',kind='queries'))
+
     def auto_admission_query(row):
         """Opt-in auto-queue only; the connected phone controls actual dispatch."""
         if not row.data.get('sms_consent'):return
