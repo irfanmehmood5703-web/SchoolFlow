@@ -9,7 +9,7 @@ class SmsGatewayTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.old={key:app.config.get(key) for key in ('TESTING','IDENTITY_ENFORCE_IN_TESTS','INSTITUTE_DATABASE_DIR','PUBLIC_DEMO_ENABLED')}
         app.config.update(TESTING=True,IDENTITY_ENFORCE_IN_TESTS=True,INSTITUTE_DATABASE_DIR=self.tmp.name,PUBLIC_DEMO_ENABLED=False)
         self.ctx=app.app_context();self.ctx.push();db.drop_all();db.create_all();self.key='k'*43;self.M=app.extensions['sms_models']
-        self.school=app.extensions['identity_helpers']['provision']('SMS-QA','Fictional SMS School','qa@example.invalid','Fictional-SMS-password-2026');self.school_id=self.school.id
+        self.school=app.extensions['identity_helpers']['provision']('SMS-QA','Fictional SMS School','qa@example.invalid','Fictional-SMS-password-2026');self.school_id=self.school.id;self.school_scope=self.school.storage_key
         with app.test_request_context('/'):
             g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
             rm=app.extensions['record_models'];db.session.add(rm['settings'](category='campus',value='North',class_name=''))
@@ -22,6 +22,8 @@ class SmsGatewayTests(unittest.TestCase):
     def call(self,action,data=None,headers=None,did=1):return self.c.post(f'/api/sms/devices/{did}/{action}',json={} if data is None else data,headers=self.headers if headers is None else headers)
     def heartbeat(self):
         response=self.call('heartbeat');self.assertEqual(response.status_code,200);self.headers['X-Device-Scope']=response.json['scope']
+        self.assertEqual(response.json['school_scope'],self.school_scope)
+        self.assertEqual(response.json['school_name'],'Fictional SMS School')
     def claim(self):
         self.heartbeat();response=self.call('claim');self.assertEqual(response.status_code,200);return response.json['job']
     def ref(self,job):return {key:job[key] for key in ('id','token')}

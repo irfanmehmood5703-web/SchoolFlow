@@ -16,7 +16,9 @@ silently sent by the school-SIM outbox.
 Portal clients provide Android file selection, save exports to the user-selected
 location, printing, back/reload and local session clearing. File/content URL
 loading, cleartext, third-party cookies, WebView permission grants, native
-JavaScript bridges and foreign-origin navigation are blocked. TLS errors stop
+JavaScript bridges and foreign-origin WebView navigation are blocked. User-tapped
+HTTPS, telephone and email links can open in another app after confirmation;
+no SchoolFlow session cookies are passed to those apps. TLS errors stop
 navigation. Backup is disabled and screenshots are protected. Download requests
 carry the current same-origin session cookie without following redirects.
 
@@ -77,3 +79,36 @@ verification steps; a compile or synthetic test is not proof of these outcomes.
 Parents, Teacher and Owner portal clients declare audio-recording permission. A foreground SchoolFlow page may request audio capture only from the exact original HTTPS origin; foreign origins, camera/mixed resources, background/cancelled requests and denied OS permission are refused. App pause stops/prepares an in-progress voice note for explicit review; it never sends a recording. Finished voice previews remain usable on return. Android permission timing may require pressing Record again after the first grant. Physical WebView/microphone checks remain necessary. SMS does not declare or request microphone permission.
 
 Default downloadable acceptance packages use a separate `.acceptance` suffix and can coexist with earlier `.test` packages. Existing school-specific builds keep their debug/signing path. Do not erase an old SMS app’s uncertain pending submission just to install a new test app; review server/phone state first. Test packages are not production-signed releases.
+
+## School-name installs and connected updates
+
+General → App Links builds four APKs for each private school. Android displays
+the school name followed by Parents, Teacher, Owner or SMS, with the school's
+logo (or initials). A generic APK cannot rename its launcher after sign-in;
+school-specific packages provide the actual installed name. Each school/role
+has a separate immutable package and a retained private signing key so an
+update installs over its previous school build. No pupil records are bundled.
+
+Client source version 2 queues updates for previously built active schools
+when the central worker next runs. The Prepare updated school apps button
+also requests a new numbered build without changing the school's package/key.
+Duplicate queued/building requests reuse the same job. Old workers cannot
+claim new-version jobs. Brand/logo changes still require the school's chosen
+branding to be prepared. Download status and SHA checksums are in App Links.
+
+Branded portal entry validates the school code against its immutable identity.
+A signed HttpOnly routing cookie keeps login, parent links and subsequent
+workspace requests within that school; normal login permissions remain the
+authority. Owner and Teacher builds accept their respective account types.
+Home reuses a valid school session. Parents use the family-bound portal and
+cannot open the staff workspace. The SMS client verifies the server's school
+identity before saving its connection and retains the attended send-once flow.
+
+Owner and Teacher use the current live web routes, navigation and settings,
+including the latest inquiry, fee-plan, challan, partial-payment and reversal
+flows when permitted. Parents use the existing family-visible fee, result,
+attendance, diary, notice and messaging pages subject to school privileges.
+These clients share server workflows rather than maintaining copies of forms.
+Android alert, confirmation and text dialogs support web actions; page Print
+buttons use the native print service after loading;
+the toolbar scrolls on small screens and shows the installed school app name.

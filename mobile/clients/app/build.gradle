@@ -9,7 +9,7 @@ def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').re
 android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
-    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 2; versionName '0.2-acceptance' }
+    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 3; versionName '0.3-acceptance' }
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
@@ -37,7 +37,7 @@ android {
         flavor.applicationId='com.schoolflow.schools.s'+school.school_key+'.'+flavor.name
         flavor.resValue 'string','app_name',resourceText(school.name+' '+names[flavor.name])
     } }
-    buildTypes { debug { applicationIdSuffix '.test'; if(school) signingConfig signingConfigs.schoolKey }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
+    buildTypes { debug { applicationIdSuffix '.test'; if(school) { debuggable false; signingConfig signingConfigs.schoolKey } }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
         release { minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { abortOnError true }

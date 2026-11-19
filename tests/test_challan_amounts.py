@@ -141,7 +141,25 @@ class ChallanAmountTests(unittest.TestCase):
         def send(_):
             c=app.test_client();c.set_cookie('session',cookie);barrier.wait(timeout=10)
             return c.post(self.path+'/apply',data={**d,'review_token':token,'_csrf':csrf}).status_code
-        with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(send,range(2)))
+        # A memory SQLite StaticPool shares one DB-API connection across
+        # threads. Use separate control connections, as the deployed database
+        # does, so a sibling request's rollback cannot invalidate authentication.
+        key=app.extensions.get('identity_bind_key');original=db.engines[key];replacement=None
+        if original.dialect.name=='sqlite' and original.url.database in (None,'',':memory:'):
+            import sqlite3
+            from pathlib import Path
+            from sqlalchemy import create_engine
+            db.session.remove();filename=str(Path(self.root.name)/'concurrent-control.db')
+            source=original.raw_connection();target=sqlite3.connect(filename)
+            try:source.driver_connection.backup(target)
+            finally:target.close();source.close()
+            replacement=create_engine('sqlite:///'+filename,connect_args={'check_same_thread':False})
+            db.engines[key]=replacement
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(send,range(2)))
+        finally:
+            db.session.remove()
+            if replacement is not None:db.engines[key]=original;replacement.dispose()
         self.assertTrue(all(code in (200,409) for code in statuses),statuses);self.assertIn(200,statuses)
         self.assertEqual(self.saved(bid)['total'],370000);self.assertEqual(self.tenant(lambda:app.extensions['challan_amount_models']['change'].query.count()),1)
 

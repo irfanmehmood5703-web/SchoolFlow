@@ -292,7 +292,7 @@ def configure_identity(app, db):
             owner = Owner.query.filter_by(institute_id=school.id, email=email, active=True).first()
             password = request.form.get('password', '')
             valid = check_password_hash(owner.password_hash if owner else dummy_hash, password[:129])
-            if owner and valid and len(password) <= 128:
+            if owner and valid and len(password) <= 128 and app.extensions.get('mobile_client_helpers',{}).get('role_allowed',lambda role:True)('owner'):
                 session.clear()
                 session.permanent = True
                 session.update(owner_id=owner.id, owner_version=owner.version, institute_id=school.id,
@@ -300,7 +300,7 @@ def configure_identity(app, db):
                 return redirect(url_for('ops.dashboard'))
             helper=app.extensions.get('staff_access_helpers',{})
             staff=helper.get('authenticate',lambda *args:None)(school,email,password)
-            if staff:
+            if staff and app.extensions.get('mobile_client_helpers',{}).get('role_allowed',lambda role:True)('teacher'):
                 session.clear();session.permanent=True
                 session.update(staff_id=staff['id'],staff_version=staff['version'],institute_id=school.id,signed_in_at=time.time(),record_csrf=secrets.token_urlsafe(32))
                 return redirect(url_for('ops.dashboard'))
@@ -323,7 +323,9 @@ def configure_identity(app, db):
     @bp.route('/logout', methods=['POST'])
     def logout():
         csrf()
+        bound=app.extensions.get('mobile_client_helpers',{}).get('binding',lambda:None)()
         session.clear()
+        if bound:return redirect(url_for('mobile_clients.entry',kind=bound['kind'],school=bound['code'],scope=bound['scope']))
         return redirect(url_for('home'))
 
     @app.cli.command('institute-create')

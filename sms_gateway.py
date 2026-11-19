@@ -223,6 +223,7 @@ def configure_sms_gateway(app,db,Student):
         if not device.active:abort(403)
         expected=scope(device,school)
         if request.endpoint!='sms_gateway.heartbeat' and not hmac.compare_digest(request.headers.get('X-Device-Scope',''),expected):abort(409)
+        g.sms_school=dict(scope=school.storage_key,name=school.name)
         device.last_seen=time.time();return device,expected
     def data():
         value=request.get_json(silent=True)
@@ -231,7 +232,7 @@ def configure_sms_gateway(app,db,Student):
     def serialize(job):return dict(id=job.id,phone=job.phone,text=job.text,state=job.state,token=job.token,expires=job.expires)
     @bp.post('/api/sms/devices/<int:did>/heartbeat')
     def heartbeat(did):
-        device,expected=auth(did);data();db.session.commit();return jsonify(scope=expected,name=device.name,campus=device.campus)
+        device,expected=auth(did);data();db.session.commit();return jsonify(scope=expected,name=device.name,campus=device.campus,school_scope=g.sms_school['scope'],school_name=g.sms_school['name'])
     @bp.post('/api/sms/devices/<int:did>/claim')
     def claim(did):
         device,_=auth(did);data();stamp=time.time()

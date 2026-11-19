@@ -2,9 +2,9 @@ name: SchoolFlow Android Clients
 on:
   push:
     branches: [main, feature/connected-android-clients]
-    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py']
+    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py', 'identity.py', 'operations.py', 'student_fee_plans.py', 'school_clock.py', 'tests/**']
   pull_request:
-    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py']
+    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py', 'identity.py', 'operations.py', 'student_fee_plans.py', 'school_clock.py', 'tests/**']
 permissions:
   contents: read
 concurrency:

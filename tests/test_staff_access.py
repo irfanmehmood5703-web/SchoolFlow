@@ -1,6 +1,7 @@
 """Real staff sign-in, per-action campus scopes and revoked-session enforcement."""
 import os,tempfile,unittest,time
 from datetime import date
+from school_clock import school_today
 from flask import g
 from werkzeug.security import generate_password_hash
 os.environ['DATABASE_URL']='sqlite:///:memory:'
@@ -30,6 +31,16 @@ class StaffAccessTests(unittest.TestCase):
         return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
     def token(self):
         with self.c.session_transaction() as s:return s['record_csrf']
+    def test_branded_teacher_app_keeps_staff_permissions_and_reuses_session(self):
+        school=db.session.get(self.M['institute'],self.school)
+        entry='/mobile/teacher?school='+school.code+'&scope='+school.storage_key
+        self.assertEqual(self.c.get(entry).status_code,302)
+        self.assertEqual(self.login().status_code,302)
+        self.assertEqual(self.c.get('/workspace/dashboard').status_code,200)
+        self.assertEqual(self.c.get('/records/student').status_code,200)
+        self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token()}).status_code,403)
+        self.assertIn('/workspace/dashboard',self.c.get(entry).location)
+
     def test_widget_sources_and_legacy_visibility_follow_role_and_campus(self):
         def allow():
             row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'dashboard.view':['Campus A'],'widgets.view':['Campus A'],'admissions.view':['Campus A'],'fees.view':['Campus A'],'finance.view':['Campus A']}}
@@ -140,7 +151,7 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.get('/api/v1/summary').status_code,403)
     def test_cash_account_and_payment_date_rules_are_checked_before_payment(self):
         self.login();token=self.token()
-        base={'_csrf':token,'student_id':'1','account':'Cash at Bank','paid_date':date.today().isoformat()}
+        base={'_csrf':token,'student_id':'1','account':'Cash at Bank','paid_date':school_today().isoformat()}
         self.assertEqual(self.c.post('/workspace/pay',data=base).status_code,403)
         base.update(account='Cash in Hand',paid_date='2020-01-01');self.assertEqual(self.c.post('/workspace/pay',data=base).status_code,403)
     def test_account_or_permission_change_invalidates_an_existing_sign_in(self):
@@ -221,10 +232,10 @@ class StaffAccessTests(unittest.TestCase):
         def scope():
             r=db.session.get(self.Staff,1);r.data={**r.data,'permissions':{'payroll.update':['Campus A']}}
         self.tenant(scope);self.login()
-        self.assertEqual(self.c.post('/workspace/payroll',data={'_csrf':self.token(),'action':'send','month':'2026-10','ids':['1'],'credit':'Cash in Hand','debit':'Cash in Hand','paid_date':date.today().isoformat()}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/payroll',data={'_csrf':self.token(),'action':'send','month':'2026-10','ids':['1'],'credit':'Cash in Hand','debit':'Cash in Hand','paid_date':school_today().isoformat()}).status_code,403)
     def test_direct_payment_request_and_discount_approval_keep_real_receipt_amounts(self):
         self.two_step();self.login()
-        response=self.c.post('/workspace/direct-payment',data={'_csrf':self.token(),'number':'1','lookup':'sid','token':'directQueuePayment_1234567890','account':'Cash in Hand','paid_date':date.today().isoformat(),'amount_1':'10','action':'pay'});self.assertEqual(response.status_code,302,response.data);self.assertEqual(self.balances(),(0,0,1))
+        response=self.c.post('/workspace/direct-payment',data={'_csrf':self.token(),'number':'1','lookup':'sid','token':'directQueuePayment_1234567890','account':'Cash in Hand','paid_date':school_today().isoformat(),'amount_1':'10','action':'pay'});self.assertEqual(response.status_code,302,response.data);self.assertEqual(self.balances(),(0,0,1))
         self.login('owner@example.invalid');self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'1','action':'approve'}).status_code,302);self.assertEqual(self.balances(),(1000,1,1))
         def discount_access():
             r=db.session.get(self.Staff,1);r.data={**r.data,'accounts':['Cash in Hand','Discounts']}
@@ -318,7 +329,7 @@ class StaffAccessTests(unittest.TestCase):
                 data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
             with self.c.session_transaction() as sess:sess['staff_version']=version
         self.login();grant_finance()
-        form=dict(_csrf=self.token(),version='0',begin='2026-01-01',end='2026-12-31',closed='1')
+        form=dict(_csrf=self.token(),version='0',begin='2030-01-01',end='2030-12-31',closed='1')
         self.assertEqual(self.c.post('/workspace/finance/periods/new',data=form).status_code,403)
         form['closed']='0';response=self.c.post('/workspace/finance/periods/new',data=form);self.assertEqual(response.status_code,302)
         self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,403)
@@ -376,8 +387,9 @@ class StaffAccessTests(unittest.TestCase):
         def seed():
             fm=app.extensions['finance_models'];rm=app.extensions['requisition_models'];stamp=dict(created_at=now,updated_at=now,created_by='QA',updated_by='QA')
             group=fm['group'](name='QA assets',account_class='Assets',active=True,**stamp);db.session.add(group);db.session.flush()
-            for i,name in enumerate(('Cash in Hand','Staff Advances'),1000):db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
-            db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
+            for i,name in enumerate(('Cash in Hand','Staff Advances'),91000):
+                if not fm['account'].query.filter_by(name=name).first():db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
+            if not fm['period'].query.filter(fm['period'].begin<=today,fm['period'].end>=today).first():db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
             from requisitions import DEFAULTS
             db.session.flush();cash=fm['account'].query.filter_by(name='Cash in Hand').one();advance=fm['account'].query.filter_by(name='Staff Advances').one()
             db.session.add(rm['config'](id=1,data={**DEFAULTS,'advance_account':advance.id,'pay_account':cash.id}))

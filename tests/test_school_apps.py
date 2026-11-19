@@ -42,7 +42,7 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':2},headers=headers or self.headers)
     def key(self,job,other=False):
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
         subject=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'Fictional school signing')]);now=datetime.now(timezone.utc)
@@ -112,9 +112,77 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(self.worker.post('/api/app-builder/'+job['id']+'/fail',json={},headers=self.headers).status_code,200)
         self.assertEqual(self.prepare(version='1').status_code,302)
         self.assertEqual(self.claim().json['job']['id'],job['id'])
+    def test_ready_app_can_request_new_code_build_with_stable_school_identity(self):
+        self.prepare();job=self.claim().json['job'];self.complete(job)
+        c=self.clients[0]
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        data=dict(_csrf=csrf,version='1',display_name=self.schools[0][3],rebuild='1',build_sequence='0')
+        self.assertEqual(c.post('/workspace/general/school-apps/prepare',data=data).status_code,422)
+        data['build_sequence']='1'
+        self.assertEqual(c.post('/workspace/general/school-apps/prepare',data=data).status_code,302)
+        update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
+        self.assertEqual(update['branding']['school_key'],job['branding']['school_key'])
+        self.assertTrue(update['signing']['keystore'])
+        # Repeated clicks while queued do not allocate extra builds.
+        data['version']=str(c.get('/workspace/general/school-apps/status').json['version'])
+        self.assertEqual(c.post('/workspace/general/school-apps/prepare',data=data).status_code,302)
+        self.assertEqual(self.M['build'].query.count(),2)
+
+    def test_central_update_queues_existing_school_once_and_refuses_old_worker(self):
+        self.prepare();job=self.claim().json['job'];self.complete(job)
+        old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
+        self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
+        update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
+        self.assertEqual(update['branding']['source_version'],2)
+        self.assertEqual(self.claim().json['job']['id'],update['id'])
+        self.assertEqual(self.M['build'].query.count(),2)
+
+    def test_branded_portal_pins_school_preserves_home_session_and_role(self):
+        c=app.test_client();school_id,scope,code,_=self.schools[0]
+        entry='/mobile/owner?school='+code+'&scope='+scope
+        response=c.get(entry);self.assertEqual(response.status_code,302)
+        self.assertIn('/auth/login',response.location)
+        self.assertIn('Secure',response.headers['Set-Cookie'])
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertEqual(c.post('/auth/institute',data={'_csrf':csrf,'code':self.schools[1][2]}).status_code,403)
+        self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'owner@example.invalid','password':self.password}).status_code,302)
+        self.assertEqual(c.get('/workspace/dashboard').status_code,200)
+        self.assertIn('/workspace/dashboard',c.get(entry).location)
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertIn('/mobile/owner',c.post('/auth/logout',data={'_csrf':csrf}).location)
+        self.assertIn('/auth/login',c.get('/auth/institute').location)
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'owner@example.invalid','password':self.password}).status_code,302)
+        self.assertEqual(c.get('/parents/'+self.schools[1][2]+'/login').status_code,403)
+        self.assertEqual(c.get('/mobile/owner?school='+code+'&scope='+'a'*32).status_code,403)
+        # A teacher-branded portal does not accept an owner password as a staff login.
+        response=c.get('/mobile/teacher?school='+code+'&scope='+scope)
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'owner@example.invalid','password':self.password}).status_code,200)
+        with c.session_transaction() as session:self.assertNotIn('owner_id',session)
+        # Parent app cannot reuse owner or staff credentials to open the workspace.
+        self.assertEqual(c.get('/mobile/parents?school='+code+'&scope='+scope).status_code,302)
+        self.assertEqual(c.get('/parents/'+code+'/login').status_code,200)
+        self.assertEqual(c.get('/parents/'+self.schools[1][2]+'/login').status_code,403)
+
     def test_generic_release_url_cannot_override_school_app(self):
         c=self.clients[0];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         self.assertEqual(c.post('/workspace/general/app-links',data={'_csrf':csrf,'app':'parents','version_token':'0','url':'https://example.invalid/generic.apk','version':'1'}).status_code,422)
+
+class CompiledSchoolIconTests(unittest.TestCase):
+    def test_optimized_icon_resource_path_is_verified_by_pixels(self):
+        from pathlib import Path
+        from PIL import Image
+        from scripts.school_app_worker import verify_school_icon
+        with tempfile.TemporaryDirectory() as folder:
+            expected=Path(folder)/'school_icon_foreground.png'
+            Image.new('RGBA',(20,20),'#176b4a').save(expected)
+            stream=io.BytesIO()
+            with zipfile.ZipFile(stream,'w') as archive:archive.writestr('res/aB.png',expected.read_bytes())
+            with zipfile.ZipFile(stream) as archive:verify_school_icon(archive,expected)
+            Image.new('RGBA',(20,20),'#999999').save(expected)
+            with zipfile.ZipFile(stream) as archive:
+                with self.assertRaisesRegex(RuntimeError,'school logo'):verify_school_icon(archive,expected)
 
 if __name__=='__main__':unittest.main()

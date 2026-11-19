@@ -623,14 +623,24 @@ def configure_operations(app, db, Student, Employee):
             count=0;changes=[]
             locked=Bill.query.filter(Bill.id.in_([b.id for b in rows])).with_for_update().all()
             for b in locked:
+                aggregate_keys=('amount_'+str(b.id),'discount_'+str(b.id))
+                has_aggregate=any(key in request.form for key in aggregate_keys)
+                has_lines=any(key.startswith(('line_amount_'+str(b.id)+'_','line_discount_'+str(b.id)+'_')) for key in request.form)
+                if has_aggregate and has_lines:raise ValueError('Use either the particular amounts or the total payment form, then reload.')
+                legacy_paid=money(request.form.get(aggregate_keys[0])) if has_aggregate else 0
+                legacy_discount=money(request.form.get(aggregate_keys[1])) if has_aggregate else 0
+                if legacy_paid+legacy_discount>b.remaining:raise ValueError('Payment and discount cannot exceed the remaining challan amount.')
                 if b.frozen: 
-                    if any(money(request.form.get('line_amount_'+str(b.id)+'_'+str(i))) or money(request.form.get('line_discount_'+str(b.id)+'_'+str(i))) for i in range(len(b.lines))): raise ValueError('Unfreeze this challan before changing it.')
+                    if legacy_paid or legacy_discount or any(money(request.form.get('line_amount_'+str(b.id)+'_'+str(i))) or money(request.form.get('line_discount_'+str(b.id)+'_'+str(i))) for i in range(len(b.lines))): raise ValueError('Unfreeze this challan before changing it.')
                     continue
                 available=payment_particulars(b)
                 allocations=[]
                 for i,left in enumerate(available):
                     paid=money(request.form.get('line_amount_'+str(b.id)+'_'+str(i)))
                     discount_line=money(request.form.get('line_discount_'+str(b.id)+'_'+str(i)))
+                    if has_aggregate:
+                        discount_line=min(left,legacy_discount);legacy_discount-=discount_line
+                        paid=min(left-discount_line,legacy_paid);legacy_paid-=paid
                     if paid+discount_line>left: raise ValueError('Payment and discount cannot exceed the remaining amount for '+str(b.lines[i].get('particular','fee'))+'.')
                     allocations.append([paid,discount_line])
                 amount=sum(x[0] for x in allocations)

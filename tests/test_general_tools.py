@@ -1,6 +1,7 @@
 """Release registry, all 37 data sources, personal layouts and truthful missing data."""
 import os,unittest
 from datetime import date,timedelta
+from school_clock import school_today
 from werkzeug.datastructures import MultiDict
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Student,Employee
@@ -13,7 +14,7 @@ class GeneralToolsTests(unittest.TestCase):
         self.c=app.test_client();self.c.get('/workspace/general/widgets')
         with self.c.session_transaction() as s:self.csrf=s['record_csrf'];s['owner_id']=41
         self.rm=app.extensions['record_models'];self.ops=app.extensions['ops_models'];self.M=app.extensions['general_tools_models']
-        self.today=date.today()
+        self.today=school_today()
         for cat,values in {'campus':['North','South'],'class_name':['One'],'section':['A']}.items():
             for v in values:db.session.add(self.rm['settings'](category=cat,value=v,class_name=''))
         s=Student(admission_no='QA-1',name='Fictional Widget Pupil',class_name='One',status='Active');db.session.add(s);db.session.flush();self.sid=s.id

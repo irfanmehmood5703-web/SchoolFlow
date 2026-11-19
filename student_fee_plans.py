@@ -153,9 +153,11 @@ def configure_student_fee_plans(app, db, Student):
                 if f'discount_{i}' not in request.form or f'arrears_{i}' not in request.form: raise ValueError('The fee rows are incomplete. Reload the form.')
                 # Override only this student's snapshot, never the shared schedule.
                 # Same-month updates use the unincremented base to avoid compounding.
-                if f'actual_{i}' not in request.form:raise ValueError('Actual fee is missing. Reload the form.')
-                line['actual']=money(request.form.get(f'actual_{i}'))
-                line['base_actual']=line['actual']
+                # Older saved/mobile forms omit actual fee. Preserve the authoritative
+                # snapshot (including the carry-forward amount for a later month).
+                if f'actual_{i}' in request.form:
+                    line['actual']=money(request.form.get(f'actual_{i}'))
+                    line['base_actual']=line['actual']
                 line['discount']=money(request.form.get(f'discount_{i}'))
                 line['arrears']=money(request.form.get(f'arrears_{i}'))
             # Exclusions apply to this student's snapshot, never to the shared schedule.
