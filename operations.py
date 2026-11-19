@@ -352,11 +352,15 @@ def configure_operations(app, db, Student, Employee):
                 target=targets[0]
                 follow=day(request.form.get('follow_up',''))
                 note=request.form.get('followup_note','').strip()
+                call_result=request.form.get('call_result','Call Completed').strip()
+                allowed_results=('Call Pending','Call Completed','No Answer','Call Back Later')
+                if call_result not in allowed_results:raise ValueError('Select a valid call result.')
                 if not 1<=len(note)<=1000:raise ValueError('Add a follow-up note (up to 1,000 characters).')
                 data=dict(target.data or {})
                 history=list(data.get('followup_history',[]))
-                history.append(dict(date=school_today().isoformat(),next_date=follow.isoformat(),note=note))
+                history.append(dict(date=school_today().isoformat(),next_date=follow.isoformat(),note=note,call_result=call_result))
                 data['followup_history']=history[-100:]
+                data['call_result']=call_result
                 data['follow_up']=follow.isoformat()
                 target.data=data
                 if target.status not in ('Converted','Closed'):target.status='Follow-up'
