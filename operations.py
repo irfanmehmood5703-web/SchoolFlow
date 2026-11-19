@@ -281,16 +281,26 @@ def configure_operations(app, db, Student, Employee):
             if len(targets)!=len(ids):raise ValueError('An inquiry was not found or was already deleted.')
             if action=='bulk_query':
                 status=request.form.get('query_status','')
-                if status not in ('Active','Follow-up','Converted','Closed'):raise ValueError('Choose a valid status.')
+                fields={}
+                for key in ('class_name','follow_up','notes'):
+                    if request.form.get('change_'+key)=='on':
+                        value=request.form.get('bulk_'+key,'').strip()
+                        if key=='class_name' and value not in dict(choices('class_name')):raise ValueError('Select a configured class.')
+                        if key=='follow_up':day(value)
+                        if len(value)>1000:raise ValueError('Bulk field is too long.')
+                        fields[key]=value
+                if status and status not in ('Active','Follow-up','Converted','Closed'):raise ValueError('Choose a valid status.')
+                if not status and not fields:raise ValueError('Select a status or at least one field to update.')
                 reason=request.form.get('reason','').strip()
                 if not 1<=len(reason)<=1000:raise ValueError('Provide a reason (up to 1,000 characters).')
                 effective=day(request.form.get('effective_date',''))
                 for target in targets:
                     previous=target.status
-                    target.status=status
+                    if status:target.status=status
                     data=dict(target.data or {})
+                    data.update(fields)
                     history=list(data.get('status_history',[]))
-                    history.append(dict(previous=previous,status=status,date=effective.isoformat(),reason=reason))
+                    history.append(dict(previous=previous,status=status or previous,fields=fields,date=effective.isoformat(),reason=reason))
                     data['status_history']=history[-100:]
                     target.data=data
                     audit('Bulk admission inquiry status',query_id=target.id,previous=previous,status=status,reason=reason)
