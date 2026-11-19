@@ -273,6 +273,15 @@ def configure_operations(app, db, Student, Employee):
             return redirect(url_for('fee_setup.schedules'))
         if kind=='shifts':return redirect(url_for('school_settings.assign_shifts'),code=307 if request.method=='POST' else 302)
         schema=SCHEMAS[kind]
+        query_extra_fields=('mother_name','mother_phone','guardian_name','guardian_relation','alternate_phone','gender','date_of_birth','address','previous_school','visitor_name','source','remarks','section','session')
+        def query_extras():
+            extras={}
+            for key in query_extra_fields:
+                value=request.form.get(key,'').strip()
+                if len(value)>500:raise ValueError('Inquiry detail is too long.')
+                if key=='date_of_birth' and value:day(value)
+                extras[key]=value
+            return extras
         if kind=='queries' and request.method=='POST' and request.form.get('action') in ('bulk_query','delete_query','followup_query'):
             action=request.form['action']
             ids=selected() if action=='bulk_query' else [request.form.get('query_id',type=int)]
@@ -338,6 +347,10 @@ def configure_operations(app, db, Student, Employee):
             status=request.form.get('query_status','Active')
             if status not in ('Active','Follow-up','Converted','Closed'): raise ValueError('Invalid inquiry status.')
             before=dict(row.data)
+            data.update(query_extras())
+            data['sms_consent']=request.form.get('sms_consent')=='on'
+            data['followup_history']=list(row.data.get('followup_history',[]))
+            data['status_history']=list(row.data.get('status_history',[]))
             row.data=data
             row.status=status
             audit('Update admission inquiry',query_id=row.id,before=before,after=data,status=status)
@@ -393,6 +406,7 @@ def configure_operations(app, db, Student, Employee):
                     if not int(data['lectures']): raise ValueError('Lectures must be positive.')
                 obj=Workflow(kind=kind,data=data,status=state);db.session.add(obj)
                 if kind=='queries':
+                    data.update(query_extras())
                     data['sms_consent']=request.form.get('sms_consent')=='on'
                     db.session.flush()
                     # Admission inquiries never send SMS automatically.
