@@ -21,7 +21,7 @@
 <div class="fields-grid">
 <label>SMS Template<select class="query-sms-template" data-target="query-message-{{row.id}}" data-student="{{row.data.get('name','')|e}}" data-class="{{row.data.get('class_name','')|e}}" data-school="{{(session.get('school_name') or 'ISF SCHOOL SYSTEM')|e}}">
 <option value="">Custom message</option>
-<option value="Dear Parent, thank you for your interest in {{student_name}}'s admission to {{school_name}}. We have received your inquiry for class {{class_name}}.">Admission Query</option>
+{% raw %}<option value="Dear Parent, thank you for your interest in {{student_name}}'s admission to {{school_name}}. We have received your inquiry for class {{class_name}}.">Admission Query</option>
 <option value="Dear Parent, this is a follow-up about {{student_name}}'s admission inquiry at {{school_name}}. Please contact our admission office.">Admission Follow-up</option>
 <option value="Dear Parent, you are invited to visit {{school_name}} to discuss {{student_name}}'s admission to class {{class_name}}.">Visit Invitation</option>
 <option value="Thank you for visiting {{school_name}}. We look forward to welcoming {{student_name}}.">Thank You</option>
@@ -29,7 +29,7 @@
 <option value="Happy Birthday, {{student_name}}! Wishing you a wonderful year ahead. Best wishes from {{school_name}}.">Student Birthday</option>
 <option value="Dear Parent, greetings from {{school_name}} regarding {{student_name}}.">General SMS 1</option>
 <option value="Dear Parent, an important update for {{student_name}} from {{school_name}}. Please contact the school office.">General SMS 2</option>
-<option value="Dear Parent, thank you for staying connected with {{school_name}}.">General SMS 3</option>
+<option value="Dear Parent, thank you for staying connected with {{school_name}}.">General SMS 3</option>{% endraw %}
 </select></label>
 <label>School SMS Device<select name="device_id" required><option value="">Select SMS App device</option>{% for device in sms_devices %}<option value="{{device.id}}">{{device.name}} — {{device.campus}}</option>{% endfor %}</select></label>
 </div>
@@ -40,7 +40,7 @@
 {% endfor %}
 <script>
 document.querySelectorAll('.query-sms-template').forEach(function(select){
-select.addEventListener('change',function(){if(this.value){var message=this.value.replaceAll('{{student_name}}',this.dataset.student).replaceAll('{{class_name}}',this.dataset.class||'your selected class').replaceAll('{{school_name}}',this.dataset.school);document.getElementById(this.dataset.target).value=message;}});
+select.addEventListener('change',function(){if(this.value){var message=this.value.replaceAll('{% raw %}{{student_name}}{% endraw %}',this.dataset.student).replaceAll('{% raw %}{{class_name}}{% endraw %}',this.dataset.class||'your selected class').replaceAll('{% raw %}{{school_name}}{% endraw %}',this.dataset.school);document.getElementById(this.dataset.target).value=message;}});
 });
 </script>
 {% endif %}
