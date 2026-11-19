@@ -334,7 +334,9 @@ def configure_operations(app, db, Student, Employee):
                 effective=day(request.form.get('effective_date',''))
                 for target in targets:
                     previous=target.status
-                    if status:target.status=status
+                    if status:
+                        if (target.data or {}).get('student_id') and status!='Converted':raise ValueError('An enrolled student must remain Converted. Do not change the admission status.')
+                        target.status=status
                     data=dict(target.data or {})
                     data.update(fields)
                     history=list(data.get('status_history',[]))
@@ -375,6 +377,7 @@ def configure_operations(app, db, Student, Employee):
                 data[key]=value
             status=request.form.get('query_status','Active')
             if status not in ('Active','Follow-up','Converted','Closed'): raise ValueError('Invalid inquiry status.')
+            if (row.data or {}).get('student_id') and status!='Converted':raise ValueError('This inquiry already created a student. Its status must remain Converted.')
             before=dict(row.data)
             data.update(query_extras())
             data['sms_consent']=request.form.get('sms_consent')=='on'
@@ -447,6 +450,15 @@ def configure_operations(app, db, Student, Employee):
             return redirect(url_for('ops.register',kind=kind))
         rows=Workflow.query.filter_by(kind=kind).filter(Workflow.status!='Voided').order_by(Workflow.id.desc()).all()
         if kind=='queries':
+            # Repair earlier follow-up updates that changed already-enrolled
+            # inquiries back to Follow-up, so converted reporting stays accurate.
+            repaired=0
+            for inquiry in rows:
+                if inquiry.status not in ('Voided','Converted') and (inquiry.data or {}).get('student_id'):
+                    inquiry.status='Converted'
+                    audit('Restore converted admission inquiry status',query_id=inquiry.id,student_id=inquiry.data['student_id'])
+                    repaired+=1
+            if repaired:commit()
             q=request.args.get('q','').strip().casefold()
             status=request.args.get('status','').strip()
             if q:rows=[r for r in rows if q in ' '.join(str(r.data.get(k,'')) for k in ('name','father','phone','class_name')).casefold()]
