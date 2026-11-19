@@ -72,8 +72,9 @@ def configure_sms_gateway(app,db,Student):
                 template=request.form.get('template','').strip()
                 school=request.form.get('school_name','').strip()
                 if not 1<=len(template)<=1000 or not 1<=len(school)<=120:raise ValueError('Enter a school name and SMS template (maximum 1,000 characters).')
-                for old in Workflow.query.filter_by(kind='sms-auto-config',status='Active').all():old.status='Replaced'
-                db.session.add(Workflow(kind='sms-auto-config',status='Active',data=dict(enabled=request.form.get('enabled')=='on',device_id=device.id,template=template,school_name=school)))
+                for old in Workflow.query.filter_by(kind='sms-auto-config',status='Active').all():
+                    if old.data.get('owner_id')==session.get('owner_id'):old.status='Replaced'
+                db.session.add(Workflow(kind='sms-auto-config',status='Active',data=dict(owner_id=session.get('owner_id'),enabled=request.form.get('enabled')=='on',device_id=device.id,template=template,school_name=school)))
                 audit('Update automatic admission SMS configuration',device_id=device.id)
             elif action=='cancel':
                 job=db.get_or_404(Job,request.form.get('job_id'))
@@ -84,7 +85,7 @@ def configure_sms_gateway(app,db,Student):
             if key:return render_template('sms_key.html',title='Connect SMS App',device=device,key=key)
             return redirect(url_for('sms_gateway.index'))
         jobs=Job.query.order_by(Job.created.desc()).limit(100).all()
-        auto=Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).first()
+        auto=next((x for x in Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).all() if x.data.get('owner_id')==session.get('owner_id')),None)
         return render_template('sms_gateway.html',title='School SIM SMS',auto_config=auto.data if auto else {},devices=Device.query.order_by(Device.id).all(),jobs=jobs,campuses=[(c,c) for c in app.extensions['staff_access_helpers']['campuses']()])
     @bp.route('/workspace/admission-query-sms',methods=['POST'])
     def admission_query_sms():
@@ -112,7 +113,7 @@ def configure_sms_gateway(app,db,Student):
     def auto_admission_query(row):
         """Opt-in auto-queue only; the connected phone controls actual dispatch."""
         if not row.data.get('sms_consent'):return
-        config=Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).first()
+        config=next((x for x in Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).all() if x.data.get('owner_id')==session.get('owner_id')),None)
         if not config or not config.data.get('enabled'):return
         device=db.session.get(Device,config.data.get('device_id'))
         if not device or not device.active:return
