@@ -198,7 +198,19 @@ def configure_operations(app, db, Student, Employee):
         return render_template(name, choices=choices, today=school_today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
     @app.context_processor
-    def nav_context(): return dict(module_menus=MENUS, menu_url=menu_url, build_label='Pre-test • fictional records only')
+    def nav_context():
+        # Only open, dated admission inquiries need reminders; the school's
+        # scoped Workflow query prevents mixing one institute with another.
+        due_queries=[]
+        if session.get('school_code') or session.get('institute_code') or session.get('owner_id') or session.get('staff_id'):
+            today=school_today().isoformat()
+            due_queries=[w for w in Workflow.query.filter_by(kind='queries').all()
+                         if w.status not in ('Voided','Converted','Closed')
+                         and (w.data or {}).get('follow_up')
+                         and (w.data or {})['follow_up']<=today]
+        return dict(module_menus=MENUS,menu_url=menu_url,
+                    admission_followup_due=due_queries,
+                    build_label='Pre-test • fictional records only')
 
     @bp.before_request
     def csrf():
@@ -345,7 +357,7 @@ def configure_operations(app, db, Student, Employee):
                 data['followup_history']=history[-100:]
                 data['follow_up']=follow.isoformat()
                 target.data=data
-                target.status='Follow-up'
+                if target.status not in ('Converted','Closed'):target.status='Follow-up'
                 audit('Admission inquiry follow-up',query_id=target.id,next_date=follow.isoformat())
             commit()
             flash('Admission inquiry changes saved.','success')
