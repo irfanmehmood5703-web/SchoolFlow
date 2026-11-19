@@ -81,11 +81,16 @@ with app.app_context():
  print('New process: cross-module records retained; typed logical backup created with private file permissions.')
  restored=h['provision']('RESTORE-QA','Fictional restore target','restore@example.invalid','Fictional-restore-password');target=h['engine'](restored.id)
  data=json.loads(path.read_text(),object_hook=decode)
+ # Provisioning now creates a chart, period and posting configuration as well
+ # as the school profile. Only those generated defaults may be replaced.
+ F=app.extensions['finance_models'];L=app.extensions['fee_ledger_models']
+ generated={app.extensions['institute_setup_models']['profile'].__table__,F['group'].__table__,F['account'].__table__,F['period'].__table__,L['config'].__table__}
+ baseline=snapshot(h,target)
+ for t in h['workspace_tables']():assert not baseline[t.name] or t in generated,(t.name,'Unexpected target records')
  with target.begin() as c:
   for t in reversed(h['workspace_tables']()):
-   existing=c.execute(select(db.func.count()).select_from(t)).scalar()
-   # A new institute has only its generated profile; never overwrite data.
-   assert existing==0 or (t is app.extensions['institute_setup_models']['profile'].__table__ and existing==1),(t.name,existing)
+   existing=[dict(r) for r in c.execute(select(t).order_by(*t.primary_key.columns)).mappings()]
+   assert existing==baseline[t.name],(t.name,'Target changed since provisioning')
    if existing:c.execute(t.delete())
   for t in h['workspace_tables']():
    if data[t.name]:c.execute(t.insert(),data[t.name])
