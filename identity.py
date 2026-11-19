@@ -323,7 +323,9 @@ def configure_identity(app, db):
     @bp.route('/logout', methods=['POST'])
     def logout():
         csrf()
+        bound=app.extensions.get('mobile_client_helpers',{}).get('binding',lambda:None)()
         session.clear()
+        if bound:return redirect(url_for('mobile_clients.entry',kind=bound['kind'],school=bound['code'],scope=bound['scope']))
         return redirect(url_for('home'))
 
     @app.cli.command('institute-create')

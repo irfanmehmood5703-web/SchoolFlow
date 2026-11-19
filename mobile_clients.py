@@ -25,14 +25,20 @@ def configure_mobile_clients(app):
         if not bound:return
         # A signed routing cookie survives normal session rotation/logout. It grants no access.
         if request.blueprint in ('identity','parent_portal','parent_messages'):
+            School=app.extensions['identity_models']['institute']
+            school=School.query.filter_by(storage_key=bound['scope'],code=bound['code'],active=True).first()
+            if not school:abort(403,'Reopen the current app supplied by your school.')
+            if request.endpoint=='identity.institute' and request.method=='GET':
+                if bound['kind']=='parents':return redirect(url_for('parent_portal.home',code=bound['code']))
+                import time
+                session.update(pending_institute=school.id,pending_at=time.time())
+                return redirect(url_for('identity.login'))
             code=(request.view_args or {}).get('code')
             if code and code.upper()!=bound['code']:abort(403,'Open the app supplied by this school.')
             if request.endpoint=='identity.institute' and request.method=='POST' and request.form.get('code','').strip().upper()!=bound['code']:abort(403,'This app belongs to '+bound['code']+'.')
             if request.endpoint=='identity.demo':abort(403)
             if request.endpoint=='identity.login':
-                School=app.extensions['identity_models']['institute']
-                school=School.query.filter_by(storage_key=bound['scope'],code=bound['code'],active=True).first()
-                if not school or session.get('pending_institute')!=school.id:abort(403,'Reopen the school app home screen.')
+                if session.get('pending_institute')!=school.id:abort(403,'Reopen the school app home screen.')
         school=getattr(g,'school_identity',None)
         if school and (school.get('scope')!=bound['scope'] or bound['kind']=='parents'):abort(403,'Sign in with the account for this school app.')
 

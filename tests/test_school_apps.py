@@ -148,6 +148,11 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'owner@example.invalid','password':self.password}).status_code,302)
         self.assertEqual(c.get('/workspace/dashboard').status_code,200)
         self.assertIn('/workspace/dashboard',c.get(entry).location)
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertIn('/mobile/owner',c.post('/auth/logout',data={'_csrf':csrf}).location)
+        self.assertIn('/auth/login',c.get('/auth/institute').location)
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'owner@example.invalid','password':self.password}).status_code,302)
         self.assertEqual(c.get('/parents/'+self.schools[1][2]+'/login').status_code,403)
         self.assertEqual(c.get('/mobile/owner?school='+code+'&scope='+'a'*32).status_code,403)
         # A teacher-branded portal does not accept an owner password as a staff login.
