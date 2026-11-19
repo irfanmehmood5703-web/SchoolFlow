@@ -53,7 +53,7 @@ details.query-active-panel{display:block!important;position:fixed;top:50%;left:5
 <div class="inquiry-print-grid">{% for key,label in [('mother_name','Mother Name'),('mother_phone','Mother Phone'),('guardian_name','Guardian'),('guardian_relation','Guardian Relation'),('alternate_phone','Alternate Phone'),('gender','Gender'),('date_of_birth','Date of Birth'),('address','Address'),('previous_school','Previous School'),('visitor_name','Visitor'),('source','Inquiry Source'),('remarks','Office Remarks'),('section','Section'),('session','Academic Session')] %}{% if row.data.get(key) %}<div class="inquiry-print-field"><span>{{label}}</span><strong>{{row.data.get(key)}}</strong></div>{% endif %}{% endfor %}</div>
 <div class="inquiry-print-signatures"><div>Parent / Guardian Signature<span></span></div><div>Admission Officer Signature<span></span></div></div>
 <div class="inquiry-print-footer"><span>{{school_profile.get('name') or (school_identity.name if school_identity else 'School')}} · Admission Office</span><span>SchoolFlow · Inquiry #{{row.id}}</span></div>
-<button class="inquiry-print-button" type="button" onclick="document.querySelectorAll('.inquiry-print-date').forEach(function(el){el.textContent=new Date().toLocaleDateString()});document.body.classList.add('printing-inquiry');window.print();setTimeout(function(){document.body.classList.remove('printing-inquiry')},1500)">Print / Save PDF</button></div></details>
+<button class="inquiry-print-button" type="button" onclick="document.querySelectorAll('.inquiry-print-date').forEach(function(el){el.textContent=new Date().toLocaleDateString()});printAdmissionInquiry(this)">Print / Save PDF</button></div></details>
 <details class="form-card" id="query-delete-{{row.id}}"><summary>Delete inquiry #{{row.id}}</summary><p>This archives the inquiry, preserving audit history. It does not delete any student.</p><form method="post">{{m.csrf()}}<input type="hidden" name="action" value="delete_query"><input type="hidden" name="query_id" value="{{row.id}}"><button onclick="return confirm('Archive this admission inquiry?')">Confirm Archive</button></form></details>
 <details class="form-card" id="query-edit-{{row.id}}">
 <summary><strong>Update #{{row.id}} — {{row.data.get('name','')}}</strong></summary>
@@ -98,6 +98,20 @@ select.addEventListener('change',function(){if(this.value){var message=this.valu
 </script>
 {% endif %}
 <script>
+/* Print only the inquiry sheet in an isolated document. This avoids extra
+   blank pages caused by the dashboard's hidden layout on mobile Chrome. */
+function printAdmissionInquiry(button){
+  var sheet=button.closest('.query-print-sheet');
+  if(!sheet)return;
+  var popup=window.open('','_blank');
+  if(!popup){alert('Allow pop-ups for SchoolFlow to print this form.');return;}
+  var styles=Array.from(document.querySelectorAll('style,link[rel="stylesheet"]')).map(function(node){return node.outerHTML}).join('');
+  var clone=sheet.cloneNode(true);
+  clone.querySelectorAll('button').forEach(function(node){node.remove()});
+  var doc='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+styles+'<style>@page{size:A4;margin:12mm}html,body{margin:0!important;padding:0!important;height:auto!important;min-height:0!important;overflow:visible!important;background:#fff!important}.query-print-sheet{position:static!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;break-after:avoid!important;page-break-after:avoid!important}.inquiry-print-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.inquiry-print-field{break-inside:avoid!important}</style></head><body>'+clone.outerHTML+'</body></html>';
+  popup.document.open();popup.document.write(doc);popup.document.close();
+  popup.onload=function(){setTimeout(function(){popup.focus();popup.print()},350)};
+}
 /* Student action buttons open one focused panel instead of six stacked sections. */
 (function(){
   var backdrop=document.createElement('div');backdrop.className='query-panel-backdrop';backdrop.hidden=true;document.body.appendChild(backdrop);
