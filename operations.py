@@ -341,6 +341,11 @@ def configure_operations(app, db, Student, Employee):
                     state='Approved' if data.get('approve') else 'Pending'
                     if not int(data['lectures']): raise ValueError('Lectures must be positive.')
                 obj=Workflow(kind=kind,data=data,status=state);db.session.add(obj)
+                if kind=='queries':
+                    data['sms_consent']=request.form.get('sms_consent')=='on'
+                    db.session.flush()
+                    auto_sms=app.extensions.get('auto_admission_query_sms')
+                    if auto_sms:auto_sms(obj)
                 if kind=='increments':
                     db.session.flush();db.session.add(SalaryIncrementRequest(token=token,workflow_id=obj.id))
                 audit('Create '+kind);commit()
