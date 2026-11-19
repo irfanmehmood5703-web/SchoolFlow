@@ -422,6 +422,10 @@ def configure_operations(app, db, Student, Employee):
             status=request.args.get('status','').strip()
             if q:rows=[r for r in rows if q in ' '.join(str(r.data.get(k,'')) for k in ('name','father','phone','class_name')).casefold()]
             if status:rows=[r for r in rows if r.status==status]
+            followup=request.args.get('followup','')
+            if followup in ('due','upcoming','today'):
+                now=school_today().isoformat()
+                rows=[r for r in rows if r.status not in ('Closed','Converted') and r.data.get('follow_up') and (r.data['follow_up']<=now if followup=='due' else r.data['follow_up']>now if followup=='upcoming' else r.data['follow_up']==now)]
         return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,increment_token=secrets.token_urlsafe(24),sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
 
     @bp.route('/approve-students',methods=['POST'])
