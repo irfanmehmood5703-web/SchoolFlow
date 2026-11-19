@@ -65,6 +65,16 @@ def configure_sms_gateway(app,db,Student):
                     key=secrets.token_urlsafe(32);device.digest=hashlib.sha256(key.encode()).hexdigest();device.generation+=1
                 else:device.active=action=='activate'
                 audit('Change SMS device',device_id=device.id,operation=action)
+            elif action=='auto_config':
+                did=request.form.get('device_id',type=int)
+                device=db.get_or_404(Device,did)
+                if not device.active:raise ValueError('Select an active SMS device.')
+                template=request.form.get('template','').strip()
+                school=request.form.get('school_name','').strip()
+                if not 1<=len(template)<=1000 or not 1<=len(school)<=120:raise ValueError('Enter a school name and SMS template (maximum 1,000 characters).')
+                for old in Workflow.query.filter_by(kind='sms-auto-config',status='Active').all():old.status='Replaced'
+                db.session.add(Workflow(kind='sms-auto-config',status='Active',data=dict(enabled=request.form.get('enabled')=='on',device_id=device.id,template=template,school_name=school)))
+                audit('Update automatic admission SMS configuration',device_id=device.id)
             elif action=='cancel':
                 job=db.get_or_404(Job,request.form.get('job_id'))
                 if job.state not in ('queued','claimed'):raise ValueError('A dispatch already started. Do not retry it automatically; review on the phone.')
@@ -74,7 +84,8 @@ def configure_sms_gateway(app,db,Student):
             if key:return render_template('sms_key.html',title='Connect SMS App',device=device,key=key)
             return redirect(url_for('sms_gateway.index'))
         jobs=Job.query.order_by(Job.created.desc()).limit(100).all()
-        return render_template('sms_gateway.html',title='School SIM SMS',devices=Device.query.order_by(Device.id).all(),jobs=jobs,campuses=[(c,c) for c in app.extensions['staff_access_helpers']['campuses']()])
+        auto=Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).first()
+        return render_template('sms_gateway.html',title='School SIM SMS',auto_config=auto.data if auto else {},devices=Device.query.order_by(Device.id).all(),jobs=jobs,campuses=[(c,c) for c in app.extensions['staff_access_helpers']['campuses']()])
     @bp.route('/workspace/admission-query-sms',methods=['POST'])
     def admission_query_sms():
         owner();csrf()
@@ -97,6 +108,29 @@ def configure_sms_gateway(app,db,Student):
         db.session.commit()
         flash('SMS queued for the school SMS App. Delivery is not yet confirmed.','success')
         return redirect(url_for('ops.register',kind='queries'))
+
+    def auto_admission_query(row):
+        """Opt-in auto-queue only; the connected phone controls actual dispatch."""
+        if not row.data.get('sms_consent'):return
+        config=Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).first()
+        if not config or not config.data.get('enabled'):return
+        device=db.session.get(Device,config.data.get('device_id'))
+        if not device or not device.active:return
+        campus=row.data.get('campus','')
+        if campus and device.campus!=campus:return
+        try:recipient=phone(row.data.get('phone',''))
+        except ValueError:return
+        name=(row.data.get('name') or 'Student').strip()
+        school=(config.data.get('school_name') or 'Our School').strip()
+        template=config.data.get('template') or 'Dear Parent, thank you for your interest in {student_name} at {school_name}. We received your admission inquiry.'
+        body=template.replace('{student_name}',name).replace('{school_name}',school).replace('{class_name}',row.data.get('class_name') or 'your selected class')
+        if not 1<=len(body)<=1000:return
+        source='admission-auto:'+str(row.id)
+        if Job.query.filter_by(source=source).first():return
+        job=Job(source=source,device_id=device.id,phone=recipient,text=body,generation=device.generation,detail='Auto admission inquiry #'+str(row.id))
+        db.session.add(job);audit('Auto queue admission SMS',query_id=row.id,job_id=job.id,device_id=device.id)
+
+    app.extensions['auto_admission_query_sms']=auto_admission_query
 
     def candidates(row,device):
         data=row.data;preferences=data.get('preferences',{})
