@@ -22,10 +22,10 @@
 {% if kind=='queries' %}
 <style>
 details[id^="query-admission-"],details[id^="query-edit-"],details[id^="query-followup-"],details[id^="query-print-"],details[id^="query-sms-"],details[id^="query-delete-"]{display:none}
-details.query-active-panel{display:block!important;position:fixed;inset:5vh max(12px,calc((100vw - 850px)/2));z-index:1100;overflow:auto;max-height:90vh;margin:0!important;padding:20px!important;background:#fff;box-shadow:0 16px 65px #102c2480;border:1px solid #b8d6c8;border-radius:14px}
+details.query-active-panel{display:block!important;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(850px,calc(100vw - 24px));height:max-content;max-height:90dvh;z-index:1100;overflow:auto;margin:0!important;padding:20px!important;background:#fff;box-shadow:0 16px 65px #102c2480;border:1px solid #b8d6c8;border-radius:14px}
 .query-panel-backdrop{position:fixed;inset:0;background:#081f18a8;z-index:1099}
-.query-panel-close{float:right;position:sticky;top:0;z-index:2;border:1px solid #b8d6c8;border-radius:8px;background:#f3faf6;padding:8px 12px;cursor:pointer;font-weight:700}
-@media(max-width:600px){details.query-active-panel{inset:2vh 8px;max-height:96vh;padding:14px!important}.query-action-grid{grid-template-columns:repeat(2,minmax(85px,1fr))}}
+.query-panel-close{float:right;position:sticky;top:0;z-index:2;border:1px solid #b8d6c8;border-radius:8px;background:#166b4b;color:#fff;padding:8px 12px;cursor:pointer;font-weight:700}
+@media(max-width:600px){details.query-active-panel{width:calc(100vw - 16px);max-height:94dvh;padding:14px!important}.query-action-grid{grid-template-columns:repeat(2,minmax(85px,1fr))}}
 </style>
 <div class="form-card"><h2>Admission inquiry actions</h2><p>Update a saved inquiry or prepare an SMS for its contact. Messages require an active school SMS App device and are queued, not automatically delivered.</p></div>
 {% for row in rows %}
