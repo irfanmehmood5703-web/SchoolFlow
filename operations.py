@@ -456,14 +456,14 @@ def configure_operations(app, db, Student, Employee):
             # Repair earlier follow-up updates that changed already-enrolled
             # inquiries back to Follow-up, so converted reporting stays accurate.
             repaired=0
+            conversion_audits=Audit.query.filter_by(action='Update admission inquiry').order_by(Audit.id.desc()).all()
             for inquiry in rows:
                 if inquiry.status=='Voided':continue
                 details=dict(inquiry.data or {})
                 # A previous edit could discard the student_id. Recover only from
                 # an explicit prior audit snapshot, never by guessing from names.
                 if not details.get('student_id'):
-                    logs=Audit.query.filter_by(action='Update admission inquiry').order_by(Audit.id.desc()).all()
-                    for log in logs:
+                    for log in conversion_audits:
                         payload=log.data or {}
                         prior=payload.get('before') or {}
                         if str(payload.get('query_id'))!=str(inquiry.id) or not isinstance(prior,dict):continue
@@ -473,6 +473,7 @@ def configure_operations(app, db, Student, Employee):
                             for key in ('student_id','admission_no','converted_date'):
                                 if prior.get(key) is not None:details[key]=prior[key]
                             inquiry.data=details
+                            repaired+=1
                             break
                 if details.get('student_id') and inquiry.status!='Converted':
                     inquiry.status='Converted'
