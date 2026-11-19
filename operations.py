@@ -311,6 +311,25 @@ def configure_operations(app, db, Student, Employee):
             commit()
             flash('Inquiry marked ready. Complete the official student admission form to create the student safely.','success')
             return redirect(url_for('ops.register',kind='queries'))
+        if kind=='queries' and request.method=='POST' and request.form.get('action')=='restore_query':
+            query_id=request.form.get('query_id',type=int)
+            if not query_id:raise ValueError('Choose an archived inquiry to restore.')
+            target=Workflow.query.filter_by(id=query_id,kind='queries',status='Voided').with_for_update().first_or_404()
+            data=dict(target.data or {})
+            previous=data.get('archived_previous_status','Active')
+            if previous not in ('Active','Follow-up','Converted','Closed'):previous='Active'
+            # An inquiry linked to a student must never be reopened as an unconverted lead.
+            if data.get('student_id'):previous='Converted'
+            target.status=previous
+            history=list(data.get('status_history') or [])
+            history.append(dict(previous='Voided',status=previous,fields={},date=school_today().isoformat(),reason='Restored archived inquiry'))
+            data['status_history']=history[-100:]
+            data['restored_from_archive']=school_today().isoformat()
+            target.data=data
+            audit('Restore archived admission inquiry',query_id=target.id,status=previous)
+            commit()
+            flash('Archived admission inquiry restored successfully.','success')
+            return redirect(url_for('ops.register',kind='queries'))
         if kind=='queries' and request.method=='POST' and request.form.get('action') in ('bulk_query','delete_query','followup_query'):
             action=request.form['action']
             ids=selected() if action=='bulk_query' else [request.form.get('query_id',type=int)]
@@ -356,8 +375,13 @@ def configure_operations(app, db, Student, Employee):
                     audit('Bulk admission inquiry status',query_id=target.id,previous=previous,status=status,reason=reason)
             elif action=='delete_query':
                 target=targets[0]
+                previous=target.status
+                data=dict(target.data or {})
+                data['archived_previous_status']=previous
+                data['archived_on']=school_today().isoformat()
+                target.data=data
                 target.status='Voided'
-                audit('Void admission inquiry',query_id=target.id)
+                audit('Void admission inquiry',query_id=target.id,previous_status=previous)
             else:
                 target=targets[0]
                 follow=day(request.form.get('follow_up',''))
@@ -502,7 +526,8 @@ def configure_operations(app, db, Student, Employee):
             if followup in ('due','upcoming','today'):
                 now=school_today().isoformat()
                 rows=[r for r in rows if r.status not in ('Closed','Converted') and r.data.get('follow_up') and (r.data['follow_up']<=now if followup=='due' else r.data['follow_up']>now if followup=='upcoming' else r.data['follow_up']==now)]
-        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,increment_token=secrets.token_urlsafe(24),sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
+        archived_rows=Workflow.query.filter_by(kind='queries',status='Voided').order_by(Workflow.id.desc()).all() if kind=='queries' else []
+        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,archived_rows=archived_rows,increment_token=secrets.token_urlsafe(24),sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
 
     @bp.route('/approve-students',methods=['POST'])
     def approve_students():
