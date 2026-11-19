@@ -282,6 +282,23 @@ def configure_operations(app, db, Student, Employee):
                 if key=='date_of_birth' and value:day(value)
                 extras[key]=value
             return extras
+        if kind=='queries' and request.method=='POST' and request.form.get('action')=='prepare_admission':
+            row=Workflow.query.filter_by(id=request.form.get('query_id',type=int),kind='queries').with_for_update().first_or_404()
+            if row.status in ('Voided','Closed'):raise ValueError('This inquiry is not eligible for admission.')
+            if row.data.get('student_id'):raise ValueError('This inquiry is already linked to a student.')
+            if not row.data.get('name') or not row.data.get('phone'):raise ValueError('Complete student name and guardian contact first.')
+            note=request.form.get('admission_note','').strip()
+            if len(note)>1000:raise ValueError('Admission note is too long.')
+            admission_date=day(request.form.get('admission_date',''))
+            data=dict(row.data or {})
+            data['admission_prepared_date']=admission_date.isoformat()
+            data['admission_note']=note
+            data['admission_prepared']=True
+            row.data=data
+            audit('Prepare admission from inquiry',query_id=row.id,date=admission_date.isoformat())
+            commit()
+            flash('Inquiry marked ready. Complete the official student admission form to create the student safely.','success')
+            return redirect(url_for('ops.register',kind='queries'))
         if kind=='queries' and request.method=='POST' and request.form.get('action') in ('bulk_query','delete_query','followup_query'):
             action=request.form['action']
             ids=selected() if action=='bulk_query' else [request.form.get('query_id',type=int)]
