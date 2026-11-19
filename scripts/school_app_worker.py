@@ -36,6 +36,20 @@ def decode_label(value):
         else:result.append(value[index]);index+=1
     return ''.join(result)
 
+def verify_school_icon(archive,expected_path):
+    # Non-debuggable Android builds may shorten resource filenames. Verify the
+    # compiled PNG's visible pixels rather than relying on its source basename.
+    def visible(image):
+        canvas=Image.new('RGBA',image.size,'white');canvas.alpha_composite(image.convert('RGBA'));return canvas.convert('RGB').tobytes()
+    with Image.open(expected_path) as expected:
+        size=expected.size;pixels=visible(expected)
+    matches=0
+    for member in archive.infolist():
+        if not member.filename.startswith('res/') or not member.filename.endswith('.png') or member.file_size>5*1024*1024:continue
+        with Image.open(io.BytesIO(archive.read(member))) as actual:
+            if actual.size==size and visible(actual)==pixels:matches+=1
+    if matches!=1:raise RuntimeError('APK icon does not match its school logo')
+
 def inspect_apks(branding,source_sha):
     aapt,signer=tools();artifacts=[]
     for role,title in ROLES.items():
@@ -55,12 +69,7 @@ def inspect_apks(branding,source_sha):
         if label_text!=branding['name']+' '+title:raise RuntimeError('APK launcher name does not match its school')
         if not fingerprint:raise RuntimeError('APK signing certificate could not be verified')
         with zipfile.ZipFile(path) as archive:
-            icons=[name for name in archive.namelist() if name.endswith('/school_icon_foreground.png')]
-            if len(icons)!=1:raise RuntimeError('School launcher icon is missing')
-            with Image.open(io.BytesIO(archive.read(icons[0]))) as actual,Image.open(CLIENTS/'generated-school-res'/'drawable'/'school_icon_foreground.png') as expected_icon:
-                def visible(image):
-                    canvas=Image.new('RGBA',image.size,'white');canvas.alpha_composite(image.convert('RGBA'));return canvas.convert('RGB').tobytes()
-                if actual.size!=expected_icon.size or visible(actual)!=visible(expected_icon):raise RuntimeError('APK icon does not match its school logo')
+            verify_school_icon(archive,CLIENTS/'generated-school-res'/'drawable'/'school_icon_foreground.png')
         blob=path.read_bytes();artifacts.append(dict(role=role,package=package[1],label=label_text,version_code=int(package[2]),signing_sha256=fingerprint,sha256=hashlib.sha256(blob).hexdigest(),content=base64.b64encode(blob).decode()))
     return dict(source_sha=source_sha,artifacts=artifacts)
 

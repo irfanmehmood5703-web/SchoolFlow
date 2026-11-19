@@ -165,4 +165,19 @@ class SchoolAppTests(unittest.TestCase):
         with c.session_transaction() as s:csrf=s['record_csrf']
         self.assertEqual(c.post('/workspace/general/app-links',data={'_csrf':csrf,'app':'parents','version_token':'0','url':'https://example.invalid/generic.apk','version':'1'}).status_code,422)
 
+class CompiledSchoolIconTests(unittest.TestCase):
+    def test_optimized_icon_resource_path_is_verified_by_pixels(self):
+        from pathlib import Path
+        from PIL import Image
+        from scripts.school_app_worker import verify_school_icon
+        with tempfile.TemporaryDirectory() as folder:
+            expected=Path(folder)/'school_icon_foreground.png'
+            Image.new('RGBA',(20,20),'#176b4a').save(expected)
+            stream=io.BytesIO()
+            with zipfile.ZipFile(stream,'w') as archive:archive.writestr('res/aB.png',expected.read_bytes())
+            with zipfile.ZipFile(stream) as archive:verify_school_icon(archive,expected)
+            Image.new('RGBA',(20,20),'#999999').save(expected)
+            with zipfile.ZipFile(stream) as archive:
+                with self.assertRaisesRegex(RuntimeError,'school logo'):verify_school_icon(archive,expected)
+
 if __name__=='__main__':unittest.main()
