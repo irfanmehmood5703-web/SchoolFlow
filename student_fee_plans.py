@@ -154,10 +154,10 @@ def configure_student_fee_plans(app, db, Student):
                 # Override only this student's snapshot, never the shared schedule.
                 # Same-month updates use the unincremented base to avoid compounding.
                 # Older saved/mobile forms omit actual fee. Preserve the authoritative
-                # unincremented snapshot rather than rejecting those submissions.
-                if f'actual_{i}' in request.form:line['actual']=money(request.form.get(f'actual_{i}'))
-                else:line['actual']=line.get('base_actual',line['actual'])
-                line['base_actual']=line['actual']
+                # snapshot (including the carry-forward amount for a later month).
+                if f'actual_{i}' in request.form:
+                    line['actual']=money(request.form.get(f'actual_{i}'))
+                    line['base_actual']=line['actual']
                 line['discount']=money(request.form.get(f'discount_{i}'))
                 line['arrears']=money(request.form.get(f'arrears_{i}'))
             # Exclusions apply to this student's snapshot, never to the shared schedule.

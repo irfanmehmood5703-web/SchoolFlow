@@ -37,7 +37,7 @@ android {
         flavor.applicationId='com.schoolflow.schools.s'+school.school_key+'.'+flavor.name
         flavor.resValue 'string','app_name',resourceText(school.name+' '+names[flavor.name])
     } }
-    buildTypes { debug { applicationIdSuffix '.test'; if(school) signingConfig signingConfigs.schoolKey }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
+    buildTypes { debug { applicationIdSuffix '.test'; if(school) { debuggable false; signingConfig signingConfigs.schoolKey } }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
         release { minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     lint { abortOnError true }

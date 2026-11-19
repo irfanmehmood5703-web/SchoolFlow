@@ -30,6 +30,16 @@ class StaffAccessTests(unittest.TestCase):
         return self.c.post('/auth/login',data={'_csrf':token,'email':username,'password':password or self.password})
     def token(self):
         with self.c.session_transaction() as s:return s['record_csrf']
+    def test_branded_teacher_app_keeps_staff_permissions_and_reuses_session(self):
+        school=db.session.get(self.M['institute'],self.school)
+        entry='/mobile/teacher?school='+school.code+'&scope='+school.storage_key
+        self.assertEqual(self.c.get(entry).status_code,302)
+        self.assertEqual(self.login().status_code,302)
+        self.assertEqual(self.c.get('/workspace/dashboard').status_code,200)
+        self.assertEqual(self.c.get('/records/student').status_code,200)
+        self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token()}).status_code,403)
+        self.assertIn('/workspace/dashboard',self.c.get(entry).location)
+
     def test_widget_sources_and_legacy_visibility_follow_role_and_campus(self):
         def allow():
             row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'dashboard.view':['Campus A'],'widgets.view':['Campus A'],'admissions.view':['Campus A'],'fees.view':['Campus A'],'finance.view':['Campus A']}}
@@ -318,7 +328,7 @@ class StaffAccessTests(unittest.TestCase):
                 data['permissions']=permissions;person.data=data;db.session.commit();version=person.version;db.session.remove()
             with self.c.session_transaction() as sess:sess['staff_version']=version
         self.login();grant_finance()
-        form=dict(_csrf=self.token(),version='0',begin='2026-01-01',end='2026-12-31',closed='1')
+        form=dict(_csrf=self.token(),version='0',begin='2030-01-01',end='2030-12-31',closed='1')
         self.assertEqual(self.c.post('/workspace/finance/periods/new',data=form).status_code,403)
         form['closed']='0';response=self.c.post('/workspace/finance/periods/new',data=form);self.assertEqual(response.status_code,302)
         self.assertEqual(self.c.post(response.location+'/edit',data={**form,'version':'1','closed':'1'}).status_code,403)
@@ -378,7 +388,7 @@ class StaffAccessTests(unittest.TestCase):
             group=fm['group'](name='QA assets',account_class='Assets',active=True,**stamp);db.session.add(group);db.session.flush()
             for i,name in enumerate(('Cash in Hand','Staff Advances'),91000):
                 if not fm['account'].query.filter_by(name=name).first():db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
-            db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
+            if not fm['period'].query.filter(fm['period'].begin<=today,fm['period'].end>=today).first():db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
             from requisitions import DEFAULTS
             db.session.flush();cash=fm['account'].query.filter_by(name='Cash in Hand').one();advance=fm['account'].query.filter_by(name='Staff Advances').one()
             db.session.add(rm['config'](id=1,data={**DEFAULTS,'advance_account':advance.id,'pay_account':cash.id}))

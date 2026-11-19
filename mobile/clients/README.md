@@ -16,7 +16,9 @@ silently sent by the school-SIM outbox.
 Portal clients provide Android file selection, save exports to the user-selected
 location, printing, back/reload and local session clearing. File/content URL
 loading, cleartext, third-party cookies, WebView permission grants, native
-JavaScript bridges and foreign-origin navigation are blocked. TLS errors stop
+JavaScript bridges and foreign-origin WebView navigation are blocked. User-tapped
+HTTPS, telephone and email links can open in another app after confirmation;
+no SchoolFlow session cookies are passed to those apps. TLS errors stop
 navigation. Backup is disabled and screenshots are protected. Download requests
 carry the current same-origin session cookie without following redirects.
 

@@ -115,7 +115,9 @@ class ShareholderIsolationTests(unittest.TestCase):
             g.institute_engine=app.extensions['identity_helpers']['engine'](self.a);db.session.remove()
             F=app.extensions['finance_models'];stamp=dict(created_at=datetime.now(timezone.utc),updated_at=datetime.now(timezone.utc),created_by='QA',updated_by='QA')
             ga=F['group'](name='Assets',account_class='Assets',active=True,**stamp);ge=F['group'](name='Equity',account_class='Equity',active=True,**stamp);db.session.add_all([ga,ge]);db.session.flush()
-            cash=F['account'](name='QA cash',code=91001,group_id=ga.id,inactive=False,**stamp);equity=F['account'](name='QA capital',code=3001,group_id=ge.id,inactive=False,**stamp);db.session.add_all([cash,equity]);db.session.add(F['period'](begin=date(2026,1,1),end=date(2026,12,31),closed=False,**stamp));db.session.commit();cash_id=cash.id;equity_id=equity.id;db.session.remove()
+            cash=F['account'](name='QA cash',code=91001,group_id=ga.id,inactive=False,**stamp);equity=F['account'](name='QA capital',code=3001,group_id=ge.id,inactive=False,**stamp);db.session.add_all([cash,equity]);db.session.flush()
+            if not F['period'].query.filter_by(begin=date(2026,1,1),end=date(2026,12,31)).first():db.session.add(F['period'](begin=date(2026,1,1),end=date(2026,12,31),closed=False,**stamp))
+            db.session.commit();cash_id=cash.id;equity_id=equity.id;db.session.remove()
         g.pop('institute_engine',None)
         token=self.csrf();self.assertEqual(self.client.post('/workspace/finance/shareholders/new',data=dict(_csrf=token,version='0',post_token=secrets.token_urlsafe(32),name='Private capital owner',equity='50',account_id=equity_id,campus='Campus Only School A',active='1')).status_code,302)
         data=dict(_csrf=token,version='1',post_token=secrets.token_urlsafe(32),day='2026-11-01',campus='Campus Only School A',cash_account=cash_id,amount='100')
@@ -140,7 +142,7 @@ class ShareholderStaffTests(unittest.TestCase):
             F=app.extensions['finance_models'];P=app.extensions['shareholder_model'];stamp=dict(created_at=datetime.now(timezone.utc),updated_at=datetime.now(timezone.utc),created_by='QA',updated_by='QA')
             ga=F['group'](name='Assets',account_class='Assets',active=True,**stamp);ge=F['group'](name='Equity',account_class='Equity',active=True,**stamp);db.session.add_all([ga,ge]);db.session.flush()
             a=F['account'](name='Allowed cash',code=91001,group_id=ga.id,inactive=False,**stamp);e=F['account'](name='Capital',code=3001,group_id=ge.id,inactive=False,**stamp);db.session.add_all([a,e]);db.session.flush();self.aid=a.id
-            db.session.add(F['period'](begin=date(2026,1,1),end=date(2026,12,31),closed=False,**stamp))
+            if not F['period'].query.filter_by(begin=date(2026,1,1),end=date(2026,12,31)).first():db.session.add(F['period'](begin=date(2026,1,1),end=date(2026,12,31),closed=False,**stamp))
             db.session.add(P(name='Fictional Partner',equity_bp=5000,account_id=e.id,campus='Campus A',active=True,token=secrets.token_urlsafe(32),created_at=datetime.now(timezone.utc),updated_at=datetime.now(timezone.utc),created_by='Fixture',updated_by='Fixture',created_key='fixture'))
         self.tenant(seed)
         def grant(create=False,delete=False,cash=False,two=False):
