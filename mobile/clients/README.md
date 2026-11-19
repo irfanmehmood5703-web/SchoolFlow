@@ -109,5 +109,6 @@ including the latest inquiry, fee-plan, challan, partial-payment and reversal
 flows when permitted. Parents use the existing family-visible fee, result,
 attendance, diary, notice and messaging pages subject to school privileges.
 These clients share server workflows rather than maintaining copies of forms.
-Android confirmation dialogs support the web actions' explicit confirmation;
+Android alert, confirmation and text dialogs support web actions; page Print
+buttons use the native print service after loading;
 the toolbar scrolls on small screens and shows the installed school app name.
