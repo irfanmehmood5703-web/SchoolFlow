@@ -75,6 +75,29 @@ def configure_sms_gateway(app,db,Student):
             return redirect(url_for('sms_gateway.index'))
         jobs=Job.query.order_by(Job.created.desc()).limit(100).all()
         return render_template('sms_gateway.html',title='School SIM SMS',devices=Device.query.order_by(Device.id).all(),jobs=jobs,campuses=[(c,c) for c in app.extensions['staff_access_helpers']['campuses']()])
+    @bp.route('/workspace/admission-query-sms',methods=['POST'])
+    def admission_query_sms():
+        owner();csrf()
+        row=Workflow.query.filter_by(id=request.form.get('query_id',type=int),kind='queries').first_or_404()
+        if row.status in ('Voided','Closed'):raise ValueError('This inquiry is closed.')
+        device=db.get_or_404(Device,request.form.get('device_id',type=int))
+        if not device.active:raise ValueError('Choose an active school SMS device.')
+        recipient=phone(row.data.get('phone',''))
+        body=request.form.get('message','').strip()
+        if not 1<=len(body)<=1000:raise ValueError('SMS must be between 1 and 1,000 characters.')
+        # One explicit submission token prevents accidental double queueing.
+        token=request.form.get('sms_token','')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}',token):raise ValueError('Reload the inquiry page before sending.')
+        source='admission-query:'+str(row.id)+':'+token
+        if Job.query.filter_by(source=source).first():
+            flash('This SMS request is already queued.','success')
+            return redirect(url_for('ops.register',kind='queries'))
+        job=Job(source=source,device_id=device.id,phone=recipient,text=body,generation=device.generation,detail='Admission inquiry #'+str(row.id))
+        db.session.add(job);audit('Queue admission inquiry SMS',query_id=row.id,job_id=job.id,device_id=device.id)
+        db.session.commit()
+        flash('SMS queued for the school SMS App. Delivery is not yet confirmed.','success')
+        return redirect(url_for('ops.register',kind='queries'))
+
     def candidates(row,device):
         data=row.data;preferences=data.get('preferences',{})
         if data.get('audience')!='parent' or not preferences.get('app_sms'):raise ValueError('Only student-parent App SMS requests can be released to the SIM outbox.')
