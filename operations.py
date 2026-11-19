@@ -327,6 +327,8 @@ def configure_operations(app, db, Student, Employee):
                         if key=='follow_up':day(value)
                         if len(value)>1000:raise ValueError('Bulk field is too long.')
                         fields[key]=value
+                notes_mode=request.form.get('bulk_notes_mode','replace')
+                if 'notes' in fields and notes_mode not in ('replace','append'):raise ValueError('Choose a valid notes update mode.')
                 if status and status not in ('Active','Follow-up','Converted','Closed'):raise ValueError('Choose a valid status.')
                 if not status and not fields:raise ValueError('Select a status or at least one field to update.')
                 reason=request.form.get('reason','').strip()
@@ -338,9 +340,17 @@ def configure_operations(app, db, Student, Employee):
                         if (target.data or {}).get('student_id') and status!='Converted':raise ValueError('An enrolled student must remain Converted. Do not change the admission status.')
                         target.status=status
                     data=dict(target.data or {})
-                    data.update(fields)
+                    updated_fields=dict(fields)
+                    if 'notes' in updated_fields and notes_mode=='append':
+                        existing=str(data.get('notes') or '').strip()
+                        addition=updated_fields['notes'].strip()
+                        if not addition:raise ValueError('Enter a note to add.')
+                        combined=(existing+'\n'+addition) if existing else addition
+                        if len(combined)>1000:raise ValueError('Combined notes exceed 1,000 characters. Shorten the new note or use Replace Notes.')
+                        updated_fields['notes']=combined
+                    data.update(updated_fields)
                     history=list(data.get('status_history',[]))
-                    history.append(dict(previous=previous,status=status or previous,fields=fields,date=effective.isoformat(),reason=reason))
+                    history.append(dict(previous=previous,status=status or previous,fields=updated_fields,date=effective.isoformat(),reason=reason,notes_mode=notes_mode if 'notes' in updated_fields else None))
                     data['status_history']=history[-100:]
                     target.data=data
                     audit('Bulk admission inquiry status',query_id=target.id,previous=previous,status=status,reason=reason)
