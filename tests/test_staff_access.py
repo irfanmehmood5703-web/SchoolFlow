@@ -376,7 +376,8 @@ class StaffAccessTests(unittest.TestCase):
         def seed():
             fm=app.extensions['finance_models'];rm=app.extensions['requisition_models'];stamp=dict(created_at=now,updated_at=now,created_by='QA',updated_by='QA')
             group=fm['group'](name='QA assets',account_class='Assets',active=True,**stamp);db.session.add(group);db.session.flush()
-            for i,name in enumerate(('Cash in Hand','Staff Advances'),1000):db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
+            for i,name in enumerate(('Cash in Hand','Staff Advances'),91000):
+                if not fm['account'].query.filter_by(name=name).first():db.session.add(fm['account'](code=i,name=name,group_id=group.id,inactive=False,**stamp))
             db.session.add(fm['period'](begin=today,end=today,closed=False,**stamp))
             from requisitions import DEFAULTS
             db.session.flush();cash=fm['account'].query.filter_by(name='Cash in Hand').one();advance=fm['account'].query.filter_by(name='Staff Advances').one()

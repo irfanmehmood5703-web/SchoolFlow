@@ -466,9 +466,14 @@ class IdentityTests(unittest.TestCase):
         response=self.client.post('/workspace/finance/groups/new',data={'_csrf':token,'version':'0','name':'Only School A Finance','account_class':'Assets','active':'1'})
         self.assertEqual(response.status_code,302)
         self.assertIn(b'Only School A Finance',self.client.get('/workspace/finance/groups').data)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.a);db.session.remove()
+            private_id=app.extensions['finance_models']['group'].query.filter_by(name='Only School A Finance').one().id
+            db.session.remove()
+        g.pop('institute_engine',None)
         self.login('TEST-B')
         self.assertNotIn(b'Only School A Finance',self.client.get('/workspace/finance/groups').data)
-        self.assertEqual(self.client.get('/workspace/finance/groups/1').status_code,404)
+        self.assertEqual(self.client.get('/workspace/finance/groups/'+str(private_id)).status_code,404)
 
 
     def test_ledger_entries_and_account_choices_are_school_private(self):

@@ -40,11 +40,13 @@ class StudentFeePlanTests(unittest.TestCase):
     def test_money_bounds_nan_and_unconfirmed_percentage(self):
         for changes in [dict(discount_1='3500.01'),dict(discount_1='NaN'),dict(arrears_1='-1'),dict(percentage='-1'),dict(year='abc'),dict(effective='2026-13')]:
             self.assertEqual(self.save(**changes).status_code,422,changes);self.assertEqual(self.P.query.count(),0)
-    def test_actual_cannot_be_overridden_and_incomplete_rows_rejected(self):
+    def test_student_actual_override_and_incomplete_rows_rejected(self):
         data=self.form();data.pop('discount_1')
         self.assertEqual(self.post(f'/{self.s.id}/edit',**data).status_code,422)
-        self.assertEqual(self.save(actual_1='1',net_1='1').status_code,302)
-        self.assertEqual(self.P.query.one().data['lines'][1]['actual'],350000)
+        self.assertEqual(self.save(actual_1='3600',net_1='1').status_code,302)
+        self.assertEqual(self.P.query.one().data['lines'][1]['actual'],360000)
+        self.assertEqual(self.P.query.one().data['lines'][1]['net'],120000)
+        self.assertEqual(self.m['workflow'].query.filter_by(kind='fee-plans').filter(self.m['workflow'].data['particular'].as_string()=='Tuition Fee').one().data['amount'],'3500')
     def test_stale_save_rejected_and_change_audited(self):
         data=self.form();self.assertEqual(self.post(f'/{self.s.id}/edit',**data).status_code,302)
         self.assertEqual(self.post(f'/{self.s.id}/edit',**data).status_code,422)

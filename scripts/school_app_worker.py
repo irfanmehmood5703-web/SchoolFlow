@@ -76,7 +76,7 @@ def build(branding,logo,keyfile,password):
         subprocess.run(args,cwd=CLIENTS,env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password},check=True)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':2},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:

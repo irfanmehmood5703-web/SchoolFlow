@@ -10,6 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
 
+SOURCE_VERSION=2
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -73,7 +74,7 @@ def configure_school_apps(app,db):
         profile=db.session.get(Profile,1);row=Item.query.filter_by(kind='school-app-branding',scope='',name='launcher').first()
         name=display_name((row.data.get('display_name') if row else '') or ' '.join(str((profile.data.get('name') if profile else '') or school.name).split())[:80])
         logo=bytes(profile.logo) if profile and profile.logo_mime and profile.logo else b''
-        spec=dict(name=name,code=school.code,school_key=school.storage_key,logo_sha256=hashlib.sha256(logo).hexdigest(),source_version=1)
+        spec=dict(name=name,code=school.code,school_key=school.storage_key,logo_sha256=hashlib.sha256(logo).hexdigest(),source_version=SOURCE_VERSION)
         fingerprint=hashlib.sha256(json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
         return spec,logo,fingerprint,row
     def current(school):
@@ -84,7 +85,7 @@ def configure_school_apps(app,db):
         school=private_school()
         if not school:return None
         spec,build,row=current(school)
-        return dict(name=spec['name'],has_logo=bool(spec['logo_sha256']!=hashlib.sha256(b'').hexdigest()),state=build.state if build else 'not-requested',error=build.error if build else '',version=row.version if row else 0,can_prepare=bool(session.get('owner_id')) and not session.get('staff_id'),ready=bool(build and build.state=='ready'))
+        return dict(name=spec['name'],has_logo=bool(spec['logo_sha256']!=hashlib.sha256(b'').hexdigest()),state=build.state if build else 'not-requested',error=build.error if build else '',version=row.version if row else 0,can_prepare=bool(session.get('owner_id')) and not session.get('staff_id'),ready=bool(build and build.state=='ready'),sequence=build.sequence if build else 0)
     def releases(rows):
         school=private_school()
         if not school:return rows
@@ -123,6 +124,9 @@ def configure_school_apps(app,db):
         db.session.flush();spec,logo,fingerprint,_=snapshot(school)
         latest_build=Build.query.filter_by(school_key=school.storage_key).order_by(Build.sequence.desc()).first()
         existing=latest_build if latest_build and latest_build.fingerprint==fingerprint else None
+        if existing and existing.state=='ready' and request.form.get('rebuild')=='1':
+            if request.form.get('build_sequence')!=str(existing.sequence):raise ValueError('The app build changed. Reload before requesting an update.')
+            existing=None
         if existing:
             if existing.state=='failed' and existing.attempts>=3:raise ValueError('This school build failed three times. The central software owner must review it before another attempt.')
             if existing.state=='failed':existing.state='queued';existing.error='';existing.worker='';existing.lease_until=0
@@ -173,7 +177,20 @@ def configure_school_apps(app,db):
         return row
     @bp.post('/api/app-builder/claim')
     def claim():
-        claims=authenticate_builder();payload();lock();stamp=time.time()
+        claims=authenticate_builder();data=payload()
+        if data.get('source_version')!=SOURCE_VERSION:abort(409,'Update the central app builder before claiming school builds.')
+        lock();stamp=time.time()
+        # Existing school installs receive this client update with the same
+        # package/signing key. New schools are still explicitly provisioned.
+        latest=db.session.query(Build.school_key,db.func.max(Build.sequence)).group_by(Build.school_key).all()
+        for school_key,sequence in latest:
+            previous=Build.query.filter_by(school_key=school_key,sequence=sequence).one()
+            if previous.state!='ready' or previous.spec.get('source_version',1)>=SOURCE_VERSION:continue
+            if not School.query.filter_by(storage_key=school_key,active=True).first():continue
+            spec={**previous.spec,'source_version':SOURCE_VERSION}
+            fingerprint=hashlib.sha256(json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+            db.session.add(Build(school_key=school_key,fingerprint=fingerprint,sequence=sequence+1,spec=spec,logo=previous.logo))
+        db.session.flush()
         row=Build.query.filter_by(state='building',worker=worker(claims)).filter(Build.lease_until>stamp).first()
         if not row:
             expired=Build.query.filter(Build.state=='building',Build.lease_until<=stamp).all()

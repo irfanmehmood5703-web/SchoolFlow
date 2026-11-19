@@ -18,14 +18,14 @@ final class PortalScreen {
  private PermissionRequest microphone;private boolean foreground;
  private ValueCallback<Uri[]> files;private String downloadUrl;private final ExecutorService io=Executors.newSingleThreadExecutor();
  PortalScreen(Activity activity){a=activity;}
- private String startUrl(){return EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE+(BuildConfig.INSTITUTE_CODE.isEmpty()?"":"?school="+BuildConfig.INSTITUTE_CODE);}
+ private String startUrl(){return EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE+(BuildConfig.INSTITUTE_CODE.isEmpty()?"":"?school="+BuildConfig.INSTITUTE_CODE+"&scope="+BuildConfig.SCHOOL_SCOPE);}
  void show(Bundle state){
   LinearLayout root=new LinearLayout(a);root.setOrientation(LinearLayout.VERTICAL);LinearLayout bar=new LinearLayout(a);
   Button home=new Button(a);home.setText("Home");home.setOnClickListener(v->web.loadUrl(startUrl()));bar.addView(home);
   Button reload=new Button(a);reload.setText("Reload");reload.setOnClickListener(v->web.reload());bar.addView(reload);
   Button print=new Button(a);print.setText("Print");print.setOnClickListener(v->((PrintManager)a.getSystemService(Context.PRINT_SERVICE)).print("SchoolFlow",web.createPrintDocumentAdapter("SchoolFlow"),null));bar.addView(print);
   Button clear=new Button(a);clear.setText("Sign out");clear.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("Clear this app’s school session?").setPositiveButton("Sign out",(d,w)->{CookieManager.getInstance().removeAllCookies(ok->{web.clearHistory();web.clearCache(true);WebStorage.getInstance().deleteAllData();web.loadUrl(startUrl());});}).setNegativeButton("Cancel",null).show());bar.addView(clear);
-  root.addView(bar);status=new TextView(a);root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
+  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);root.addView(brand);status=new TextView(a);root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
   WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSafeBrowsingEnabled(true);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.setWebViewClient(new WebViewClient(){
@@ -37,6 +37,8 @@ final class PortalScreen {
    @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error){if(req.isForMainFrame())status.setText("School unavailable. Check internet, then tap Reload.");}
   });
   web.setWebChromeClient(new WebChromeClient(){
+   @Override public boolean onJsAlert(WebView view,String url,String message,JsResult result){if(!EndpointPolicy.allowed(url)){result.cancel();return true;}new AlertDialog.Builder(a).setMessage(message).setPositiveButton("OK",(d,w)->result.confirm()).setOnCancelListener(d->result.cancel()).show();return true;}
+   @Override public boolean onJsConfirm(WebView view,String url,String message,JsResult result){if(!EndpointPolicy.allowed(url)){result.cancel();return true;}new AlertDialog.Builder(a).setMessage(message).setPositiveButton("Confirm",(d,w)->result.confirm()).setNegativeButton("Cancel",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;}
    @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(files!=null)files.onReceiveValue(null);files=callback;try{a.startActivityForResult(params.createIntent(),41);}catch(ActivityNotFoundException e){files.onReceiveValue(null);files=null;status.setText("No file chooser installed.");}return true;}
    @Override public void onPermissionRequest(PermissionRequest request){a.runOnUiThread(()->requestMicrophone(request));}
    @Override public void onPermissionRequestCanceled(PermissionRequest request){a.runOnUiThread(()->{if(microphone==request)microphone=null;});}

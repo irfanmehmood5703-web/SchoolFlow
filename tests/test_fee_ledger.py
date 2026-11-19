@@ -20,6 +20,21 @@ class FeeLedgerTests(unittest.TestCase):
     def pay(self,s,b,amount='80',discount='20',**changes):
         data=dict(_csrf=self.csrf,student_id=s.id,bill_id=b.id,mode='current',token=secrets.token_urlsafe(24),paid_date='2026-11-01',account='Cash in Hand',**{'amount_'+str(b.id):amount,'discount_'+str(b.id):discount});data.update(changes)
         return self.c.post('/workspace/pay',data=data)
+    def test_particular_partial_payment_and_mixed_form_rejection(self):
+        self.config();student,bill=self.seed()
+        bill.lines=[dict(particular='Tuition',amount=6000),dict(particular='Books',amount=4000)];db.session.commit()
+        data=dict(_csrf=self.csrf,student_id=student.id,bill_id=bill.id,mode='current',token=secrets.token_urlsafe(24),paid_date='2026-11-01',account='Cash in Hand')
+        data.update({'line_amount_'+str(bill.id)+'_0':'50','line_discount_'+str(bill.id)+'_1':'10'})
+        mixed={**data,'amount_'+str(bill.id):'99'}
+        self.assertEqual(self.c.post('/workspace/pay',data=mixed).status_code,422)
+        self.assertEqual((bill.paid,bill.discount),(0,0))
+        self.assertEqual(self.c.post('/workspace/pay',data=data).status_code,302)
+        self.assertEqual((bill.paid,bill.discount,bill.remaining),(5000,1000,4000))
+        receipt=app.extensions['ops_models']['receipt'].query.one()
+        import json
+        self.assertEqual(json.loads(receipt.notes.split('\n',1)[0][len('[SF-LINES]'):]),[[5000,0],[0,1000]])
+        self.assertEqual(self.net(self.asset),5000)
+
     def net(self,account):return sum(x.debit-x.credit for x in self.j['line'].query.filter_by(account_id=account.id))
     def test_disabled_default_and_settings_validation(self):
         s,b=self.seed();self.assertEqual(self.pay(s,b).status_code,302);self.assertEqual(self.j['journal'].query.count(),0)
