@@ -360,6 +360,20 @@ def configure_records(app, db, Student, Employee):
         if kind=='student' and obj is None and request.method=='GET':
             Profile=app.extensions['institute_setup_models']['profile'];profile=db.session.get(Profile,1)
             if profile and profile.data.get('current_session'):data.setdefault('academic_session',profile.data['current_session'])
+        if kind=='student' and obj is None and request.method=='GET':
+            inquiry_id=request.args.get('inquiry_id',type=int)
+            if inquiry_id:
+                Workflow=app.extensions['ops_models']['workflow']
+                inquiry=Workflow.query.filter_by(id=inquiry_id,kind='queries').first_or_404()
+                if inquiry.status in ('Voided','Closed') or inquiry.data.get('student_id'):
+                    abort(409)
+                mapping={'name':'name','father':'father','phone':'phone','class_name':'class_name',
+                         'mother_name':'mother_name','mother_phone':'mother_phone',
+                         'gender':'gender','date_of_birth':'date_of_birth',
+                         'address':'address','academic_session':'session','section':'section'}
+                for dest,src in mapping.items():
+                    if inquiry.data.get(src):data[dest]=inquiry.data[src]
+                data['admission_inquiry_id']=str(inquiry.id)
         files = RecordFile.query.filter_by(owner_kind=kind, owner_id=obj.id).all() if obj else []
         photo = next((f for f in files if f.photo), None)
         families = RecordFamily.query.order_by(RecordFamily.number).all()
@@ -391,6 +405,18 @@ def configure_records(app, db, Student, Employee):
             data.pop("password", None)
             return render_form(kind, obj, data, errors, 422)
         created = obj is None
+        inquiry=None
+        if kind=='student' and created and request.form.get('admission_inquiry_id'):
+            raw=request.form.get('admission_inquiry_id','')
+            if not raw.isdigit():abort(400)
+            Workflow=app.extensions['ops_models']['workflow']
+            inquiry=Workflow.query.filter_by(id=int(raw),kind='queries').with_for_update().first_or_404()
+            if inquiry.status in ('Voided','Closed') or inquiry.data.get('student_id'):
+                errors['form']='This inquiry has already been converted or closed.'
+                return render_form(kind,obj,data,errors,409)
+            if data.get('name','').strip().casefold()!=str(inquiry.data.get('name','')).strip().casefold():
+                errors['form']='Student name differs from the selected inquiry. Review the inquiry first.'
+                return render_form(kind,obj,data,errors,422)
         capacity_waiting = False
         try:
             if kind == "student":
@@ -451,6 +477,13 @@ def configure_records(app, db, Student, Employee):
                 RecordFile.query.filter_by(owner_kind=kind, owner_id=obj.id, photo=True).delete()
             for f in files:
                 db.session.add(RecordFile(owner_kind=kind, owner_id=obj.id, **f))
+            if inquiry is not None:
+                inquiry_data=dict(inquiry.data or {})
+                inquiry_data['student_id']=obj.id
+                inquiry_data['admission_no']=obj.admission_no
+                inquiry_data['converted_date']=date.today().isoformat()
+                inquiry.data=inquiry_data
+                inquiry.status='Converted'
             db.session.add(RecordEvent(owner_kind=kind, owner_id=obj.id, action="Created" if created else "Updated"))
             Audit=app.extensions['ops_models']['audit']
             db.session.add(Audit(action=('Create ' if created else 'Update ')+kind,data=dict(record_kind=kind,record_id=obj.id,record_name=obj.name,before=audit_before,after=safe(data))))
