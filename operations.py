@@ -383,6 +383,9 @@ def configure_operations(app, db, Student, Employee):
             data['sms_consent']=request.form.get('sms_consent')=='on'
             data['followup_history']=list(row.data.get('followup_history',[]))
             data['status_history']=list(row.data.get('status_history',[]))
+            # Preserve immutable conversion linkage when editing public inquiry fields.
+            for key in ('student_id','admission_no','converted_date'):
+                if key in before:data[key]=before[key]
             row.data=data
             row.status=status
             audit('Update admission inquiry',query_id=row.id,before=before,after=data,status=status)
@@ -454,9 +457,26 @@ def configure_operations(app, db, Student, Employee):
             # inquiries back to Follow-up, so converted reporting stays accurate.
             repaired=0
             for inquiry in rows:
-                if inquiry.status not in ('Voided','Converted') and (inquiry.data or {}).get('student_id'):
+                if inquiry.status=='Voided':continue
+                details=dict(inquiry.data or {})
+                # A previous edit could discard the student_id. Recover only from
+                # an explicit prior audit snapshot, never by guessing from names.
+                if not details.get('student_id'):
+                    logs=Audit.query.filter_by(action='Update admission inquiry').order_by(Audit.id.desc()).all()
+                    for log in logs:
+                        payload=log.data or {}
+                        prior=payload.get('before') or {}
+                        if str(payload.get('query_id'))!=str(inquiry.id) or not isinstance(prior,dict):continue
+                        sid=prior.get('student_id')
+                        student=db.session.get(Student,int(sid)) if str(sid).isdigit() else None
+                        if student:
+                            for key in ('student_id','admission_no','converted_date'):
+                                if prior.get(key) is not None:details[key]=prior[key]
+                            inquiry.data=details
+                            break
+                if details.get('student_id') and inquiry.status!='Converted':
                     inquiry.status='Converted'
-                    audit('Restore converted admission inquiry status',query_id=inquiry.id,student_id=inquiry.data['student_id'])
+                    audit('Restore converted admission inquiry status',query_id=inquiry.id,student_id=details['student_id'])
                     repaired+=1
             if repaired:commit()
             q=request.args.get('q','').strip().casefold()
