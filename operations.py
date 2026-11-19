@@ -273,6 +273,47 @@ def configure_operations(app, db, Student, Employee):
             return redirect(url_for('fee_setup.schedules'))
         if kind=='shifts':return redirect(url_for('school_settings.assign_shifts'),code=307 if request.method=='POST' else 302)
         schema=SCHEMAS[kind]
+        if kind=='queries' and request.method=='POST' and request.form.get('action') in ('bulk_query','delete_query','followup_query'):
+            action=request.form['action']
+            ids=selected() if action=='bulk_query' else [request.form.get('query_id',type=int)]
+            if not ids or any(not x for x in ids) or len(ids)>200:raise ValueError('Select between 1 and 200 inquiries.')
+            targets=Workflow.query.filter(Workflow.id.in_(ids),Workflow.kind=='queries',Workflow.status!='Voided').with_for_update().all()
+            if len(targets)!=len(ids):raise ValueError('An inquiry was not found or was already deleted.')
+            if action=='bulk_query':
+                status=request.form.get('query_status','')
+                if status not in ('Active','Follow-up','Converted','Closed'):raise ValueError('Choose a valid status.')
+                reason=request.form.get('reason','').strip()
+                if not 1<=len(reason)<=1000:raise ValueError('Provide a reason (up to 1,000 characters).')
+                effective=day(request.form.get('effective_date',''))
+                for target in targets:
+                    previous=target.status
+                    target.status=status
+                    data=dict(target.data or {})
+                    history=list(data.get('status_history',[]))
+                    history.append(dict(previous=previous,status=status,date=effective.isoformat(),reason=reason))
+                    data['status_history']=history[-100:]
+                    target.data=data
+                    audit('Bulk admission inquiry status',query_id=target.id,previous=previous,status=status,reason=reason)
+            elif action=='delete_query':
+                target=targets[0]
+                target.status='Voided'
+                audit('Void admission inquiry',query_id=target.id)
+            else:
+                target=targets[0]
+                follow=day(request.form.get('follow_up',''))
+                note=request.form.get('followup_note','').strip()
+                if not 1<=len(note)<=1000:raise ValueError('Add a follow-up note (up to 1,000 characters).')
+                data=dict(target.data or {})
+                history=list(data.get('followup_history',[]))
+                history.append(dict(date=school_today().isoformat(),next_date=follow.isoformat(),note=note))
+                data['followup_history']=history[-100:]
+                data['follow_up']=follow.isoformat()
+                target.data=data
+                target.status='Follow-up'
+                audit('Admission inquiry follow-up',query_id=target.id,next_date=follow.isoformat())
+            commit()
+            flash('Admission inquiry changes saved.','success')
+            return redirect(url_for('ops.register',kind='queries'))
         if kind=='queries' and request.method=='POST' and request.form.get('action')=='update_query':
             row=Workflow.query.filter_by(id=request.form.get('query_id',type=int),kind='queries').with_for_update().first_or_404()
             if row.status=='Voided': raise ValueError('This inquiry is no longer active.')
@@ -352,6 +393,11 @@ def configure_operations(app, db, Student, Employee):
                 flash('Record saved.','success')
             return redirect(url_for('ops.register',kind=kind))
         rows=Workflow.query.filter_by(kind=kind).filter(Workflow.status!='Voided').order_by(Workflow.id.desc()).all()
+        if kind=='queries':
+            q=request.args.get('q','').strip().casefold()
+            status=request.args.get('status','').strip()
+            if q:rows=[r for r in rows if q in ' '.join(str(r.data.get(k,'')) for k in ('name','father','phone','class_name')).casefold()]
+            if status:rows=[r for r in rows if r.status==status]
         return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,increment_token=secrets.token_urlsafe(24),sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
 
     @bp.route('/approve-students',methods=['POST'])
