@@ -20,6 +20,13 @@
 {% endif %}
 <form method="post" class="form-card">{{m.csrf()}}<div class="table-toolbar"><h2>Saved entries · {{rows|length}}</h2>{% if kind=='queries' %}<details class="query-bulk-sms"><summary>✉ Bulk SMS — selected admission inquiries (manual send only)</summary><p>Only inquiries with recorded parent SMS consent are eligible. Select rows below, choose a connected phone, and explicitly queue messages.</p><div class="fields-grid"><label>School Name<input name="school_name" maxlength="120" value="{{session.get('school_name','SchoolFlow')}}"></label><label>SMS App Device<select name="device_id"><option value="">Choose connected phone</option>{% for device in sms_devices %}<option value="{{device.id}}">{{device.name}} — {{device.campus}}</option>{% endfor %}</select></label><label>Message Template<textarea name="bulk_message" rows="3" maxlength="1000" placeholder="Dear Parent, admission inquiry for {student_name} in {class_name} at {school_name}."></textarea></label></div><input type="hidden" name="sms_token" value="{{increment_token}}"><p>Placeholders: {student_name}, {class_name}, {school_name}. No SMS is sent when a query is saved.</p><button name="action" value="bulk_sms" formaction="{{url_for('sms_gateway.admission_query_bulk_sms')}}" onclick="return confirm('Queue SMS for selected inquiries? SIM charges may apply when the phone sends them.')">Queue Selected SMS</button></details>{% endif %}{% if kind=='queries' %}<div class="query-bulk-controls"><select name="query_status"><option value="">Keep current status</option>{% for s in ['Active','Follow-up','Converted','Closed'] %}<option value="{{s}}">{{s}}</option>{% endfor %}</select><label><input type="checkbox" name="change_class_name"> Change Class</label><select name="bulk_class_name"><option value="">Choose class</option>{% for id,label in choices('class_name') %}<option value="{{id}}">{{label}}</option>{% endfor %}</select><label><input type="checkbox" name="change_follow_up"> Change Follow-up</label><input name="bulk_follow_up" type="date"><label><input type="checkbox" name="change_notes"> Change Notes</label><input name="bulk_notes" maxlength="1000" placeholder="Updated notes"><input name="effective_date" type="date" value="{{today}}" required><input name="reason" placeholder="Reason for change" maxlength="1000"><button name="action" value="bulk_query" data-needs-selection onclick="return confirm('Change status of selected admission inquiries?')">Bulk Update Status</button></div>{% endif %}{% if kind in ['increments','advances','leave-approvals','lecture-register'] %}<div><button name="action" value="approve" data-needs-selection>Approve selected</button><button name="action" value="reject" data-needs-selection>Reject selected</button></div>{% endif %}</div><input class="table-search" placeholder="Search saved entries"><div class="table"><table><thead><tr><th><input type="checkbox" data-select-all></th><th>ID</th>{% for key,label,typ,required in schema %}<th>{{label}}</th>{% endfor %}<th>Status</th>{% if kind=='queries' %}<th>Actions</th>{% endif %}</tr></thead><tbody>{% for row in rows %}<tr><td><input type="checkbox" name="ids" value="{{row.id}}" {{'disabled' if row.status=='Paid' else ''}}></td><td>{{row.id}}</td>{% for key,label,typ,required in schema %}<td>{{dict(choices(typ)).get(row.data.get(key),row.data.get(key,'')) if typ in ['employee','teacher','student'] else row.data.get(key,'')}}</td>{% endfor %}<td>{{row.status}}</td>{% if kind=='queries' %}<td><div class="query-action-grid"><a class="query-action query-action-edit" href="#query-admission-{{row.id}}">✓ Admission</a><a class="query-action query-action-edit" href="#query-edit-{{row.id}}">✎ Update</a><a class="query-action" href="#query-followup-{{row.id}}">◷ Follow-up</a><a class="query-action" href="#query-print-{{row.id}}">▤ Print</a><a class="query-action query-action-sms" href="#query-sms-{{row.id}}">✉ SMS</a><a class="query-action query-action-delete" href="#query-delete-{{row.id}}">× Delete</a></div></td>{% endif %}</tr>{% else %}<tr><td colspan="20" class="empty-state">No records yet. Add a test entry above.</td></tr>{% endfor %}</tbody></table></div></form>
 {% if kind=='queries' %}
+<style>
+details[id^="query-admission-"],details[id^="query-edit-"],details[id^="query-followup-"],details[id^="query-print-"],details[id^="query-sms-"],details[id^="query-delete-"]{display:none}
+details.query-active-panel{display:block!important;position:fixed;inset:5vh max(12px,calc((100vw - 850px)/2));z-index:1100;overflow:auto;max-height:90vh;margin:0!important;padding:20px!important;background:#fff;box-shadow:0 16px 65px #102c2480;border:1px solid #b8d6c8;border-radius:14px}
+.query-panel-backdrop{position:fixed;inset:0;background:#081f18a8;z-index:1099}
+.query-panel-close{float:right;position:sticky;top:0;z-index:2;border:1px solid #b8d6c8;border-radius:8px;background:#f3faf6;padding:8px 12px;cursor:pointer;font-weight:700}
+@media(max-width:600px){details.query-active-panel{inset:2vh 8px;max-height:96vh;padding:14px!important}.query-action-grid{grid-template-columns:repeat(2,minmax(85px,1fr))}}
+</style>
 <div class="form-card"><h2>Admission inquiry actions</h2><p>Update a saved inquiry or prepare an SMS for its contact. Messages require an active school SMS App device and are queued, not automatically delivered.</p></div>
 {% for row in rows %}
 <details class="form-card" id="query-admission-{{row.id}}"><summary><strong>Admission Confirmation Preparation — {{row.data.get('name','')}}</strong></summary><p>Prepare the inquiry for admission. The official Student Admission Form remains responsible for creating a unique student ID, checking duplicates, capacity, and assigning fees. This action does not create a duplicate student or activate fees. The official form below pre-fills available details and links the inquiry after a successful student save.</p><p>Student: <strong>{{row.data.get('name','')}}</strong> · Class: {{row.data.get('class_name','')}} · Contact: {{row.data.get('phone','')}}</p>{% if row.data.get('admission_prepared') %}<p><strong>Prepared:</strong> {{row.data.get('admission_prepared_date','')}} · {{row.data.get('admission_note','')}}</p>{% endif %}<form method="post">{{m.csrf()}}<input type="hidden" name="action" value="prepare_admission"><input type="hidden" name="query_id" value="{{row.id}}"><label>Admission Date<input type="date" name="admission_date" value="{{today}}" required></label><label>Office Note<textarea name="admission_note" maxlength="1000"></textarea></label><button type="submit">Prepare Admission</button></form><p><a class="button secondary" href="{{url_for('records.new_record',kind='student',inquiry_id=row.id)}}">Open Official Student Admission Form</a></p></details>
@@ -69,20 +76,23 @@ select.addEventListener('change',function(){if(this.value){var message=this.valu
 </script>
 {% endif %}
 <script>
-/* Action links must expand their target <details>; a hash alone only scrolls. */
+/* Student action buttons open one focused panel instead of six stacked sections. */
 (function(){
-  function openQueryAction(hash){
-    if(!hash || !/^#query-(?:admission|edit|followup|print|sms|delete)-[0-9]+$/.test(hash))return;
-    var target=document.getElementById(hash.slice(1));
-    if(!target || target.tagName.toLowerCase()!=='details')return;
-    target.open=true;
-    requestAnimationFrame(function(){target.scrollIntoView({behavior:'smooth',block:'start'});});
+  var backdrop=document.createElement('div');backdrop.className='query-panel-backdrop';backdrop.hidden=true;document.body.appendChild(backdrop);
+  var active=null,previousFocus=null;
+  function closePanel(){if(!active)return;active.classList.remove('query-active-panel');active.open=false;var btn=active.querySelector('.query-panel-close');if(btn)btn.remove();active=null;backdrop.hidden=true;document.body.style.overflow='';if(previousFocus)previousFocus.focus();}
+  function openPanel(hash){
+    if(!/^#query-(?:admission|edit|followup|print|sms|delete)-[0-9]+$/.test(hash||''))return;
+    var target=document.getElementById(hash.slice(1));if(!target||target.tagName!=='DETAILS')return;
+    if(active===target)return;
+    closePanel();previousFocus=document.activeElement;active=target;target.open=true;target.classList.add('query-active-panel');target.scrollTop=0;
+    var close=document.createElement('button');close.type='button';close.className='query-panel-close';close.textContent='✕ Close';close.setAttribute('aria-label','Close inquiry action');close.addEventListener('click',closePanel);target.insertBefore(close,target.firstChild);
+    backdrop.hidden=false;document.body.style.overflow='hidden';close.focus();
   }
-  document.querySelectorAll('a.query-action[href^="#query-"]').forEach(function(link){
-    link.addEventListener('click',function(){openQueryAction(link.getAttribute('href'));});
-  });
-  openQueryAction(window.location.hash);
-  window.addEventListener('hashchange',function(){openQueryAction(window.location.hash);});
+  document.querySelectorAll('a.query-action[href^="#query-"]').forEach(function(link){link.addEventListener('click',function(event){event.preventDefault();openPanel(link.getAttribute('href'));});});
+  backdrop.addEventListener('click',closePanel);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePanel();});
+  openPanel(window.location.hash);
 })();
 </script>
 {% endblock %}
