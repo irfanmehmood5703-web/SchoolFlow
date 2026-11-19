@@ -160,6 +160,46 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('campus')?.addEventListener('change',filterSubjects);
     fetch('/workspace/core/exam/subject-options').then(r=>r.ok?r.json():Promise.reject()).then(data=>{subjectMappings=data;filterSubjects()}).catch(()=>{});
   }
+  // Filter the built-in HRM hierarchy while leaving school-created options available.
+  const employeeForm = document.querySelector('form[data-kind="employee"]');
+  if (employeeForm) {
+    const department = document.getElementById('department');
+    const groupSelect = document.getElementById('designation_group');
+    const designation = document.getElementById('role');
+    const hierarchy = {
+      'Academics': {'Teaching': ['Teacher','Senior Teacher','Coordinator']},
+      'Administration': {'Management': ['Principal','Vice Principal','Administrator']},
+      'Accounts & Finance': {'Finance Staff': ['Accountant','Cashier','Fee Clerk']},
+      'Cleaning & Maintenance': {'Support Staff': ['Cleaner','Sweeper','Maintenance Worker']},
+      'Security': {'Security Staff': ['Security Guard','Gatekeeper']},
+      'Transport': {'Transport Staff': ['Driver','Transport Incharge']},
+      'IT': {'Technical Staff': ['IT Officer','Computer Operator']},
+      'Front Desk': {'Office Staff': ['Receptionist','Admission Officer']}
+    };
+    const builtInGroups = new Set(Object.values(hierarchy).flatMap(groups => Object.keys(groups)));
+    const builtInRoles = new Set(Object.values(hierarchy).flatMap(groups => Object.values(groups).flat()));
+    function filterHierarchy() {
+      const groups = hierarchy[department?.value];
+      if (!groupSelect || !designation) return;
+      [...groupSelect.options].forEach(option => {
+        if (!option.value) return;
+        const allowed = !groups || !builtInGroups.has(option.value) || Object.hasOwn(groups,option.value);
+        option.hidden = !allowed; option.disabled = !allowed;
+      });
+      if (groupSelect.selectedOptions[0]?.disabled) groupSelect.value = '';
+      const allowedRoles = groups?.[groupSelect.value];
+      [...designation.options].forEach(option => {
+        if (!option.value) return;
+        const allowed = !groups || !builtInRoles.has(option.value) || !!allowedRoles?.includes(option.value);
+        option.hidden = !allowed; option.disabled = !allowed;
+      });
+      if (designation.selectedOptions[0]?.disabled) designation.value = '';
+    }
+    department?.addEventListener('change',filterHierarchy);
+    groupSelect?.addEventListener('change',filterHierarchy);
+    employeeForm.addEventListener('catalog-option-added',filterHierarchy);
+    filterHierarchy();
+  }
   const role=document.getElementById('role'),group=document.getElementById('designation_group');
   if(role&&group)fetch('/workspace/core/hrm/designation-options').then(r=>r.ok?r.json():Promise.reject()).then(links=>{
     const update=()=>[...role.options].forEach(o=>{const valid=!links[o.value]||links[o.value]===group.value;o.hidden=!valid;o.disabled=!valid;if(!valid&&o.selected)role.value=''});
