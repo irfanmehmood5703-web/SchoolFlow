@@ -273,6 +273,26 @@ def configure_operations(app, db, Student, Employee):
             return redirect(url_for('fee_setup.schedules'))
         if kind=='shifts':return redirect(url_for('school_settings.assign_shifts'),code=307 if request.method=='POST' else 302)
         schema=SCHEMAS[kind]
+        if kind=='queries' and request.method=='POST' and request.form.get('action')=='update_query':
+            row=Workflow.query.filter_by(id=request.form.get('query_id',type=int),kind='queries').with_for_update().first_or_404()
+            if row.status=='Voided': raise ValueError('This inquiry is no longer active.')
+            data={}
+            for key,label,typ,required in schema:
+                value=request.form.get(key,'').strip()
+                if required and not value: raise ValueError(label+' is required.')
+                if len(value)>5000: raise ValueError(label+' is too long.')
+                if value and typ=='date': day(value)
+                if typ in ('campus','class_name','section','subject') and value and value not in dict(choices(typ)): raise ValueError('Choose a configured '+label+'.')
+                data[key]=value
+            status=request.form.get('query_status','Active')
+            if status not in ('Active','Follow-up','Converted','Closed'): raise ValueError('Invalid inquiry status.')
+            before=dict(row.data)
+            row.data=data
+            row.status=status
+            audit('Update admission inquiry',query_id=row.id,before=before,after=data,status=status)
+            commit()
+            flash('Admission inquiry updated.','success')
+            return redirect(url_for('ops.register',kind='queries'))
         if request.method=='POST':
             action=request.form.get('action','save')
             if action in ('approve','reject','delete'):
@@ -327,7 +347,7 @@ def configure_operations(app, db, Student, Employee):
                 flash('Record saved.','success')
             return redirect(url_for('ops.register',kind=kind))
         rows=Workflow.query.filter_by(kind=kind).filter(Workflow.status!='Voided').order_by(Workflow.id.desc()).all()
-        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,increment_token=secrets.token_urlsafe(24))
+        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,increment_token=secrets.token_urlsafe(24),sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
 
     @bp.route('/approve-students',methods=['POST'])
     def approve_students():
