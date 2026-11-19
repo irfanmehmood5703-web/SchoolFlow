@@ -177,4 +177,10 @@ STANDARD_CHOICES = {
     "disability": ["None", "Visual", "Hearing", "Physical", "Learning", "Other", "Not specified"],
     "mother_tongue": ["Urdu", "Punjabi", "English", "Sindhi", "Pashto", "Balochi", "Saraiki", "Hindko", "Other"],
     "guardian_relation": ["Father", "Mother", "Guardian", "Other"],
+    # Built-in HRM catalog; custom options remain institute-owned in RecordSettings.
+    "department": ["Academics", "Administration", "Accounts & Finance", "Cleaning & Maintenance", "Security", "Transport", "IT", "Front Desk"],
+    "designation_group": ["Teaching", "Management", "Finance Staff", "Support Staff", "Security Staff", "Transport Staff", "Technical Staff", "Office Staff"],
+    "designation": ["Teacher", "Senior Teacher", "Coordinator", "Principal", "Vice Principal", "Administrator", "Accountant", "Cashier", "Fee Clerk", "Cleaner", "Sweeper", "Maintenance Worker", "Security Guard", "Gatekeeper", "Driver", "Transport Incharge", "IT Officer", "Computer Operator", "Receptionist", "Admission Officer"],
+    "employment_type": ["Full Time", "Part Time", "Contract", "Temporary", "Visiting"],
+    "pay_mode": ["Cash", "Bank Transfer", "Cheque"],
 }
