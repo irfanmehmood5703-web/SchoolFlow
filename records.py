@@ -388,6 +388,8 @@ def configure_records(app, db, Student, Employee):
         from user_logging import safe
         audit_before=safe(read_data(kind,obj)) if obj else {}
         data, errors = validate_form(kind, obj)
+        if kind=='student' and obj is None and request.form.get('admission_inquiry_id'):
+            data['admission_inquiry_id']=request.form.get('admission_inquiry_id')
         files, file_errors = incoming_files()
         if kind=='employee':
             spec=app.extensions['school_settings_helpers']['config']('hrm:employee-fields')
