@@ -1,6 +1,7 @@
 """Real staff sign-in, per-action campus scopes and revoked-session enforcement."""
 import os,tempfile,unittest,time
 from datetime import date
+from school_clock import school_today
 from flask import g
 from werkzeug.security import generate_password_hash
 os.environ['DATABASE_URL']='sqlite:///:memory:'
@@ -150,7 +151,7 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.get('/api/v1/summary').status_code,403)
     def test_cash_account_and_payment_date_rules_are_checked_before_payment(self):
         self.login();token=self.token()
-        base={'_csrf':token,'student_id':'1','account':'Cash at Bank','paid_date':date.today().isoformat()}
+        base={'_csrf':token,'student_id':'1','account':'Cash at Bank','paid_date':school_today().isoformat()}
         self.assertEqual(self.c.post('/workspace/pay',data=base).status_code,403)
         base.update(account='Cash in Hand',paid_date='2020-01-01');self.assertEqual(self.c.post('/workspace/pay',data=base).status_code,403)
     def test_account_or_permission_change_invalidates_an_existing_sign_in(self):
@@ -231,10 +232,10 @@ class StaffAccessTests(unittest.TestCase):
         def scope():
             r=db.session.get(self.Staff,1);r.data={**r.data,'permissions':{'payroll.update':['Campus A']}}
         self.tenant(scope);self.login()
-        self.assertEqual(self.c.post('/workspace/payroll',data={'_csrf':self.token(),'action':'send','month':'2026-10','ids':['1'],'credit':'Cash in Hand','debit':'Cash in Hand','paid_date':date.today().isoformat()}).status_code,403)
+        self.assertEqual(self.c.post('/workspace/payroll',data={'_csrf':self.token(),'action':'send','month':'2026-10','ids':['1'],'credit':'Cash in Hand','debit':'Cash in Hand','paid_date':school_today().isoformat()}).status_code,403)
     def test_direct_payment_request_and_discount_approval_keep_real_receipt_amounts(self):
         self.two_step();self.login()
-        response=self.c.post('/workspace/direct-payment',data={'_csrf':self.token(),'number':'1','lookup':'sid','token':'directQueuePayment_1234567890','account':'Cash in Hand','paid_date':date.today().isoformat(),'amount_1':'10','action':'pay'});self.assertEqual(response.status_code,302,response.data);self.assertEqual(self.balances(),(0,0,1))
+        response=self.c.post('/workspace/direct-payment',data={'_csrf':self.token(),'number':'1','lookup':'sid','token':'directQueuePayment_1234567890','account':'Cash in Hand','paid_date':school_today().isoformat(),'amount_1':'10','action':'pay'});self.assertEqual(response.status_code,302,response.data);self.assertEqual(self.balances(),(0,0,1))
         self.login('owner@example.invalid');self.assertEqual(self.c.post('/workspace/core/users/payment-requests',data={'_csrf':self.token(),'id':'1','action':'approve'}).status_code,302);self.assertEqual(self.balances(),(1000,1,1))
         def discount_access():
             r=db.session.get(self.Staff,1);r.data={**r.data,'accounts':['Cash in Hand','Discounts']}
