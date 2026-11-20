@@ -9,4 +9,14 @@
 .issued-document .certificate-sheet.card img[alt="Student photo"]{border:2px solid #176b4a!important;border-radius:6px!important;box-shadow:0 1px 5px rgba(0,0,0,.15)!important}
 .issued-document .certificate-sheet.card img[alt="Student QR code"]{border:2px solid #d3e4da!important;border-radius:4px!important;padding:2px!important;background:#fff!important}
 @media print{.issued-document .certificate-sheet.card article>table>tbody>tr>td,.issued-document .certificate-sheet.card article>table>tbody>tr>td>table,.issued-document .certificate-sheet.card article>table>tbody>tr>td>table td{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-shadow:none!important}.issued-document .certificate-sheet.card article>table>tbody>tr>td{outline:1px solid #a4c9b6!important}}
+
+/* Final ID-card readability polish: clear identity hierarchy and balanced spacing. */
+.issued-document .certificate-sheet.card article>table>tbody>tr>td>table td{padding:5mm 4mm!important;vertical-align:middle!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child h3:first-of-type{font-size:16px!important;line-height:1.25!important;margin:8px 0 10px!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child h3:nth-of-type(2){font-size:17px!important;line-height:1.3!important;margin:9px 0 5px!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child h3{font-size:16px!important;letter-spacing:.7px!important;margin:5px 0 11px!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td p{font-size:12px!important;line-height:1.55!important;margin:7px 0!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:nth-last-of-type(2){font-weight:700!important;color:#155b40!important}
+.issued-document .certificate-sheet.card img[alt="Student QR code"]{width:27mm!important;height:27mm!important}
+@media print{.issued-document .certificate-sheet.card article>table>tbody>tr>td{break-inside:avoid!important}}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
