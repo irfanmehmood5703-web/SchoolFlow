@@ -104,3 +104,13 @@ class TeacherAppTests(unittest.TestCase):
         def check():
             E=app.extensions['student_extras_models']['entry'];self.assertEqual(E.query.filter_by(kind='diary').count(),1);self.assertEqual(E.query.first().data['homework'],'Exercise two')
         self.tenant(check)
+    def test_class_wise_marks_include_class_and_subject_wise_respects_enrollment(self):
+        self.seed()
+        def make():
+            details=self.rm['student'].query.filter_by(student_id=self.pupil).one();details.data={**details.data,'subjects':['Urdu']}
+            row=self.ops['workflow'](kind='awards',status='Active',data=dict(name='Fictional class exam',campus='Campus A',class_name='One',section='A',student_filter='class',papers=[dict(subject='Math',grading='Marks',total=37,date=str(school_today()),teacher='1')]))
+            db.session.add(row);db.session.flush();return row.id
+        aid=self.tenant(make);path=f'/teacher-app/classes/{self.cid}/marks/{aid}/0';self.assertIn(b'Pupil Campus A',self.c.get(path).data)
+        def filter_subject():
+            row=db.session.get(self.ops['workflow'],aid);row.data={**row.data,'student_filter':'subject'}
+        self.tenant(filter_subject);self.assertNotIn(b'Pupil Campus A',self.c.get(path).data)

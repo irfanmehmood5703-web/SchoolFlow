@@ -175,7 +175,11 @@ def configure_teacher_app(app,db,Student,Employee):
     def study_file(cid,iid,fid):
         c=cohort(cid,'student_extras.view');study_item(c,iid);f=app.extensions['parent_study_models']['file'].query.filter_by(id=fid,item_id=iid).first_or_404();return attachment(f)
     def exam_rows(c,award):
-        rows=roster(c);return [(s,d) for s,d in rows if all(not award.data.get(k) or d.get(k)==award.data[k] for k in ('section','gender','group_name','academic_session'))]
+        rows=[(s,d) for s,d in roster(c,False) if all(not award.data.get(k) or d.get(k)==award.data[k] for k in ('section','gender','group_name','academic_session'))]
+        def roll(pair):
+            student,data=pair;value=str(data.get('roll_no','')).strip();return (not bool(value),0 if value.isdigit() else 1,int(value) if value.isdigit() else value.casefold(),student.id)
+        rows.sort(key=roll if award.data.get('sort_order')=='roll' else (lambda pair:pair[0].id))
+        return rows
     def exams(c):
         out=[]
         for a in W.query.filter_by(kind='awards',status='Active').order_by(W.id.desc()).all():
@@ -185,7 +189,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return out
     @bp.route('/classes/<int:cid>/exams/new',methods=['GET','POST'])
     def create_exam(cid):
-        c=cohort(cid,'exam.create');rows=roster(c);catalog={k:sorted({d.get(k) for s,d in rows if d.get(k)}) for k in ('gender','group_name','academic_session')};settings=app.extensions['school_settings_helpers'];config=settings['subject_config'](c.data['subject']);grading=config.get('grading','Marks');token=review('new-exam',cid,dict(assignment=c.data,catalog=catalog,config=config))
+        c=cohort(cid,'exam.create');rows=roster(c,False);catalog={k:sorted({d.get(k) for s,d in rows if d.get(k)}) for k in ('gender','group_name','academic_session')};settings=app.extensions['school_settings_helpers'];config=settings['subject_config'](c.data['subject']);grading=config.get('grading','Marks');token=review('new-exam',cid,dict(assignment=c.data,catalog=catalog,config=config))
         if request.method=='POST':
             name=request.form.get('name','').strip();day=parse_day(request.form.get('exam_date'));returned=parse_day(request.form.get('return_date'));typ=request.form.get('test_type');sort=request.form.get('sort_order');filtering=request.form.get('student_filter')
             if not 1<=len(name)<=180 or typ not in ('Written','Oral','Practical') or sort not in ('sid','roll','section') or filtering not in ('class','subject') or returned<day:raise ValueError('Check exam name, dates, assessment type and sorting.')
@@ -214,6 +218,7 @@ def configure_teacher_app(app,db,Student,Employee):
         if request.method=='POST':
             extra_ids(['mark_','state_'],ids)
             for s,d in rows:
+                if not any(k+str(s.id) in request.form for k in ('mark_','state_')):continue
                 state=request.form.get('state_'+str(s.id),'');value=request.form.get('mark_'+str(s.id),'').strip()
                 if state not in ('','A','L'):raise ValueError('Invalid paper attendance.')
                 row=saved.get(s.id)
