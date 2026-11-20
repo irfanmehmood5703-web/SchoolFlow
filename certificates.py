@@ -183,7 +183,7 @@ def configure_certificates(app,db,Student):
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'school-leaving':
             legacy_start='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p><p>Was admitted on'
-            if content.get('body','').startswith(legacy_start):
+            if legacy_start in content.get('body',''):
                 from certificate_defaults import default_content
                 content=dict(content,body=default_content('school-leaving')['body'])
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
