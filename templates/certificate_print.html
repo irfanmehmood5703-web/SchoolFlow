@@ -19,4 +19,26 @@
 .issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:nth-last-of-type(2){font-weight:700!important;color:#155b40!important}
 .issued-document .certificate-sheet.card img[alt="Student QR code"]{width:27mm!important;height:27mm!important}
 @media print{.issued-document .certificate-sheet.card article>table>tbody>tr>td{break-inside:avoid!important}}
+
+/* Branded ID card backgrounds: green front, soft green back, white readable labels. */
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child>table,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child>table td{background:#176b4a!important;color:#fff!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child h3,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p b,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child strong{color:#fff!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child>table,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child>table td{background:#e8f3eb!important;color:#153d2b!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child h3,
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child p{color:#153d2b!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child img[alt="School logo"]{background:#fff!important;border-radius:5px!important;padding:3px!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:last-child img[alt="Student QR code"]{background:#fff!important;padding:5px!important}
+@media print{
+ .issued-document .certificate-sheet.card article>table>tbody>tr>td,
+ .issued-document .certificate-sheet.card article>table>tbody>tr>td>table,
+ .issued-document .certificate-sheet.card article>table>tbody>tr>td>table td{
+ -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
