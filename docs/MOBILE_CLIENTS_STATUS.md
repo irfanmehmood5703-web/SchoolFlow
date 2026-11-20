@@ -1,11 +1,9 @@
-# Connected Android clients and school-SIM outbox — 13 November 2026
+# Connected Android clients and school-SIM outbox — updated 20 November 2026
 
 This release supplies four separate Android test packages, targeting the original
 SchoolFlow HTTPS host. Parents, Teacher and Owner are restricted native portal
 clients over existing real web workflows, not independent offline/native rewrites.
-The SMS client uses Android's actual selected SIM API with explicit per-message
-confirmation, multipart count, encrypted connection/pending state and no automatic
-resend after the server's dispatch transition. No real SMS was sent during work.
+The SMS client uses Android's actual selected SIM API. An explicit Start authorizes a finite foreground queue with selectable 15/20/25-second spacing (default 20). Connection/pending state is encrypted and started/uncertain messages are never automatically resent. See SMS_BATCH_SENDING.md for Pause, recovery and result semantics. No real SMS was sent during work.
 
 General → App Links → Connect school SIM SMS registers owner-controlled campus
 phones. Communication Requests → Review for school SIM previews exact prepared
