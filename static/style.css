@@ -66,3 +66,23 @@ main{margin-left:0}.app-header{background:var(--dark);color:#fff;position:relati
  tr{break-inside:avoid}
  img{max-width:100%}
 }
+
+/* Print documents are separate from interactive screens across modules. */
+@media print{
+  .school-print-document-title{font-size:12px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;margin-top:10px;color:#176b4a}
+  .school-print-header{margin-bottom:6mm!important}
+  .app-header,.build-banner,.top-navigation,.workspace-utility,.skip-link,footer,.tab-strip,.page-actions,.heading-actions,.form-actions,.filter-grid,.pagination,.flash,.no-print,[data-print-hide]{display:none!important}
+  body,main,.page-content{display:block!important;position:static!important;overflow:visible!important;max-width:none!important;box-shadow:none!important}
+  .page-content{padding:0!important;margin:0!important;width:100%!important}
+  .page-heading{margin:0 0 5mm!important;padding:0!important}
+  .page-heading h1{font-size:17px!important;margin:0!important}
+  .page-heading .button,.page-heading button{display:none!important}
+  .form-card,.widget,.card{box-shadow:none!important;max-width:100%!important}
+  table{width:100%!important;border-collapse:collapse!important}
+  table th{background:#f0f5f1!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table th,table td{border-bottom:1px solid #dce5de!important;vertical-align:top}
+  p,td,th{orphans:2;widows:2}
+  h1,h2,h3,h4{break-after:avoid-page}
+  .page-content> :last-child{margin-bottom:0!important}
+  .print-copies.vertical{break-inside:auto}
+}
