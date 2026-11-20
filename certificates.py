@@ -179,6 +179,13 @@ def configure_certificates(app,db,Student):
             labelled='[stdPhoto]<p><b>Student Name:</b> [studentName]</p><p><b>Father Name:</b> [fatherName]</p><p><b>Class:</b> [className] &nbsp; <b>Section:</b> [sectionName]</p><p><b>Roll No.:</b> [rollNo] &nbsp; <b>Student ID:</b> [sid]</p>'
             if legacy in content.get('body',''):
                 content=dict(content,body=content['body'].replace(legacy,labelled))
+        # Upgrade only the untouched starter wording for future certificates.
+        # Campus-customized wording and previously issued documents remain unchanged.
+        if t.key == 'school-leaving':
+            legacy_start='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p><p>Was admitted on'
+            if content.get('body','').startswith(legacy_start):
+                from certificate_defaults import default_content
+                content=dict(content,body=default_content('school-leaving')['body'])
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
         html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
         return html,amounts,data
