@@ -24,7 +24,7 @@ jobs:
         env:
           IDENTITY_DATABASE_URL: ''
           SCHOOLFLOW_PRIVATE_STORAGE_QA: ''
-        run: python -W ignore -m unittest discover -s tests -q
+        run: python -X faulthandler -W ignore -m unittest discover -s tests -q
   postgres:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
@@ -54,6 +54,8 @@ jobs:
         run: python -W ignore -m unittest discover -s tests -p test_vendor_admin.py -q
       - name: Existing identity and cross-school regressions on PostgreSQL
         run: python -W ignore -m unittest discover -s tests -p test_identity.py -q
+      - name: Owner summaries and preference isolation on PostgreSQL
+        run: python -W ignore -m unittest discover -s tests -p test_owner_app.py -q
       - name: School APK queue on separate control database
         run: python -W ignore -m unittest discover -s tests -p test_school_apps.py -q
       - name: Shareholder accounting and tenant isolation

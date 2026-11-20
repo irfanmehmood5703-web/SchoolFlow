@@ -297,7 +297,8 @@ def configure_identity(app, db):
                 session.permanent = True
                 session.update(owner_id=owner.id, owner_version=owner.version, institute_id=school.id,
                                signed_in_at=time.time(), record_csrf=secrets.token_urlsafe(32))
-                return redirect(url_for('ops.dashboard'))
+                bound=app.extensions.get('mobile_client_helpers',{}).get('binding',lambda:None)()
+                return redirect(url_for('owner_app.home') if bound and bound.get('kind')=='owner' else url_for('ops.dashboard'))
             helper=app.extensions.get('staff_access_helpers',{})
             staff=helper.get('authenticate',lambda *args:None)(school,email,password)
             if staff and app.extensions.get('mobile_client_helpers',{}).get('role_allowed',lambda role:True)('teacher'):

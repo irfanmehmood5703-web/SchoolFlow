@@ -17,6 +17,7 @@ def configure_general_leaves(app, db, Student):
         status = db.Column(db.String(20), nullable=False, default='Pending')
         created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
+    app.extensions['general_leave_model']=StudentLeave
     bp = Blueprint('general_leaves', __name__, url_prefix='/api/general/leaves')
     def guard(write=False):
         identity = getattr(g, 'school_identity', None) or {}

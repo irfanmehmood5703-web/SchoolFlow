@@ -48,7 +48,7 @@ class ParentsPtmTests(unittest.TestCase):
     def credential(self):
         r=self.post('/workspace/general/parents/links/1',{'action':'issue'})
         self.assertEqual(r.status_code,200,r.data[:200])
-        full=html.unescape(re.search(rb'<strong>(.*?)</strong>',r.data)[1].decode())
+        full=html.unescape(re.search(rb'<strong data-parent-credential>(.*?)</strong>',r.data)[1].decode())
         return full.split('#')[1]
     def parent(self):
         credential=self.credential();c=app.test_client();self.token(c,'/parents/PARENT-TEST/enter')

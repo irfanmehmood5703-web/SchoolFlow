@@ -10,7 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
 
-SOURCE_VERSION=2
+SOURCE_VERSION=3
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -95,7 +95,7 @@ def configure_school_apps(app,db):
         for row in rows:
             if row['key'] not in ROLES:continue
             role=row['key'];file=files.get(role)
-            row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version='0.2-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school name and icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
+            row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school name and icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
         return rows
     def owner():
         school=private_school()

@@ -44,7 +44,7 @@ class BrandingValueTests(unittest.TestCase):
         self.template('[emp_name] [emp_photo] [emp_qr]',header='[institute_logo]')
         page=self.c.get('/workspace/core/hrm/print-template/1?employee_id=1')
         self.assertEqual(page.status_code,200);self.assertIn(b'[institute_logo]',page.data)
-        self.assertEqual(page.data.count(b'src="/workspace/core/logo"'),2) # shared heading plus document logo
+        self.assertEqual(page.data.count(b'src="/workspace/core/logo"'),3) # screen brand, print heading and document logo
         self.assertIn(f'src="/records/files/{photo.id}"'.encode(),page.data);self.assertIn(b'src="/workspace/core/hrm/employee-qr/1.svg"',page.data)
         qr=self.c.get('/workspace/core/hrm/employee-qr/1.svg');self.assertEqual(qr.status_code,200);self.assertEqual(qr.mimetype,'image/svg+xml');self.assertIn('no-store',qr.headers['Cache-Control'])
     def test_record_values_are_escaped_and_final_styles_are_resanitized(self):

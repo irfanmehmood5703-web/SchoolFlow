@@ -5,7 +5,7 @@ from decimal import Decimal
 from widget_catalog import WIDGETS
 
 
-def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_head=''):
+def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_head='',campus=''):
     out={}
     def add(key,value,unit,headers,rows,note,chart=None):
         if key in keys:out[key]=dict(value=value,unit=unit,headers=headers,rows=rows,note=note,chart=chart or [],chart_max=max([abs(float(v)) for _,v in (chart or [])]+[1]))
@@ -25,6 +25,10 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         cols=[D.data[k].as_string() for k in ('campus','section','admission_date','leaving_date','birth_date')]
         for row in db.session.query(Student.id,Student.name,Student.class_name,Student.status,*cols).outerjoin(D,D.student_id==Student.id).all():
             people.append(dict(id=row[0],name=row[1],class_name=row[2] or 'Unassigned',status=row[3],campus=row[4] or '',section=row[5] or '',joined=parsed(row[6]),left=parsed(row[7]),born=parsed(row[8])))
+    if campus:people=[s for s in people if s['campus']==campus]
+    employee_ids=set()
+    if campus:
+        E=rm['employee'];employee_ids={r[0] for r in db.session.query(Employee.id).join(E,E.employee_id==Employee.id).filter(E.data['campus'].as_string()==campus).all()}
     by_id={s['id']:s for s in people};active=[s for s in people if s['status']=='Active'];active_ids={s['id'] for s in active}
     work=[]
     if needed & {'Admissions','Exam & Attendance','HRM','General'}:
@@ -34,6 +38,7 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         if 'HRM' in needed:kinds.update(('salary-plans','increments','advances','leave-approvals'))
         if 'General' in needed:kinds.update(('complaints','suggestions','complaints-suggestions'))
         work=ops['workflow'].query.filter(ops['workflow'].kind.in_(kinds)).all()
+    if campus:work=[w for w in work if w.data.get('campus')==campus or str(w.data.get('student_id','')) in {str(s['id']) for s in people} or str(w.data.get('employee_id','')) in {str(e) for e in employee_ids}]
     if 'Admissions' in needed:
         queries=[w for w in work if w.kind=='queries']
         add('admission-queries',len(queries),'records',['ID','Student','Class','Status','Follow-up'],[[w.id,w.data.get('name',''),w.data.get('class_name',''),w.status,w.data.get('follow_up','')] for w in queries],'All saved admission enquiries, not invented conversion counts.')
@@ -42,16 +47,21 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         for k in ('active-students','student-strength','strength-chart'):
             add(k,len(active),'students',['SID','Student','Campus','Class','Section'],rows,'Currently Active student records in your permitted campus scope.',list(sorted(classes.items())))
         capacity=app.extensions['admission_capacity']['rows']() if 'admission-capacity' in keys else []
+        if campus:capacity=[r for r in capacity if r['campus']==campus]
         add('admission-capacity',sum(r['occupied'] for r in capacity),'occupied seats',['Campus','Class','Session','Enrolled','Seats','Available'],[[r['campus'],r['class_name'],r['academic_session'],r['occupied'],r['seats'] if r['seats'] is not None else 'Unlimited',r['available'] if r['available'] is not None else 'Unlimited'] for r in capacity],'Only configured capacity rows are included; no capacity is invented.')
         for key,field in [('new-admissions','joined'),('inactive-students','left')]:
             filtered=[s for s in people if s[field] and s[field].strftime('%Y-%m') in month_keys and s[field]<=today and (key!='inactive-students' or s['status']!='Active')]
             counts=Counter(s[field].strftime('%Y-%m') for s in filtered)
             add(key,len(filtered),'in 12 months',['SID','Student','Date','Campus','Class'],[[s['id'],s['name'],str(s[field]),s['campus'],s['class_name']] for s in filtered],'Last 12 calendar months through today, using actual admission/leaving dates. Missing dates are excluded.',[(m,counts[m]) for m in month_keys])
     if 'Finance' in needed:
-        bills=ops['bill'].query.all()
+        bill_query=ops['bill'].query
+        if campus:bill_query=bill_query.filter(ops['bill'].student_id.in_(by_id))
+        bills=bill_query.all()
         selected=[b for b in bills if start.strftime('%Y-%m')<=b.month<=end.strftime('%Y-%m')]
         receipts=ops['receipt'].query.filter(ops['receipt'].voided==False,ops['receipt'].day>=start,ops['receipt'].day<=end).all()
         month_receipts=ops['receipt'].query.filter(ops['receipt'].voided==False,ops['receipt'].day>=today.replace(day=1),ops['receipt'].day<=today).all()
+        if campus:
+            receipts=[r for r in receipts if r.student_id in by_id];month_receipts=[r for r in month_receipts if r.student_id in by_id]
         receipt_total=sum(r.amount for r in month_receipts)
         def bill_rows(rows):
             return [[b.id,by_id.get(b.student_id,{}).get('name',''),b.month,str(b.due),money(b.total),money(b.paid),money(b.discount),money(b.remaining)] for b in rows]
@@ -103,7 +113,7 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         if set(keys)&{'income-expenses','daily-profit'}:
             J=app.extensions['ledger_models']['journal'];L=app.extensions['ledger_models']['line']
             grouped=defaultdict(lambda:[0,0])
-            for day,snapshot,debit,credit in db.session.query(J.day,L.snapshot,L.debit,L.credit).join(L,L.journal_id==J.id).filter(J.day>=start,J.day<=end).all():
+            for day,snapshot,debit,credit in db.session.query(J.day,L.snapshot,L.debit,L.credit).join(L,L.journal_id==J.id).filter(J.day>=start,J.day<=end,*([J.campus==campus] if campus else [])).all():
                 typ=snapshot.get('account_class')
                 if typ=='Income':grouped[str(day)][0]+=credit-debit
                 elif typ=='Expense':grouped[str(day)][1]+=debit-credit
@@ -142,10 +152,10 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         bands=Counter('80%+' if r[-1]>=80 else '60–79.99%' if r[-1]>=60 else '40–59.99%' if r[-1]>=40 else 'Below 40%' for r in result_rows)
         add('performance-bands',bands['80%+'],'results at 80%+',['Award','SID','Student','Class','Month','Percentage'],result_rows,'Bands count saved student/award/month numeric result groups, not missing or qualitative marks.',list(bands.items()))
     if 'HRM' in needed:
-        employees=Employee.query.order_by(Employee.name).all();names={e.id:e.name for e in employees}
+        employees=Employee.query.filter(*([Employee.id.in_(employee_ids)] if campus else [])).order_by(Employee.name).all();names={e.id:e.name for e in employees}
         statuses=Counter(e.status for e in employees)
         add('employee-status',sum(e.status=='Active' for e in employees),'active employees',['Employee ID','Name','Role','Status'],[[e.id,e.name,e.role,e.status] for e in employees],'Saved employee statuses; inactive records remain in the report.',list(statuses.items()))
-        daily=ops['daily'].query.filter_by(kind='staff').filter(ops['daily'].day>=start,ops['daily'].day<=end).all();counts=Counter(r.status for r in daily);marked=[r for r in daily if r.status!='Off Day']
+        daily=ops['daily'].query.filter_by(kind='staff').filter(ops['daily'].day>=start,ops['daily'].day<=end,*([ops['daily'].person_id.in_(employee_ids)] if campus else [])).all();counts=Counter(r.status for r in daily);marked=[r for r in daily if r.status!='Off Day']
         value=round(sum(r.status in ('Present','Late') for r in marked)/len(marked)*100,2) if marked else None
         add('staff-attendance',value,'percent',['Employee','Date','Status'],[[names.get(r.person_id,'Unavailable'),str(r.day),r.status] for r in daily],'Present + Late as a percentage of saved non-Off-Day entries in the selected period; no unmarked staff are invented.',list(counts.items()))
         approvals=[w for w in work if w.kind in ('salary-plans','increments','advances')]
@@ -165,6 +175,7 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         add('complaints-chart',sum(complaint_months[m] for m in six),'records in 6 months',['Month','Records'],[[m,complaint_months[m]] for m in six],'Actual creation months of locally saved complaint/suggestion records.',[(m,complaint_months[m]) for m in six])
         add('updates',len(published),'published releases',['App','Version','Release notes'],[[r['label'],r['version'],r['notes']] for r in published],'Your configured SchoolFlow release versions and notes; no vendor announcements are copied.')
         requests=rm['communication'].query.filter(rm['communication'].created_at>=start,rm['communication'].created_at<end+timedelta(days=1)).all()
+        if campus:requests=[r for r in requests if r.student_id in by_id]
         add('sms',None,'SMS credit unavailable',['Request','Student ID','Status','Created'],[[r.id,r.student_id,r.status,str(r.created_at)] for r in requests],f'{len(requests)} local communication requests in the selected period. SIM/provider balance and recipient delivery are unavailable. Phone-submission results are recorded separately under School SIM SMS; saved requests here are not sent messages.')
     if 'attendance-donut' in out:
         summary=out['attendance-donut'];total=sum(value for _,value in summary['chart']);offset=0;segments=[]

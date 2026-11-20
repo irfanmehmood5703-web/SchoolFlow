@@ -41,7 +41,7 @@ class MessagingTests(unittest.TestCase):
         c=c or self.c;return c.post(path,data={'_csrf':self.csrf(c),**(data or {})},follow_redirects=bool(data and data.get('export')))
     def parent(self,fid=1):
         r=self.post('/workspace/general/parents/links/'+str(fid),{'action':'issue'});self.assertEqual(r.status_code,200)
-        full=html.unescape(re.search(rb'<strong>(.*?)</strong>',r.data)[1].decode());p=app.test_client();p.get('/parents/MSG-ONE/enter');r=self.post('/parents/MSG-ONE/enter',{'credential':full.split('#')[1]},p);self.assertEqual(r.status_code,302);return p
+        full=html.unescape(re.search(rb'<strong data-parent-credential>(.*?)</strong>',r.data)[1].decode());p=app.test_client();p.get('/parents/MSG-ONE/enter');r=self.post('/parents/MSG-ONE/enter',{'credential':full.split('#')[1]},p);self.assertEqual(r.status_code,302);return p
     def new(self,**changes):
         data=dict(campus='North',category='Parent',recipient='parent:1|1',subject='Fictional progress',body='Please review classwork.',token=secrets.token_urlsafe(32));data.update(changes);return data
     def create(self,**changes):
@@ -179,12 +179,31 @@ class MessagingTests(unittest.TestCase):
         self.assertEqual(teacher.get('/workspace/conversations/'+south).status_code,404)
     def test_simultaneous_exact_retry_creates_one_message(self):
         from concurrent.futures import ThreadPoolExecutor
+        from sqlalchemy import create_engine,select
+        from sqlalchemy.pool import StaticPool
         data=self.new();cookie=self.c.get_cookie('session').value
+        # StaticPool shares one SQLite DBAPI handle across request threads.
+        # Use independent real registry connections, as the private tenant DB
+        # already does, so this tests concurrent requests rather than racing
+        # commits/rollbacks on the same native sqlite3 connection.
+        key=app.extensions.get('identity_bind_key');original=db.engines[key];control=None
+        if original.dialect.name=='sqlite' and isinstance(original.pool,StaticPool):
+            control=create_engine('sqlite:///'+self.root.name+'/concurrent-control.db',connect_args={'timeout':20})
+            tables=[t for t in db.metadata.sorted_tables if t.info.get('identity_control')]
+            db.session.remove();db.metadata.create_all(control,tables=tables)
+            with original.connect() as source,control.begin() as target:
+                for table in tables:
+                    records=[dict(r) for r in source.execute(select(table)).mappings()]
+                    if records:target.execute(table.insert(),records)
+            db.engines[key]=control
         def send():
             client=app.test_client();client.set_cookie('session',cookie)
             return client.post('/workspace/conversations/new',data={'_csrf':self.csrf(),**data}).status_code
-        with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(lambda _:send(),range(2)))
-        self.assertEqual(statuses,[302,302]);self.assertEqual(self.tenant(lambda:self.M['message'].query.count()),1)
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:statuses=list(pool.map(lambda _:send(),range(2)))
+            self.assertEqual(statuses,[302,302]);self.assertEqual(self.tenant(lambda:self.M['message'].query.count()),1)
+        finally:
+            if control is not None:db.session.remove();db.engines[key]=original;control.dispose()
 
     def test_export_download_is_actor_bound_expiring_and_preserves_filters(self):
         self.create()
