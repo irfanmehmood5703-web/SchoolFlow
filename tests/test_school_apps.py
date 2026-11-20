@@ -149,8 +149,12 @@ class SchoolAppTests(unittest.TestCase):
         for row in self.M['build'].query.all():
             self.assertEqual(row.logo,b'');row.spec={**row.spec,'source_version':3}
         db.session.commit()
-        for index in range(2):
-            job=self.claim().json['job'];self.assertEqual(job['branding']['school_key'],self.schools[index][1]);self.assertEqual(base64.b64decode(job['logo']),logos[index]);self.assertEqual(job['branding']['logo_sha256'],hashlib.sha256(logos[index]).hexdigest());self.assertEqual(job['sequence'],2);self.complete(job)
+        seen=set()
+        for _ in range(2):
+            job=self.claim().json['job'];scope=job['branding']['school_key'];index=next(i for i,school in enumerate(self.schools) if school[1]==scope)
+            self.assertNotIn(scope,seen);seen.add(scope)
+            self.assertEqual(base64.b64decode(job['logo']),logos[index]);self.assertEqual(job['branding']['logo_sha256'],hashlib.sha256(logos[index]).hexdigest());self.assertEqual(job['sequence'],2);self.complete(job)
+        self.assertEqual(seen,{school[1] for school in self.schools})
 
     def test_signin_branding_and_logo_are_bound_to_installed_school(self):
         from PIL import Image
