@@ -46,3 +46,23 @@ main{margin-left:0}.app-header{background:var(--dark);color:#fff;position:relati
 @media print{
   :where(input,select,textarea){background:#fff!important;border-color:#aaa!important;box-shadow:none!important}
 }
+
+/* Shared tenant-branded print header; screen layout remains unchanged. */
+.school-print-header{display:none}
+@media print{
+ @page{size:A4;margin:10mm 12mm}
+ html,body{width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;background:#fff!important}
+ main{min-height:0!important;height:auto!important;overflow:visible!important}
+ .school-print-header{display:block!important;margin:0 0 9mm;padding:0 0 4mm;border-bottom:2px solid #176b4a;color:#142e24;break-after:avoid}
+ .school-print-brand{display:flex;align-items:center;gap:12px}
+ .school-print-brand img{display:block;max-width:65px;max-height:65px;object-fit:contain}
+ .school-print-brand strong{font-size:19px;line-height:1.25;display:block}
+ .school-print-contact{font-size:10px;line-height:1.5;margin-top:3px}
+ .workspace-assistant,.workspace-tools,#workspace-tools,.assistant-launcher,.print-settings{display:none!important}
+ .page-content{min-height:0!important;height:auto!important;overflow:visible!important}
+ .form-card,.widget{break-inside:auto}
+ .form-card table,.widget table{break-inside:auto}
+ thead{display:table-header-group}
+ tr{break-inside:avoid}
+ img{max-width:100%}
+}
