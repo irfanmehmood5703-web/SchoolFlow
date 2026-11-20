@@ -23,7 +23,7 @@ def clean_html(value,report_assets=False):
         if name in ('alt','title'):return True
         if tag=='a' and name=='href':return value.startswith(('https://','http://','mailto:','#'))
         if tag=='img' and name=='src' and report_assets and re.fullmatch(r'/workspace/core/(?:logo|hrm/employee-qr/\d+\.svg)',value):return True
-        if tag=='img' and name=='src':return bool(re.fullmatch(r'/(?:records/files/\d+|workspace/certificates/(?:logo/\d+|qr/\d+\.svg))',value))
+        if tag=='img' and name=='src':return bool(re.fullmatch(r'/(?:records/files/\d+|workspace/certificates/(?:logo/\d+|qr/\d+\.svg|guardian-qr/\d+\.svg))',value))
         return False
     return bleach.clean(str(value),tags=HTML_TAGS,attributes=attribute,protocols=['http','https','mailto'],strip=True,strip_comments=True,css_sanitizer=CSS)
 
@@ -398,7 +398,7 @@ def configure_certificates(app,db,Student):
                 else:
                     mime='image/svg+xml';content=guardian_qr(issue.id) if t.key=='guardian-card' else qrcode.make(qr_payload(s),image_factory=SvgPathImage,box_size=5,border=4).to_string()
                 return 'src="data:'+mime+';base64,'+base64.b64encode(content).decode()+'"' if content and mime else 'alt="Image unavailable"'
-            issue.html=re.sub(r'src="(/(?:records/files/\d+|workspace/certificates/(?:logo/\d+|qr/\d+\.svg)))"',freeze,issue.html)
+            issue.html=re.sub(r'src="(/(?:records/files/\d+|workspace/certificates/(?:logo/\d+|qr/\d+\.svg|guardian-qr/\d+\.svg)))"',freeze,issue.html)
             snapshot_bytes+=len(issue.html.encode())+sum(len(getattr(t,key).encode()) for key in ('header','body','footer'))
             if snapshot_bytes>20*1024*1024:raise ValueError('These documents are too large for one print batch. Select fewer students.')
             issue.snapshot=dict(student=dict(id=s.id,name=s.name,father=d.get('father') or s.father,roll_no=d.get('roll_no') or s.admission_no,class_name=s.class_name,section=d.get('section',''),academic_session=d.get('academic_session','')),template=dict(name=t.name,key=t.key,version=t.version,**{key:getattr(t,key) for key in ('header','body','footer')}),fees=amounts,copy_type=copy_type)
