@@ -167,6 +167,7 @@ def configure_certificates(app,db,Student):
         return values,amounts,d
     # All render state is passed explicitly; no globals or shared request state.
     def document(s,c,t,ref,copy_type,content=None):
+        from certificate_defaults import default_content
         values,amounts,data=mapping(s,c,ref,copy_type)
         values['reference']=f"{CATALOG.get(t.key,{'prefix':'DOC'})['prefix']}-{ref}"
         def replace(match):
@@ -189,7 +190,6 @@ def configure_certificates(app,db,Student):
         if t.key == 'school-leaving':
             legacy_start='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p><p>Was admitted on'
             if legacy_start in content.get('body',''):
-                from certificate_defaults import default_content
                 content=dict(content,body=default_content('school-leaving')['body'])
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
         html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
