@@ -314,17 +314,19 @@ def configure_records(app, db, Student, Employee):
     def incoming_files():
         errors, result = {}, []
         photo = request.files.get("photo")
+        guardian_photo = request.files.get("guardian_photo") if request.path.startswith("/workspace/records/student/") else None
         docs = request.files.getlist("documents")
         titles = request.form.getlist("document_title")
         if len(docs) > MAX_ATTACHMENTS:
             errors["documents"] = "A maximum of 20 documents can be added at once."
-        for i, item in enumerate(([photo] if photo and photo.filename else []) + [d for d in docs if d.filename]):
-            is_photo = item is photo
+        for i, item in enumerate(([photo] if photo and photo.filename else []) + ([guardian_photo] if guardian_photo and guardian_photo.filename else []) + [d for d in docs if d.filename]):
+            is_guardian = item is guardian_photo
+            is_photo = item is photo or is_guardian
             content = item.read(MAX_FILE + 1)
             filename = secure_filename(item.filename)[:180]
             ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
             if not filename or not content or len(content) > MAX_FILE:
-                errors["photo" if is_photo else "documents"] = "Use non-empty files up to 5 MB each."
+                errors["guardian_photo" if is_guardian else ("photo" if is_photo else "documents")] = "Use non-empty files up to 5 MB each."
                 continue
             if ext not in ALLOWED_DOCUMENTS:
                 errors["documents"] = "This file type is not supported."
@@ -332,7 +334,7 @@ def configure_records(app, db, Student, Employee):
             mime = "application/octet-stream"
             if is_photo:
                 if ext not in {"jpg", "jpeg", "png", "webp"}:
-                    errors["photo"] = "Use a JPG, PNG or WebP image."
+                    errors["guardian_photo" if is_guardian else "photo"] = "Use a JPG, PNG or WebP image."
                     continue
                 if content.startswith(b"\x89PNG\r\n\x1a\n"):
                     mime = "image/png"
@@ -344,11 +346,11 @@ def configure_records(app, db, Student, Employee):
                     errors["photo"] = "Use a JPG, PNG or WebP image."
                     continue
             doc_index = docs.index(item) if not is_photo else None
-            title = "Profile Photo" if is_photo else (titles[doc_index].strip() if doc_index < len(titles) else "")
+            title = ("Guardian Photo" if is_guardian else "Profile Photo") if is_photo else (titles[doc_index].strip() if doc_index < len(titles) else "")
             if not title:
                 errors["documents"] = "Enter an attachment title for each selected document."
                 continue
-            result.append(dict(title=title[:180], filename=filename, mime=mime, photo=is_photo,
+            result.append(dict(owner_kind="guardian" if is_guardian else None, title=title[:180], filename=filename, mime=mime, photo=is_photo,
                 content=content, sha256=hashlib.sha256(content).hexdigest()))
         return result, errors
 
@@ -376,11 +378,12 @@ def configure_records(app, db, Student, Employee):
                 data['admission_inquiry_id']=str(inquiry.id)
         files = RecordFile.query.filter_by(owner_kind=kind, owner_id=obj.id).all() if obj else []
         photo = next((f for f in files if f.photo), None)
+        guardian_photo = RecordFile.query.filter_by(owner_kind="guardian", owner_id=obj.id, photo=True).first() if kind == "student" and obj else None
         families = RecordFamily.query.order_by(RecordFamily.number).all()
         return render_template("record_form.html", kind=kind, obj=obj, data=data, errors=errors or {},
             sections=STUDENT_SECTIONS if kind == "student" else app.extensions['school_settings_helpers']['employee_sections'](),
             upload_settings=app.extensions['school_settings_helpers']['config']('hrm:employee-fields') if kind=='employee' else {},
-            choices=setup_choices(), families=families, photo=photo, files=[f for f in files if not f.photo],
+            choices=setup_choices(), families=families, photo=photo, guardian_photo=guardian_photo, files=[f for f in files if not f.photo],
             communication=STUDENT_COMMUNICATION, title=("Update " if obj else "Add ")+kind.title()), response_status
 
     def save_record(kind, obj=None):
@@ -475,10 +478,13 @@ def configure_records(app, db, Student, Employee):
                 f = RecordFile.query.filter_by(id=int(fid), owner_kind=kind, owner_id=obj.id, photo=False).first()
                 if f:
                     db.session.delete(f)
-            if (request.form.get("remove_photo") and upload_config.get("photo",{}).get("visible",True)) or any(f["photo"] for f in files):
+            if (request.form.get("remove_photo") and upload_config.get("photo",{}).get("visible",True)) or any(f["photo"] and f.get("owner_kind") != "guardian" for f in files):
                 RecordFile.query.filter_by(owner_kind=kind, owner_id=obj.id, photo=True).delete()
+            if kind == 'student' and (request.form.get("remove_guardian_photo") or any(f.get("owner_kind") == "guardian" for f in files)):
+                RecordFile.query.filter_by(owner_kind="guardian", owner_id=obj.id, photo=True).delete()
             for f in files:
-                db.session.add(RecordFile(owner_kind=kind, owner_id=obj.id, **f))
+                owner_kind = f.pop("owner_kind", None) or kind
+                db.session.add(RecordFile(owner_kind=owner_kind, owner_id=obj.id, **f))
             if inquiry is not None:
                 inquiry_data=dict(inquiry.data or {})
                 inquiry_data['student_id']=obj.id
