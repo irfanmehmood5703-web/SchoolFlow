@@ -18,6 +18,7 @@ CSS=CSSSanitizer(allowed_css_properties=['color','background-color','font-family
 def clean_html(value,report_assets=False):
     def attribute(tag,name,value):
         if name=='style':return True
+        if name=='class' and tag=='table':return value in ('guardian-front','guardian-back','guardian-facts')
         if name in ('colspan','rowspan') and tag in ('td','th'):return bool(re.fullmatch(r'\d{1,2}',value))
         if name in ('alt','title'):return True
         if tag=='a' and name=='href':return value.startswith(('https://','http://','mailto:','#'))
