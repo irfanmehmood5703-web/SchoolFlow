@@ -1,2 +1,21 @@
 <style>.certificate-sheet{box-sizing:border-box;width:100%;max-width:190mm;margin:0 auto;padding:8mm;color:#18392b;background:white;font:14px/1.6 Arial,sans-serif;overflow-wrap:anywhere;contain:layout paint}.certificate-sheet *{box-sizing:border-box}.certificate-sheet table{border-collapse:collapse;max-width:100%}.certificate-sheet td,.certificate-sheet th{padding:8px;border:1px solid #dce8e1}.certificate-sheet p{margin:12px 0}.certificate-sheet img{max-width:100%;object-fit:contain}.certificate-sheet h1{font-size:24px;margin:24px 0}.certificate-sheet h2{font-size:20px}.certificate-sheet hr{margin:20px 0;border:0;border-top:1px solid #a9cabc}.certificate-sheet.card{max-width:120mm;padding:4mm;font-size:10px}.certificate-sheet.card h3{font-size:12px}.certificate-sheet.card td{padding:4px}.certificate-sheet.card hr{page-break-after:auto}.certificate-sheet.label{max-width:120mm;font-size:12px}@media print{.certificate-sheet{break-after:page;max-width:190mm}.certificate-sheet.card{max-width:120mm;padding:4mm;font-size:10px}.certificate-sheet.card h3{font-size:12px}.certificate-sheet.card td{padding:4px}.certificate-sheet.label{max-width:120mm}}</style>
+
+<style>
+/* Readable, print-ready ID cards; applies to both newly generated and saved cards. */
+.certificate-sheet.card{max-width:178mm;padding:5mm;font-size:12px;line-height:1.45}
+.certificate-sheet.card article>table{width:100%!important;min-height:86mm;border-collapse:separate;border-spacing:3mm 0}
+.certificate-sheet.card article>table>tbody>tr>td{width:50%!important;vertical-align:top;padding:0!important;border:1px solid #d7e4dc;border-radius:8px;overflow:hidden}
+.certificate-sheet.card article>table>tbody>tr>td>table{width:100%!important;min-height:86mm;border-collapse:collapse}
+.certificate-sheet.card article>table>tbody>tr>td>table td{border:0!important;padding:5mm 3mm!important}
+.certificate-sheet.card h3{font-size:15px;line-height:1.25;margin:6px 0}
+.certificate-sheet.card p{font-size:11px;line-height:1.4;margin:6px 0}
+.certificate-sheet.card img[alt="Student photo"]{width:25mm!important;height:29mm!important;max-width:none!important;object-fit:cover!important;border:2px solid #fff;border-radius:5px}
+.certificate-sheet.card img[alt="School logo"]{width:16mm!important;height:16mm!important;max-width:none!important;object-fit:contain!important}
+.certificate-sheet.card img[alt="Student QR code"]{width:25mm!important;height:25mm!important;max-width:none!important;object-fit:contain!important}
+@media print{
+ .certificate-sheet.card{max-width:178mm!important;padding:0!important;font-size:12px!important;break-inside:avoid;break-after:auto!important}
+ .certificate-sheet.card article>table{break-inside:avoid}
+ .certificate-sheet.card article>table>tbody>tr>td{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
 <section class="certificate-sheet {{layout}}"><header>{{sections.header|safe}}</header><article>{{sections.body|safe}}</article><footer style="margin-top:24px">{{sections.footer|safe}}</footer></section>
