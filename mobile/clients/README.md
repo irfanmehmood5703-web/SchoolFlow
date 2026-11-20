@@ -15,7 +15,7 @@ silently sent by the school-SIM outbox.
 
 Portal clients provide Android file selection, save exports to the user-selected
 location, printing, back/reload and local session clearing. File/content URL
-loading, cleartext, third-party cookies, WebView permission grants, native
+loading, cleartext, third-party cookies, unreviewed WebView permission grants, native
 JavaScript bridges and foreign-origin WebView navigation are blocked. User-tapped
 HTTPS, telephone and email links can open in another app after confirmation;
 no SchoolFlow session cookies are passed to those apps. TLS errors stop
@@ -116,3 +116,34 @@ These clients share server workflows rather than maintaining copies of forms.
 Android alert, confirmation and text dialogs support web actions; page Print
 buttons use the native print service after loading;
 the toolbar scrolls on small screens and shows the installed school app name.
+
+
+## Dedicated Teacher workspace (source protocol 7)
+
+The Teacher client opens `/teacher-app`. An active Teacher staff account and
+linked employee are required. HRM assigns campus/class/section/subject; Users &
+Privileges grants each action. No permission is granted by installing an APK.
+`attendance.own`, `payroll.self` and `hrm.self_requests` allow personal records
+and pending requests without giving campus-wide HRM/payroll access. Separate
+`teacher.leave_view` and `teacher.leave_approve` grants control student leave.
+
+Teachers can change only assigned class attendance and paper marks. Unchanged
+attendance and gate time-in/out remain intact. Today’s own diary is editable;
+previous days are read-only. Published study resources, assignment reviews,
+student leave responses and scheduled notices use the existing Parent records.
+The school continues to control report publication. Scheduled notices appear
+in Parent App notifications from the selected Pakistan time, provided the
+teacher, grant and class assignment remain active. Personal reminders are
+shown in-app; background push and offline alarms are not implemented.
+
+Owner-issued Teacher QR links expire after ten minutes, are single-use and
+are invalidated by new issuance or account revocation. Scan with a phone QR
+camera or paste the school-issued link on the Teacher QR sign-in page. Username
+remembrance never saves the password. Normal session expiry/revocation applies.
+
+Only the Teacher flavour declares coarse/fine location permissions. A trusted
+foreground page may request precise location for the existing self-attendance
+geofence flow. Permission is not retained across navigations; pausing or leaving
+the page denies pending requests. Android installation, real GPS accuracy,
+precise-location permission denial and real campus check-in/out still require
+physical-device acceptance. Do not create real attendance as part of CI.

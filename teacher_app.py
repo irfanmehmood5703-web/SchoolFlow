@@ -102,17 +102,30 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('attendance',cohort=c,rows=rows,existing=existing,day=day,statuses=statuses,review_token=token)
     @bp.route('/classes/<int:cid>/diary',methods=['GET','POST'])
     def diary(cid):
-        c=cohort(cid,'student_extras.create' if request.method=='POST' else 'student_extras.view');E=app.extensions['student_extras_models']['entry']
+        c=cohort(cid,('student_extras.update' if request.form.get('action')=='update' else 'student_extras.create') if request.method=='POST' else 'student_extras.view');E=app.extensions['student_extras_models']['entry']
         if request.method=='POST':
             if parse_day(request.form.get('starts'))!=school_today():raise ValueError('Previous diaries are read-only. Choose today to write a diary.')
-            if any(request.form.get(k)!=str(c.data[k]) for k in ('campus','class_name','section')) or request.form.getlist('subjects')!=[c.data['subject']] or request.form.get('subject_name_0')!=c.data['subject'] or request.form.getlist('subject_slot')!=['0'] or request.form.get('action')!='save' or request.form.get('channel')!='app':abort(403)
+            if any(request.form.get(k)!=str(c.data[k]) for k in ('campus','class_name','section')) or request.form.getlist('subjects')!=[c.data['subject']] or request.form.get('subject_name_0')!=c.data['subject'] or request.form.getlist('subject_slot')!=['0'] or request.form.get('action') not in ('save','update') or request.form.get('channel')!='app':abort(403)
+            if request.form.get('action')=='update':
+                row=db.get_or_404(E,request.form.get('entry',type=int));ids={eid for sub in app.extensions['student_extras_models']['submission'].query.filter_by(actor='staff:'+str(g.staff_principal.id)).all() for eid in sub.entry_ids}
+                if row.id not in ids or row.kind!='diary' or row.starts!=school_today() or row.campus!=c.data['campus'] or any(row.data.get(k)!=c.data[k] for k in ('class_name','section','subject')):abort(403,'Only your own subject diary for today can be edited.')
+                review('diary-update',row.id,[row.body,row.data,c.data]);data=dict(row.data);size=0;count=0
+                for part in ('classwork','homework'):
+                    data[part]=clean_work(request.form.get(part+'_0',''));data[part+'_attachments']=list(data.get(part+'_attachments',[]))
+                    for name,mime,content in app.extensions['student_extra_uploads'](part+'_files_0'):
+                        size+=len(content);count+=1
+                        if size>15*1024*1024 or count>20:raise ValueError('Use up to twenty new files and 15 MB combined.')
+                        file=app.extensions['student_extras_models']['attachment'](entry_id=row.id,filename=name,mime=mime,content=content);db.session.add(file);db.session.flush();data[part+'_attachments'].append(file.id)
+                if not any(plain_work(data[part]) or data[part+'_attachments'] for part in ('classwork','homework')):raise ValueError('Enter classwork, homework or an attachment.')
+                row.data=data;row.body='Classwork: '+plain_work(data['classwork'])+'\nHomework: '+plain_work(data['homework']);audit('Teacher updated own subject diary',c,entry_id=row.id);db.session.commit();flash('Today’s subject diary updated.','success');return redirect(url_for('teacher_app.diary',cid=cid))
             def choices(key):return [c.data[key]] if key in c.data else []
             def scope_ok(campus):
                 if campus!=c.data['campus']:abort(403)
             app.extensions['diary_work_helpers']['save'](choices,scope_ok,parse_day,app.extensions['student_extra_uploads'])
             return redirect(url_for('teacher_app.diary',cid=cid))
         entries=E.query.filter_by(kind='diary',campus=c.data['campus']).order_by(E.starts.desc(),E.id.desc()).limit(300).all();entries=[e for e in entries if all(e.data.get(k)==c.data[k] for k in ('class_name','section','subject'))]
-        return render('diary',cohort=c,entries=entries)
+        own_ids={eid for sub in app.extensions['student_extras_models']['submission'].query.filter_by(actor='staff:'+str(g.staff_principal.id)).all() for eid in sub.entry_ids};editing=next((r for r in entries if r.id in own_ids and r.starts==school_today()),None)
+        return render('diary',cohort=c,entries=entries,editing=editing,diary_writable=request.args.get('day',str(school_today()))==str(school_today()),diary_review=review('diary-update',editing.id,[editing.body,editing.data,c.data]) if editing else '')
     @bp.get('/classes/<int:cid>/diary/<int:eid>/files/<int:fid>')
     def diary_file(cid,eid,fid):
         c=cohort(cid,'student_extras.view');M=app.extensions['student_extras_models'];e=db.get_or_404(M['entry'],eid)

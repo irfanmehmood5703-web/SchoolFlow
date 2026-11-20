@@ -96,3 +96,11 @@ class TeacherAppTests(unittest.TestCase):
         self.assertEqual(guest.post('/teacher-sign-in/STAFF-TEST',data={'_csrf':csrf,'credential':token}).status_code,302);self.assertEqual(guest.get('/teacher-app').status_code,200)
         with guest.session_transaction() as session:csrf=session['record_csrf']
         self.assertEqual(guest.post('/teacher-sign-in/STAFF-TEST',data={'_csrf':csrf,'credential':token}).status_code,403)
+    def test_today_diary_edits_same_record_without_duplicate(self):
+        self.seed();path=f'/teacher-app/classes/{self.cid}/diary';page=self.c.get(path);token=re.search(rb'name="submission" value="([^"]+)"',page.data).group(1).decode();data={'_csrf':self.token(),'submission':token,'subject_slot':['0'],'subjects':['Math'],'subject_name_0':'Math','channel':'app','campus':'Campus A','class_name':'One','section':'A','starts':str(school_today()),'action':'save','classwork_0':'Read chapter one','homework_0':'Exercise one'}
+        result=self.c.post(path,data=data);self.assertEqual(result.status_code,302,result.data)
+        page=self.c.get(path);review=re.search(rb'name="review" value="([^"]+)"',page.data).group(1).decode();eid=re.search(rb'name="entry" value="([^"]+)"',page.data).group(1).decode();data.update(action='update',entry=eid,review=review,homework_0='Exercise two')
+        result=self.c.post(path,data=data);self.assertEqual(result.status_code,302,result.data)
+        def check():
+            E=app.extensions['student_extras_models']['entry'];self.assertEqual(E.query.filter_by(kind='diary').count(),1);self.assertEqual(E.query.first().data['homework'],'Exercise two')
+        self.tenant(check)
