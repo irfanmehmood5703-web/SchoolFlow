@@ -18,4 +18,17 @@
  .certificate-sheet.card article>table>tbody>tr>td{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
+
+<style>
+/* Match card preview and newly generated cards to the professional print frame. */
+.certificate-sheet.card article>table>tbody>tr>td{border:2px solid #176b4a!important;outline:1px solid #a4c9b6!important;outline-offset:-5px!important;border-radius:9px!important;background:#fff!important;color:#183b2c!important;overflow:hidden!important}
+.certificate-sheet.card article>table>tbody>tr>td:first-child{border-top:6px solid #176b4a!important}
+.certificate-sheet.card article>table>tbody>tr>td:last-child{border-top:6px solid #254d3a!important}
+.certificate-sheet.card article>table>tbody>tr>td>table,.certificate-sheet.card article>table>tbody>tr>td>table td{background:#fff!important;color:#183b2c!important}
+.certificate-sheet.card h3{color:#176b4a!important;font-size:15px!important;font-weight:800!important}
+.certificate-sheet.card p{color:#244735!important;font-size:11px!important}
+.certificate-sheet.card img[alt="Student photo"]{border:2px solid #176b4a!important;border-radius:6px!important}
+.certificate-sheet.card img[alt="Student QR code"]{border:2px solid #d3e4da!important;padding:2px!important;background:#fff!important}
+@media print{.certificate-sheet.card article>table>tbody>tr>td{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+</style>
 <section class="certificate-sheet {{layout}}"><header>{{sections.header|safe}}</header><article>{{sections.body|safe}}</article><footer style="margin-top:24px">{{sections.footer|safe}}</footer></section>
