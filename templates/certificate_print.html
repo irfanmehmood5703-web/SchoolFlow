@@ -47,4 +47,20 @@
 .issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b) b{font-weight:800!important;color:#fff!important}
 .issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b):nth-last-of-type(2){font-size:14px!important;font-weight:800!important;white-space:nowrap!important;color:#fff!important}
 @media print{.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b){color:#fff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+
+/* Formal A4 certificate typography and aligned document content, including issued snapshots. */
+.issued-document:has(.certificate-sheet.document){padding:12mm!important}
+.issued-document .certificate-sheet.document{max-width:186mm!important;padding:10mm 12mm!important;border:2px solid #176b4a!important;outline:1px solid #a7c8b6!important;outline-offset:-6px!important;font-size:14px!important;line-height:1.75!important;overflow-wrap:break-word!important}
+.issued-document .certificate-sheet.document article{width:100%!important;text-align:justify!important;text-justify:inter-word!important}
+.issued-document .certificate-sheet.document article>p{margin:13px 0!important;text-align:justify!important;line-height:1.8!important}
+.issued-document .certificate-sheet.document article>h1{text-align:center!important;font-size:23px!important;letter-spacing:.4px!important;margin:22px 0 24px!important}
+.issued-document .certificate-sheet.document article>h3{text-align:left!important;color:#176b4a!important;margin:20px 0 7px!important}
+.issued-document .certificate-sheet.document article>table{width:100%!important;table-layout:fixed!important;margin:14px 0!important}
+.issued-document .certificate-sheet.document article td{overflow-wrap:break-word!important;vertical-align:middle!important}
+.issued-document .certificate-sheet.document header>table{width:100%!important;table-layout:fixed!important}
+.issued-document .certificate-sheet.document footer>table{width:100%!important;table-layout:fixed!important}
+@media print{
+ .issued-document:has(.certificate-sheet.document){padding:0!important}
+ .issued-document .certificate-sheet.document{padding:10mm 12mm!important;break-inside:avoid!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
