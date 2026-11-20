@@ -1,5 +1,5 @@
 """Parent summaries, real requests and publication isolation in private fictional schools."""
-import io,re,secrets,unittest,json
+import html,io,re,secrets,unittest,json
 from datetime import timedelta
 from unittest.mock import patch
 from tests import test_parents_ptm as fixture
@@ -124,6 +124,16 @@ class ParentAppTests(unittest.TestCase):
         p=self.parent();page=self.page(p,'dates');self.assertIn(b'Class schedule',page.data);self.assertNotIn(b'SECRET',page.data)
         def change():self.ops['workflow'].query.filter_by(id=wid).one().data=dict(name='Changed',campus='North',class_name='One',papers=[])
         self.tenant(change);self.assertEqual(self.post('/workspace/general/parent-study',dict(data,token=secrets.token_urlsafe(32))).status_code,422)
+    def test_colliding_ids_in_another_school_cannot_share_resources_or_sessions(self):
+        self.seed_app();p=self.parent();other=self.H['provision']('PARENT-OTHER','Other Private School','owner@example.invalid',self.password).id
+        def seed():
+            f=self.rm['family'](id=1,number='OTHER1',data=dict(phone='03000000009'));db.session.add(f);db.session.add(Student(id=1,admission_no='OTHER1',name='Other private child',class_name='One',status='Active'));db.session.flush();db.session.add(self.rm['student'](student_id=1,family_id=1,data=dict(campus='North',section='A')))
+            I=app.extensions['parent_study_models']['item'];db.session.add(I(id=1,kind='notes',title='Other private notes',campus='North',class_name='One',body='OTHER PRIVATE CONTENT',starts=school_today(),ends=school_today(),published=True,token=secrets.token_urlsafe(32)))
+        self.tenant(seed,other);owner=self.owner('PARENT-OTHER');response=self.post('/workspace/general/parents/links/1',dict(action='issue'),owner);credential=html.unescape(re.search(rb'<strong data-parent-credential>(.*?)</strong>',response.data)[1].decode()).split('#')[1]
+        q=app.test_client();self.token(q,'/parents/PARENT-OTHER/enter');self.assertEqual(self.post('/parents/PARENT-OTHER/enter',dict(credential=credential),q).status_code,302)
+        self.assertNotIn(b'OTHER PRIVATE CONTENT',self.page(p,'notes').data)
+        page=q.get('/parents/PARENT-OTHER/app/notes?sid=1');self.assertIn(b'OTHER PRIVATE CONTENT',page.data);self.assertNotIn(b'Reviewed class resource',page.data)
+        self.assertEqual(q.get(self.base+'/app/notes?sid=1').status_code,302)
     def test_private_profile_never_exposes_school_owner_or_staff_notes(self):
         p=self.parent()
         def seed():
