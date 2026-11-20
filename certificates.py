@@ -179,6 +179,9 @@ def configure_certificates(app,db,Student):
             labelled='[stdPhoto]<p><b>Student Name:</b> [studentName]</p><p><b>Father Name:</b> [fatherName]</p><p><b>Class:</b> [className] &nbsp; <b>Section:</b> [sectionName]</p><p><b>Roll No.:</b> [rollNo] &nbsp; <b>Student ID:</b> [sid]</p>'
             if legacy in content.get('body',''):
                 content=dict(content,body=content['body'].replace(legacy,labelled))
+        # Upgrade the unedited starter guardian card without changing campus-customized cards.
+        if t.key == 'guardian-card' and 'For student pick-up and drop-off' in content.get('body','') and 'Card expiry: __________________' in content.get('body',''):
+            content=dict(content,body=default_content('guardian-card')['body'])
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'school-leaving':
