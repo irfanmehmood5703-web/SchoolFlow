@@ -255,7 +255,10 @@ def configure_owner_app(app,db,Student,Employee):
         for event in events:
             tool=next((tool for prefix,tool in [('message:','messages'),('support:','support'),('payment:','payments')] if event['key'].startswith(prefix)),None)
             if tool:event['url']=link('owner_app.open_tool',key=tool)
+        holidays=app.extensions['holiday_calendar_helpers']['rows']();sh=app.extensions['school_settings_helpers'];settings=sh['config']('attendance-alerts')
         for kind,rows in [('student',people(True)),('staff',[(e,d) for e,d in employees() if e.status=='Active'])]:
+            if settings.get(kind+'_enabled') is False:continue
+            rows=[(r,d) for r,d in rows if not sh['shift'](kind,r,d.data if d else {},school_today()).get('off') and not any(h.scope in ('',(d.data if d else {}).get('campus','')) and (h.data['date'][5:]==school_today().strftime('%m-%d') if h.data.get('repeats') else h.data['date']==school_today().isoformat()) for h in holidays)]
             ids={r.id for r,_ in rows};marked={r.person_id for r in ops['daily'].query.filter_by(kind=kind,day=school_today()).filter(ops['daily'].person_id.in_(ids)).all()};missing=sorted(ids-marked)
             if missing:
                 key='owner-attendance:'+kind+':'+hashlib.sha256(g.owner_campus.encode()).hexdigest()[:12]

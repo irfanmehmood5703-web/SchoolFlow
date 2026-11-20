@@ -24,7 +24,7 @@ jobs:
         env:
           IDENTITY_DATABASE_URL: ''
           SCHOOLFLOW_PRIVATE_STORAGE_QA: ''
-        run: python -W ignore -m unittest discover -s tests -q
+        run: python -X faulthandler -W ignore -m unittest discover -s tests -q
   postgres:
     runs-on: ubuntu-24.04
     timeout-minutes: 18

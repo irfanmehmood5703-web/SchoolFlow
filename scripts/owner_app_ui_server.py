@@ -7,10 +7,7 @@ os.environ['DATABASE_URL']='sqlite:///'+str(Path(tmp.name)/'control.db')
 os.environ.pop('IDENTITY_DATABASE_URL',None);os.environ.pop('SCHOOLFLOW_PRIVATE_STORAGE_QA',None)
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolve().parents[1]/'tests')]
 from test_owner_app import OwnerAppTests
-from flask import redirect
 from app import app
-@app.get('/qa/owner-entry')
-def qa_entry():
-    return redirect('/mobile/owner?school=OWNER-A&scope='+fixture.schools[0][1])
 fixture=OwnerAppTests();fixture.setUp()
+Path(os.environ.get('OWNER_UI_ENTRY_FILE','/tmp/owner-ui-entry.txt')).write_text('/mobile/owner?school=OWNER-A&scope='+fixture.schools[0][1])
 app.run('127.0.0.1',5057,threaded=True,use_reloader=False)
