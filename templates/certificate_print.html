@@ -82,4 +82,24 @@
 .issued-document .certificate-sheet.card article table.guardian-back>tbody>tr>td>table th{width:38%!important;text-align:left!important}
 .issued-document .certificate-sheet.card article table.guardian-back p{margin:4px 0!important;line-height:1.4!important}
 @media print{.issued-document .certificate-sheet.card article table.guardian-front img,.issued-document .certificate-sheet.card article table.guardian-back img{break-inside:avoid!important}}
+
+/* Guardian front identity details: one complete, unified two-column grid. */
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts{
+ width:100%!important;border-collapse:collapse!important;border:1px solid #9cc7b3!important;
+ table-layout:fixed!important;margin-top:10px!important;
+}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts tr{background:#176b4a!important}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts th,
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts td{
+ display:table-cell!important;box-sizing:border-box!important;
+ width:50%!important;padding:2.5mm 1.5mm!important;
+ border:1px solid #9cc7b3!important;background:#176b4a!important;
+ color:#fff!important;vertical-align:middle!important;
+ font-size:11px!important;line-height:1.3!important;
+}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts th{text-align:left!important;font-weight:700!important}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts td{text-align:right!important;font-weight:600!important}
+@media print{.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts,
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts th,
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts td{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
