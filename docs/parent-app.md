@@ -1,0 +1,13 @@
+# Parent App
+
+The school-bound Parent APK uses the same private family account and live school database as the Parent web portal. Branding comes from the school's saved name and official logo. Opening the APK selects the provisioned school; it does not authenticate the parent. School-issued one-time credentials/OTP remain required.
+
+The new zinc-green parent interface includes family Home, child overview/profile, Academics, Attendance, Fees and Connect, with a persistent child switcher. Summaries use actual school records: no demo counts or assumed delivery. Attendance uses recorded days and excludes Off Day/Unmarked from its denominator. Fee totals retain partial payments and discounts and exclude voided receipts from payment history. Child-owned challans can be viewed and printed.
+
+Results remain explicitly published immutable exam snapshots. Diary, notices, files, messages, manual overrides and overdue-fee access policies remain enforced. Parent request actions derive the student, family, campus and school scope from the authenticated account, use CSRF and idempotent submission tokens, and write the existing school leave/feedback models. PTM feedback changes only the parent's feedback field and rejects stale versions.
+
+Owner: General → Parents App → Parent Study & Documents publishes class study links/files, notes, assignments and vacation work. Draft/future/expired/unpublished resources and files are unavailable to parents. Saved Award Lists and Date Sheets have a reviewed publication link; the source and active roster must still match on submission. Parent exam papers and roll numbers are snapshotted, without staff notes, marks or teacher identifiers. Assignment text responses are reviewed and graded by the school owner. File limits and supported formats are the existing validated school upload rules.
+
+Web data/UI updates appear on refresh/reopen. The Parent client refreshes after returning from the background unless a form has unsaved input. Native launcher, permissions and binary changes require installing the new APK; silent Android installation is not promised. This release does not enable background SMS, push delivery or paid providers.
+
+Automated validation uses disposable private schools and families, never real school records. Backend tests cover family isolation, feature restrictions, exact balances, assignment/file visibility and revocation, idempotency, CSRF, PTM versions, publication snapshots, and notification revision races. CI runs mobile/desktop Playwright flows and PostgreSQL checks. Physical Android-device installation and printing remain device acceptance checks.

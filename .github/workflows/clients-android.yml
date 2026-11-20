@@ -2,9 +2,9 @@ name: SchoolFlow Android Clients
 on:
   push:
     branches: [main, feature/connected-android-clients]
-    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py', 'identity.py', 'operations.py', 'student_fee_plans.py', 'school_clock.py', 'tests/**', 'owner_app.py', 'widget_sources.py', 'templates/owner_app.html', 'static/owner-*', 'scripts/*owner_app*']
+    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py', 'identity.py', 'operations.py', 'student_fee_plans.py', 'school_clock.py', 'tests/**', 'owner_app.py', 'widget_sources.py', 'templates/owner_app.html', 'static/owner-*', 'scripts/*owner_app*', 'parents.py', 'parent_app.py', 'parent_study.py', 'templates/parent*.html', 'templates/message_parent_base.html', 'static/parent-app.*', 'scripts/*parent_app*']
   pull_request:
-    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py', 'identity.py', 'operations.py', 'student_fee_plans.py', 'school_clock.py', 'tests/**', 'owner_app.py', 'widget_sources.py', 'templates/owner_app.html', 'static/owner-*', 'scripts/*owner_app*']
+    paths: ['mobile/clients/**', '.github/workflows/clients-android.yml', 'sms_gateway.py', 'mobile_clients.py', 'identity.py', 'operations.py', 'student_fee_plans.py', 'school_clock.py', 'tests/**', 'owner_app.py', 'widget_sources.py', 'templates/owner_app.html', 'static/owner-*', 'scripts/*owner_app*', 'parents.py', 'parent_app.py', 'parent_study.py', 'templates/parent*.html', 'templates/message_parent_base.html', 'static/parent-app.*', 'scripts/*parent_app*']
 permissions:
   contents: read
 concurrency:
@@ -80,9 +80,39 @@ jobs:
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: failure()
         with: {name: SchoolFlow-Owner-App-UI-log, path: '/tmp/owner-ui-server.log', retention-days: 7}
+  parent-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - run: python -m pip install -r requirements.txt
+      - name: Verify Parent App with a private fictional family at phone and desktop widths
+        env:
+          SCHOOLFLOW_UI_QA: '1'
+          SCHOOLFLOW_PLAYWRIGHT_MODULE: /tmp/schoolflow-browser/node_modules/playwright
+        run: |
+          npm install --prefix /tmp/schoolflow-browser --no-save playwright@1.62.1
+          /tmp/schoolflow-browser/node_modules/.bin/playwright install --with-deps chromium
+          python scripts/parent_app_ui_server.py > /tmp/parent-ui-server.log 2>&1 &
+          qa_pid=$!
+          trap 'kill "$qa_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5058/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/test_parent_app.cjs
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with: {name: SchoolFlow-Parent-App-UI, path: '/tmp/parent-app-ui/', retention-days: 14}
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: failure()
+        with: {name: SchoolFlow-Parent-App-UI-log, path: '/tmp/parent-ui-server.log', retention-days: 7}
   publish-test-apks:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [android, backend, owner-ui]
+    needs: [android, backend, owner-ui, parent-ui]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {contents: write, actions: read}
