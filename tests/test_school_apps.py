@@ -42,8 +42,9 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':3},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':4},headers=headers or self.headers)
     def key(self,job,other=False):
+        if job['signing'].get('keystore') and not other:return self.worker.put('/api/app-builder/'+job['id']+'/signing',json={'keystore':job['signing']['keystore']},headers=self.headers)
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
         subject=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'Fictional school signing')]);now=datetime.now(timezone.utc)
         certificate=x509.CertificateBuilder().subject_name(subject).issuer_name(subject).public_key(key.public_key()).serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(days=1)).not_valid_after(now+timedelta(days=100)).sign(key,hashes.SHA256())
@@ -133,9 +134,41 @@ class SchoolAppTests(unittest.TestCase):
         old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
         update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
-        self.assertEqual(update['branding']['source_version'],3)
+        self.assertEqual(update['branding']['source_version'],4)
         self.assertEqual(self.claim().json['job']['id'],update['id'])
         self.assertEqual(self.M['build'].query.count(),2)
+
+    def test_client_upgrade_reloads_each_tenants_saved_logo_after_old_bytes_are_discarded(self):
+        from PIL import Image
+        logos=[]
+        for index,color in enumerate(['#176b4a','#8b2454']):
+            stream=io.BytesIO();Image.new('RGB',(120,120),color).save(stream,format='PNG');logos.append(stream.getvalue())
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.schools[index][0]);profile=db.session.get(app.extensions['institute_setup_models']['profile'],1);profile.logo=logos[index];profile.logo_mime='image/png';db.session.commit();db.session.remove()
+            self.assertEqual(self.prepare(index).status_code,302);job=self.claim().json['job'];self.complete(job)
+        for row in self.M['build'].query.all():
+            self.assertEqual(row.logo,b'');row.spec={**row.spec,'source_version':3}
+        db.session.commit()
+        seen=set()
+        for _ in range(2):
+            job=self.claim().json['job'];scope=job['branding']['school_key'];index=next(i for i,school in enumerate(self.schools) if school[1]==scope)
+            self.assertNotIn(scope,seen);seen.add(scope)
+            self.assertEqual(base64.b64decode(job['logo']),logos[index]);self.assertEqual(job['branding']['logo_sha256'],hashlib.sha256(logos[index]).hexdigest());self.assertEqual(job['sequence'],2);self.complete(job)
+        self.assertEqual(seen,{school[1] for school in self.schools})
+
+    def test_signin_branding_and_logo_are_bound_to_installed_school(self):
+        from PIL import Image
+        logos=[]
+        for index,color in enumerate(['#176b4a','#3a4070']):
+            stream=io.BytesIO();Image.new('RGB',(90,90),color).save(stream,format='PNG');logos.append(stream.getvalue())
+            with app.test_request_context('/'):
+                g.institute_engine=app.extensions['identity_helpers']['engine'](self.schools[index][0]);profile=db.session.get(app.extensions['institute_setup_models']['profile'],1);profile.logo=logos[index];profile.logo_mime='image/png';db.session.commit();db.session.remove()
+        for index in range(2):
+            c=app.test_client();iid,scope,code,name=self.schools[index];c.get('/mobile/owner?school='+code+'&scope='+scope)
+            page=c.get('/auth/login');self.assertEqual(page.status_code,200);self.assertIn(name.encode(),page.data);self.assertIn(('/mobile/school-logo/'+scope).encode(),page.data);self.assertNotIn(b'Software owner',page.data)
+            logo=c.get('/mobile/school-logo/'+scope);self.assertEqual(logo.data,logos[index]);self.assertEqual(logo.headers['Cache-Control'],'private, no-store');self.assertEqual(c.get('/mobile/school-logo/'+self.schools[1-index][1]).status_code,404)
+            with c.session_transaction() as session:self.assertNotIn('owner_id',session)
+        self.assertIn(b'SchoolFlow',app.test_client().get('/auth/institute').data)
 
     def test_branded_portal_pins_school_preserves_home_session_and_role(self):
         c=app.test_client();school_id,scope,code,_=self.schools[0]
@@ -184,5 +217,18 @@ class CompiledSchoolIconTests(unittest.TestCase):
             Image.new('RGBA',(20,20),'#999999').save(expected)
             with zipfile.ZipFile(stream) as archive:
                 with self.assertRaisesRegex(RuntimeError,'school logo'):verify_school_icon(archive,expected)
+
+class BrandFallbackTests(unittest.TestCase):
+    def test_existing_acronyms_and_approved_logo_hash(self):
+        import mobile.clients.prepare_branding as branding
+        from pathlib import Path
+        self.assertEqual(branding.school_initials('ISF SCHOOL SYSTEM'),'ISF')
+        self.assertEqual(branding.school_initials('DPS Faisalabad'),'DPS')
+        self.assertEqual(branding.school_initials('Sadia School'),'SS')
+        self.assertEqual(branding.school_initials('Beaconhouse School System'),'BSS')
+        data=dict(name='ISF SCHOOL SYSTEM',school_key='a'*32,code='ISF001',logo_sha256=hashlib.sha256(b'approved logo bytes').hexdigest())
+        with tempfile.TemporaryDirectory() as folder,patch.object(branding,'ROOT',Path(folder)):
+            with self.assertRaisesRegex(ValueError,'approved branding'):branding.prepare(data,b'')
+            self.assertFalse((Path(folder)/'generated-school-res').exists())
 
 if __name__=='__main__':unittest.main()

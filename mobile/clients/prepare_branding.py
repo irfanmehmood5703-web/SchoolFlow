@@ -1,9 +1,17 @@
 """Generate build-time launcher assets from a validated school snapshot."""
-import argparse,base64,io,json,re,shutil
+import argparse,base64,hashlib,io,json,re,shutil
 from pathlib import Path
 from PIL import Image,ImageOps,ImageDraw,ImageFont
 
 ROOT=Path(__file__).resolve().parent
+
+def school_initials(name):
+    words=name.split()
+    # Preserve an institute's existing acronym: ISF School System is ISF,
+    # rather than taking I + S + S from the three words.
+    first=re.sub(r'[^A-Za-z0-9]','',words[0]) if words else ''
+    if 2<=len(first)<=8 and first.upper()==first:return first
+    return ''.join(word[0] for word in words[:3]).upper()
 
 def validate(data):
     if not isinstance(data,dict) or not re.fullmatch(r'[0-9a-f]{32}',str(data.get('school_key',''))):raise ValueError('Invalid immutable school identity')
@@ -13,6 +21,8 @@ def validate(data):
     return data
 
 def prepare(data,logo=b''):
+    if data.get('logo_sha256') and hashlib.sha256(logo).hexdigest()!=data['logo_sha256']:
+        raise ValueError('School logo bytes do not match the approved branding snapshot')
     validate(data);target=ROOT/'generated-school-res'
     if target.exists():shutil.rmtree(target)
     target.mkdir()
@@ -23,9 +33,10 @@ def prepare(data,logo=b''):
             source.load();image=source.convert('RGBA')
     else:
         image=Image.new('RGBA',(512,512),'#176b4a');draw=ImageDraw.Draw(image)
-        initials=''.join(word[0] for word in data['name'].split()[:3]).upper()
+        initials=school_initials(data['name'])
         fonts=[Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),Path('/usr/share/fonts/TTF/DejaVuSans-Bold.ttf')]
-        font=next((ImageFont.truetype(str(path),160) for path in fonts if path.exists()),ImageFont.load_default(size=160))
+        size=min(160,max(60,480//max(len(initials),1)))
+        font=next((ImageFont.truetype(str(path),size) for path in fonts if path.exists()),ImageFont.load_default(size=size))
         box=draw.textbbox((0,0),initials,font=font);draw.text(((512-(box[2]-box[0]))/2-box[0],(512-(box[3]-box[1]))/2-box[1]),initials,font=font,fill='white')
     # Place the complete logo inside the adaptive icon's safe central region.
     foreground=Image.new('RGBA',(432,432),(255,255,255,0));fitted=ImageOps.contain(image,(184,184),Image.Resampling.LANCZOS);foreground.alpha_composite(fitted,((432-fitted.width)//2,(432-fitted.height)//2))
