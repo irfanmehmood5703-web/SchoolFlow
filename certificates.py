@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from certificate_defaults import DOCUMENTS,CATALOG,default_content
 
-TAGS=('copyType todayDate instName instContact instEmail instLogo instAddress studentName fatherName fatherMobile rollNo regNo familyNo campusName className sectionName SessionName studentGroup CurrentStatus dob currentMonth admissionDate leavingDate admissionClass boardRegNo boardRollNo boardTotalMarks boardObtMarks stdPhoto qrCode examHall examRollNo sid stdPic gender religion studentCnic studentContactNo studentEmail birthCity bloodGroup caste identificationMark fatherCnic guardianName guardianCnic currentAddress permanentAddress color_primary color_secondary color_3 color_4 institute_name institute_logo campus_address campus_city campus_open_date campus_contact campus_email currPayable tuitionFee admissionfee totalPayable totalRemPayable totalPaidAmount totalDiscountGiven currentTotal currentPaid curRemaining curDiscount refNo reference').split()
+TAGS=('copyType todayDate instName instContact instEmail instLogo instAddress studentName fatherName fatherMobile rollNo regNo familyNo campusName className sectionName SessionName studentGroup CurrentStatus dob currentMonth admissionDate leavingDate admissionClass boardRegNo boardRollNo boardTotalMarks boardObtMarks stdPhoto guardianPhoto qrCode examHall examRollNo sid stdPic gender religion studentCnic studentContactNo studentEmail birthCity bloodGroup caste identificationMark fatherCnic guardianName guardianCnic currentAddress permanentAddress color_primary color_secondary color_3 color_4 institute_name institute_logo campus_address campus_city campus_open_date campus_contact campus_email currPayable tuitionFee admissionfee totalPayable totalRemPayable totalPaidAmount totalDiscountGiven currentTotal currentPaid curRemaining curDiscount refNo reference').split()
 HTML_TAGS=['p','div','span','b','strong','i','em','u','s','strike','br','hr','h1','h2','h3','h4','h5','h6','table','thead','tbody','tfoot','tr','td','th','ul','ol','li','blockquote','a','img','sup','sub']
 CSS=CSSSanitizer(allowed_css_properties=['color','background-color','font-family','font-size','font-weight','font-style','text-decoration','text-align','text-transform','line-height','letter-spacing','width','height','min-height','max-width','margin','margin-top','margin-bottom','margin-left','margin-right','padding','padding-top','padding-bottom','padding-left','padding-right','border','border-top','border-bottom','border-left','border-right','border-color','border-width','border-style','border-radius','border-collapse','vertical-align','display','float','object-fit'])
 
@@ -147,7 +147,9 @@ def configure_certificates(app,db,Student):
     def mapping(s,c,ref,copy_type):
         d=details(s);settings=c.data;today=now().date()
         photo=rm['file'].query.filter_by(owner_kind='student',owner_id=s.id,photo=True).first()
-        image=image_tag(url_for('records.record_file',id=photo.id),'Student photo') if photo else '<span>Photo</span>'
+        image=image_tag(url_for('records.record_file',id=photo.id),'Student photo') if photo else '<span>Student photo not uploaded</span>'
+        guardian=rm['file'].query.filter_by(owner_kind='guardian',owner_id=s.id,photo=True).first()
+        guardian_image=image_tag(url_for('records.record_file',id=guardian.id),'Guardian photo') if guardian else '<span>Guardian photo not uploaded</span>'
         logo=image_tag(url_for('certificates.logo',cid=c.id),'School logo') if c.logo else '<span>School logo</span>'
         qr=image_tag(url_for('certificates.qr',sid=s.id),'Student QR code')
         values={tag.casefold():'' for tag in TAGS}
@@ -161,7 +163,7 @@ def configure_certificates(app,db,Student):
         amounts=dict(totalPayable=sum(b.total for b in bills),totalRemPayable=sum(b.remaining for b in bills),totalPaidAmount=sum(b.paid for b in bills),totalDiscountGiven=sum(b.discount for b in bills),currPayable=sum(b.total for b in current),currentTotal=sum(b.total for b in current),currentPaid=sum(b.paid for b in current),curRemaining=sum(b.remaining for b in current),curDiscount=sum(b.discount for b in current),tuitionFee=sum(x['net'] for x in plan_lines if x['particular'].casefold() in ('tuition fee','tuition')),admissionfee=sum(x['net'] for x in plan_lines if x['particular'].casefold()=='admission fee'))
         aliases.update({key:f'{value/100:,.2f}' for key,value in amounts.items()})
         values.update({key.casefold():str(value) for key,value in aliases.items()})
-        for key,value in [('stdPhoto',image),('stdPic',image),('instLogo',logo),('institute_logo',logo),('qrCode',qr)]:values[key.casefold()]=Markup(value)
+        for key,value in [('stdPhoto',image),('stdPic',image),('guardianPhoto',guardian_image),('instLogo',logo),('institute_logo',logo),('qrCode',qr)]:values[key.casefold()]=Markup(value)
         return values,amounts,d
     # All render state is passed explicitly; no globals or shared request state.
     def document(s,c,t,ref,copy_type,content=None):
