@@ -10,7 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
 
-SOURCE_VERSION=4
+SOURCE_VERSION=5
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024

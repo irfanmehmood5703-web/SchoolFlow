@@ -216,4 +216,5 @@ def configure_student_extras(app, db, Student):
         response.headers['Content-Security-Policy']="default-src 'none'; sandbox"
         return response
 
+    app.extensions['student_extra_uploads']=uploads
     app.register_blueprint(bp)

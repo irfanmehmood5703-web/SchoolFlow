@@ -402,7 +402,7 @@ def configure_parents(app,db,Student):
         f=principal()
         if not f:return redirect(url_for('parent_portal.login',code=code))
         rows=app.extensions['record_helpers']['read_many']('student',Student.query.join(rm['student'],rm['student'].student_id==Student.id).filter(rm['student'].family_id==f.id,Student.status=='Active').order_by(Student.name).all())
-        return render_template('parent_portal.html',title='Parent Portal',view='home',school=g.parent_school,children=rows)
+        return app.extensions['parent_app_helpers']['home'](code)
     @public.get('/students/<int:sid>/<feature>')
     def feature(code,sid,feature):
         if feature not in dict(FEATURES):abort(404)
@@ -411,6 +411,8 @@ def configure_parents(app,db,Student):
         student=Student.query.join(rm['student'],rm['student'].student_id==Student.id).filter(Student.id==sid,rm['student'].family_id==f.id,Student.status=='Active').first_or_404()
         data=app.extensions['record_helpers']['read_many']('student',[student])[0][1];decision=access(sid,data.get('campus',''),feature)
         if decision['effective']=='block':return render_template('parent_portal.html',title=dict(FEATURES)[feature],view='blocked',school=g.parent_school,student=student),403
+        intercepted=app.extensions['parent_app_helpers']['intercept'](sid,feature)
+        if intercepted is not None:return intercepted
         warn=decision['effective']=='warn';content=[];label=dict(FEATURES)[feature]
         if feature=='fees':content=[dict(title=b.month,body='Payable Rs '+format(b.total/100,'.2f')+' · Paid Rs '+format(b.paid/100,'.2f')+' · Remaining Rs '+format(b.remaining/100,'.2f')) for b in Bill.query.filter_by(student_id=sid).order_by(Bill.month.desc()).all()]
         elif feature in ('marks','results'):
@@ -490,4 +492,6 @@ def configure_parents(app,db,Student):
     def private_headers(response):
         response.headers['Cache-Control']='no-store';response.headers['Referrer-Policy']='no-referrer';return response
     app.extensions['parent_portal_helpers']=dict(scope=public_scope,principal=principal)
+    from parent_app import configure_parent_app
+    configure_parent_app(app,db,Student,public,principal,access,rate)
     app.register_blueprint(bp);app.register_blueprint(public)
