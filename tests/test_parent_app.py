@@ -50,6 +50,7 @@ class ParentAppTests(unittest.TestCase):
         self.assertIn(b'Not marked',self.page(p,'attendance',3).data)
         self.assertEqual(p.get(self.base+'/app/attendance?sid=1&month=2026-99').status_code,422)
         self.assertEqual(p.get(self.base+'/app/attendance?sid=1&month=bad').status_code,422)
+        for month in ['0001-01','9999-12']:self.assertEqual(p.get(self.base+'/app/attendance?sid=1&month='+month).status_code,422)
     def test_partial_fees_receipts_discounts_and_guarded_print(self):
         self.seed_app();p=self.parent();r=self.page(p,'fees')
         for value in [b'Rs 2,000.00',b'Rs 500.00',b'Rs 100.00',b'Rs 1,400.00',b'Partly paid']:self.assertIn(value,r.data)

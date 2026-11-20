@@ -63,7 +63,9 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
         month=month or school_today().strftime('%Y-%m')
         try:
             if not re.fullmatch(r'\d{4}-\d{2}',month):raise ValueError()
-            start=date.fromisoformat(month+'-01');end=date(start.year,start.month,calendar.monthrange(start.year,start.month)[1])
+            start=date.fromisoformat(month+'-01')
+            if not 1900<=start.year<=9998:raise ValueError()
+            end=date(start.year,start.month,calendar.monthrange(start.year,start.month)[1])
         except ValueError:abort(422,'Choose a valid month.')
         rows=ops['daily'].query.filter_by(kind='student',person_id=sid).filter(ops['daily'].day<=school_today()).order_by(ops['daily'].day.desc()).all()
         chosen=[r for r in rows if start<=r.day<=end];counts=Counter(r.status for r in chosen)
