@@ -139,10 +139,10 @@ class ParentAppTests(unittest.TestCase):
         p=self.parent()
         def seed():
             r=self.rm['student'].query.filter_by(student_id=1).one();r.data={**r.data,'notes':'SECRET STAFF NOTES','medical':'SECRET HEALTH'}
-            P=app.extensions['institute_setup_models']['profile'];r=db.session.get(P,1);r.data=dict(name='Fictional School',owner_contact='SECRET OWNER',contact='03000000000',address='School address')
+            P=app.extensions['institute_setup_models']['profile'];r=db.session.get(P,1);r.data=dict(name='Updated Private School',owner_contact='SECRET OWNER',contact='03000000000',address='School address')
         self.tenant(seed)
         for view in ['profile','contact','student']:
-            page=self.page(p,view);self.assertNotIn(b'SECRET',page.data)
+            page=self.page(p,view);self.assertNotIn(b'SECRET',page.data);self.assertIn(b'Updated Private School',page.data)
         self.assertIn(b'tel:03000000000',self.page(p,'contact').data)
 
 if __name__=='__main__':unittest.main()
