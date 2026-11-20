@@ -227,6 +227,8 @@ def configure_certificates(app,db,Student):
         # Upgrade the unedited starter guardian card without changing campus-customized cards.
         if t.key == 'guardian-card' and 'For student pick-up and drop-off' in content.get('body','') and 'Card expiry: __________________' in content.get('body',''):
             content=dict(content,body=default_content('guardian-card')['body'])
+        if t.key=='guardian-card' and 'Valid Until' in content.get('body','') and 'GUARDIAN VERIFICATION' in content.get('body',''):
+            content=dict(content,body=content['body'].replace('Valid Until','Valid Session').replace('________________','[SessionName]'))
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'school-leaving':
