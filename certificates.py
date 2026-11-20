@@ -142,7 +142,7 @@ def configure_certificates(app,db,Student):
         if not c.logo:abort(404)
         return app.response_class(c.logo,mimetype=c.logo_mime,headers={'Cache-Control':'private, no-store'})
     def image_tag(src,alt):
-        size=('90px','90px') if 'QR' in alt else (('55px','55px') if 'logo' in alt.lower() else ('70px','80px'))
+        size=('90px','90px') if 'QR' in alt else (('55px','55px') if 'logo' in alt.lower() else (('78px','92px') if 'Guardian photo' in alt else (('58px','70px') if 'Student photo' in alt else ('70px','80px'))))
         return f'<img src="{escape(src)}" alt="{escape(alt)}" style="max-width:{size[0]};height:{size[1]};object-fit:contain">'
     def mapping(s,c,ref,copy_type):
         d=details(s);settings=c.data;today=now().date()
