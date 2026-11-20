@@ -271,6 +271,7 @@ def configure_sms_gateway(app,db,Student):
             db.session.commit();return jsonify(state=job.state,replayed=True)
         if job.state!='started':abort(409)
         job.state=state;job.detail=str(payload.get('detail',''))[:160];job.updated=time.time()
+        batches['after_result'](device)
         audit('SMS phone submission result',job_id=job.id,state=state,device_id=device.id);db.session.commit();return jsonify(state=state,replayed=False)
     from sms_batches import configure_sms_batches
     batches=configure_sms_batches(app,db,bp,Device,Job,auth,data)

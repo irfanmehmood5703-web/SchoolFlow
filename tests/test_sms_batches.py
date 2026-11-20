@@ -56,6 +56,13 @@ class SmsBatchTests(unittest.TestCase):
         manual=self.call('claim').json['job']
         with patch('sms_batches.time.time',return_value=20030):self.assertEqual(self.call('start',self.ref(manual)).status_code,429)
         with patch('sms_batches.time.time',return_value=20050):self.assertEqual(self.call('start',self.ref(manual)).status_code,200)
+    def test_slow_sim_result_extends_gap_once_and_report_replay_does_not_extend_it(self):
+        self.heartbeat();self.extra();batch=self.batch(20)
+        with patch('sms_batches.time.time',return_value=10000):job=self.claim(batch).json['job'];self.start(batch,job)
+        with patch('sms_batches.time.time',return_value=10005):self.assertEqual(self.report(job).status_code,200)
+        with patch('sms_batches.time.time',return_value=10015):self.assertTrue(self.report(job).json['replayed'])
+        with patch('sms_batches.time.time',return_value=10024):self.assertEqual(self.claim(batch).json['wait_seconds'],1)
+        with patch('sms_batches.time.time',return_value=10025):self.assertIsNotNone(self.claim(batch).json['job'])
     def test_pause_releases_only_unsent_claim_and_invalidates_old_token(self):
         self.heartbeat();self.extra();batch=self.batch();job=self.claim(batch).json['job']
         self.assertEqual(self.call('batch-stop',dict(batch=batch['id'])).status_code,200)

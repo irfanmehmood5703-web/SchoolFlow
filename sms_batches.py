@@ -17,6 +17,7 @@ def configure_sms_batches(app,db,bp,Device,Job,auth,data):
         __tablename__='sms_send_pace'
         device_id=db.Column(db.Integer,db.ForeignKey(Device.id),primary_key=True)
         next_at=db.Column(db.Float,nullable=False,default=0)
+        interval=db.Column(db.Integer,nullable=False,default=20)
     app.extensions['sms_models'].update(batch=Batch,pace=Pace)
     def owned(device,raw):
         if not isinstance(raw,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',raw):abort(422)
@@ -75,8 +76,15 @@ def configure_sms_batches(app,db,bp,Device,Job,auth,data):
         pace=db.session.get(Pace,device.id);stamp=time.time()
         if pace and pace.next_at>stamp:abort(429,description='Wait before submitting the next SMS.')
         if not pace:pace=Pace(device_id=device.id);db.session.add(pace)
-        pace.next_at=stamp+(row.interval if row else 20)
+        pace.interval=row.interval if row else 20
+        pace.next_at=stamp+pace.interval
+    def after_result(device):
+        # The acknowledgement follows the real SIM callbacks. Holding the
+        # interval again here prevents process restarts or slow start responses
+        # from shortening the actual gap between messages. Replays skip this.
+        pace=db.session.get(Pace,device.id)
+        if pace:pace.next_at=max(pace.next_at,time.time()+pace.interval)
     def active(device):
         row=Batch.query.filter_by(device_id=device.id,generation=device.generation,active=True).first()
         return summary(row) if row else None
-    return dict(for_claim=for_claim,before_start=before_start,summary=summary,active=active)
+    return dict(for_claim=for_claim,before_start=before_start,summary=summary,active=active,after_result=after_result)
