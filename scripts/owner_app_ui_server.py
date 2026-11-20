@@ -9,8 +9,8 @@ sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolv
 from test_owner_app import OwnerAppTests
 from flask import redirect
 from app import app
-fixture=OwnerAppTests();fixture.setUp()
 @app.get('/qa/owner-entry')
 def qa_entry():
     return redirect('/mobile/owner?school=OWNER-A&scope='+fixture.schools[0][1])
+fixture=OwnerAppTests();fixture.setUp()
 app.run('127.0.0.1',5057,threaded=True,use_reloader=False)
