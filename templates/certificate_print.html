@@ -41,4 +41,10 @@
  .issued-document .certificate-sheet.card article>table>tbody>tr>td>table td{
  -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
 }
+
+/* Keep Roll No and Student ID values legible on dark-green issued card fronts. */
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b){font-size:12.5px!important;font-weight:600!important;line-height:1.6!important;letter-spacing:0!important;color:#fff!important;opacity:1!important;text-shadow:none!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b) b{font-weight:800!important;color:#fff!important}
+.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b):nth-last-of-type(2){font-size:14px!important;font-weight:800!important;white-space:nowrap!important;color:#fff!important}
+@media print{.issued-document .certificate-sheet.card article>table>tbody>tr>td:first-child p:has(b){color:#fff!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
