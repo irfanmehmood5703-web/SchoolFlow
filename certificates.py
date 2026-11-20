@@ -231,6 +231,10 @@ def configure_certificates(app,db,Student):
             content=dict(content,body=content['body'].replace('Valid Until','Valid Session').replace('________________','[SessionName]'))
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
+        if t.key == 'character':
+            legacy_character='This certificate records the student’s character and conduct during attendance at [instName].'
+            if legacy_character in content.get('body',''):
+                content=dict(content,body=default_content('character')['body'])
         if t.key == 'school-leaving':
             legacy_start='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p><p>Was admitted on'
             if legacy_start in content.get('body',''):
