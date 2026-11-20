@@ -13,7 +13,7 @@ class SmsGatewayTests(unittest.TestCase):
         with app.test_request_context('/'):
             g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
             rm=app.extensions['record_models'];db.session.add(rm['settings'](category='campus',value='North',class_name=''))
-            db.session.add(self.M['device'](id=1,name='Fictional school phone',campus='North',active=True,digest=hashlib.sha256(self.key.encode()).hexdigest()))
+            db.session.add(self.M['device'](name='Fictional school phone',campus='North',active=True,digest=hashlib.sha256(self.key.encode()).hexdigest()))
             db.session.add(self.M['job'](id='j'*43,source='fictional:1',device_id=1,generation=1,phone='+12025550123',text='Fictional test only'))
             db.session.commit();db.session.remove()
         self.c=app.test_client();self.headers={'X-Institute-Code':'SMS-QA','Authorization':'Bearer '+self.key}

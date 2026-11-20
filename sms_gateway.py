@@ -3,7 +3,7 @@ import hashlib,hmac,re,secrets,time
 from flask import Blueprint,abort,flash,g,jsonify,redirect,render_template,request,session,url_for
 from sqlalchemy import select
 
-API_ENDPOINTS={'sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result'}
+API_ENDPOINTS={'sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','sms_gateway.batch','sms_gateway.batch_status','sms_gateway.batch_stop'}
 
 def configure_sms_gateway(app,db,Student):
     bp=Blueprint('sms_gateway',__name__)
@@ -207,7 +207,7 @@ def configure_sms_gateway(app,db,Student):
             for item in candidates(row,device):
                 if not Job.query.filter_by(source=item['source']).first():db.session.add(Job(device_id=device.id,generation=device.generation,**{k:item[k] for k in ('source','phone','text')}))
             audit('Release school SIM SMS',request_id=wid,device_id=device.id,count=len(items));db.session.commit()
-            flash('Queued for phone review. Nothing has been sent yet.','success');return redirect(url_for('sms_gateway.index'))
+            flash('Queued for the SMS App. Start sending on the registered phone; nothing has been sent yet.','success');return redirect(url_for('sms_gateway.index'))
         return render_template('sms_release.html',title='Review school SIM SMS',row=row,devices=devices,device=device,items=items)
     def scope(device,school):return hashlib.sha256(f'{school.storage_key}:{device.id}:{device.generation}:sms-v1'.encode()).hexdigest()
     def auth(did):
@@ -232,17 +232,24 @@ def configure_sms_gateway(app,db,Student):
     def serialize(job):return dict(id=job.id,phone=job.phone,text=job.text,state=job.state,token=job.token,expires=job.expires)
     @bp.post('/api/sms/devices/<int:did>/heartbeat')
     def heartbeat(did):
-        device,expected=auth(did);data();db.session.commit();return jsonify(scope=expected,name=device.name,campus=device.campus,school_scope=g.sms_school['scope'],school_name=g.sms_school['name'])
+        device,expected=auth(did);data();queued=Job.query.filter_by(device_id=device.id,generation=device.generation,state='queued').count();active=batches['active'](device);db.session.commit();return jsonify(scope=expected,name=device.name,campus=device.campus,school_scope=g.sms_school['scope'],school_name=g.sms_school['name'],queued=queued,active_batch=active)
     @bp.post('/api/sms/devices/<int:did>/claim')
     def claim(did):
-        device,_=auth(did);data();stamp=time.time()
+        device,_=auth(did);payload=data();stamp=time.time();batch,response=batches['for_claim'](device,payload)
+        if response is not None:db.session.commit();return jsonify(**response)
         # Never reclaim a started job: loss of a result is an ambiguous send.
-        job=Job.query.filter_by(device_id=device.id,generation=device.generation,state='claimed').first()
+        q=Job.query.filter_by(device_id=device.id,generation=device.generation,state='claimed')
+        if batch:q=q.filter(Job.id.in_(batch.jobs))
+        job=q.first()
         if job and job.expires<=stamp:job.state='queued';job.token='';db.session.flush();job=None
         if not job:
-            job=Job.query.filter_by(device_id=device.id,generation=device.generation,state='queued').order_by(Job.created).first()
+            q=Job.query.filter_by(device_id=device.id,generation=device.generation,state='queued')
+            if batch:q=q.filter(Job.id.in_(batch.jobs))
+            job=q.order_by(Job.created,Job.id).first()
             if job:job.state='claimed';job.token=secrets.token_urlsafe(32);job.expires=stamp+300;job.updated=stamp
-        db.session.commit();return jsonify(job=serialize(job) if job else None)
+        response=dict(job=serialize(job) if job else None)
+        if batch:response['batch']=batches['summary'](batch)
+        db.session.commit();return jsonify(**response)
     def owned(device,payload):
         jid=payload.get('id','');token=payload.get('token','')
         if not isinstance(jid,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',jid) or not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):abort(403)
@@ -251,8 +258,9 @@ def configure_sms_gateway(app,db,Student):
         return job
     @bp.post('/api/sms/devices/<int:did>/start')
     def start(did):
-        device,_=auth(did);job=owned(device,data())
+        device,_=auth(did);payload=data();job=owned(device,payload)
         if job.state!='claimed' or job.expires<=time.time():abort(409)
+        batches['before_start'](device,job,payload)
         job.state='started';job.updated=time.time();db.session.commit();return jsonify(state='started')
     @bp.post('/api/sms/devices/<int:did>/result')
     def result(did):
@@ -263,5 +271,8 @@ def configure_sms_gateway(app,db,Student):
             db.session.commit();return jsonify(state=job.state,replayed=True)
         if job.state!='started':abort(409)
         job.state=state;job.detail=str(payload.get('detail',''))[:160];job.updated=time.time()
+        batches['after_result'](device)
         audit('SMS phone submission result',job_id=job.id,state=state,device_id=device.id);db.session.commit();return jsonify(state=state,replayed=False)
+    from sms_batches import configure_sms_batches
+    batches=configure_sms_batches(app,db,bp,Device,Job,auth,data)
     app.register_blueprint(bp)

@@ -33,9 +33,13 @@ carry the current same-origin session cookie without following redirects.
    Requests, choose Review for school SIM. Preview exact saved texts, recipients
    and phone campus, then explicitly approve the SIM charges. Other channels
    (WhatsApp, branded SMS and push) are not converted to SIM sends.
-4. Tap Review next queued SMS on the phone, read the recipient/text, then confirm
-   Send once. Multipart messages display the part count before confirmation.
-5. Upload the phone result to the outbox. This request never sends another SMS.
+4. Tap **Send Messages** on the phone. Choose the school SIM and a 15, 20 or
+   25-second interval, then confirm the approved queue once. Default: 20 seconds.
+   Keep the app open. Pause or leaving the app stops further dispatch.
+5. Successful phone results upload automatically before the next message. If
+   upload fails, use **Upload saved result**; this never resends an SMS. Manual
+   single-message review remains available. Multipart messages use more than
+   one SIM SMS credit, and recipient delivery is not verified.
 
 A server-side dispatch starts only once. A claimed but not-started lease may
 expire; a started/unknown message is never automatically re-queued. A duplicate
