@@ -39,7 +39,7 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.get('/workspace/dashboard').status_code,200)
         self.assertEqual(self.c.get('/records/student').status_code,200)
         self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token()}).status_code,403)
-        self.assertIn('/workspace/dashboard',self.c.get(entry).location)
+        self.assertIn('/teacher-app',self.c.get(entry).location)
 
     def test_widget_sources_and_legacy_visibility_follow_role_and_campus(self):
         def allow():

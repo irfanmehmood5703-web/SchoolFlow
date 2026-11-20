@@ -214,7 +214,7 @@ def configure_identity(app, db):
         db.session.remove()
         if request.url_rule is None:
             return
-        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card','sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','sms_gateway.batch','sms_gateway.batch_status','sms_gateway.batch_stop','school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail','school_apps.public_download') or request.blueprint in ('identity','parent_portal','parent_messages','mobile_clients','vendor','vendor_support','vendor_ai'):
+        if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card','sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','sms_gateway.batch','sms_gateway.batch_status','sms_gateway.batch_stop','school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail','school_apps.public_download') or request.blueprint in ('teacher_login','identity','parent_portal','parent_messages','mobile_clients','vendor','vendor_support','vendor_ai'):
             return
         if session.get('demo') and app.config.get('PUBLIC_DEMO_ENABLED', True):
             # Demo always uses the original fictional-data database, never a
@@ -304,7 +304,8 @@ def configure_identity(app, db):
             if staff and app.extensions.get('mobile_client_helpers',{}).get('role_allowed',lambda role:True)('teacher'):
                 session.clear();session.permanent=True
                 session.update(staff_id=staff['id'],staff_version=staff['version'],institute_id=school.id,signed_in_at=time.time(),record_csrf=secrets.token_urlsafe(32))
-                return redirect(url_for('ops.dashboard'))
+                bound=app.extensions.get('mobile_client_helpers',{}).get('binding',lambda:None)()
+                return redirect(url_for('teacher_app.home') if bound and bound.get('kind')=='teacher' else url_for('ops.dashboard'))
             error = 'Email or password is incorrect.'
         return render_template('identity.html', step='login', school=school, error=error)
 

@@ -95,7 +95,7 @@ def configure_mobile_clients(app):
                 value=dict(code=school.code,scope=school.storage_key,kind=kind)
                 if bound!=value:
                     session.clear();session['record_csrf']=secrets.token_urlsafe(32)
-                response=redirect(url_for('parent_portal.home',code=preset) if kind=='parents' else url_for('owner_app.home') if kind=='owner' and session.get('institute_id')==school.id and session.get('owner_id') else url_for('ops.dashboard') if session.get('institute_id')==school.id and (session.get('owner_id') if kind=='owner' else session.get('staff_id')) else url_for('identity.login'))
+                response=redirect(url_for('parent_portal.home',code=preset) if kind=='parents' else url_for('owner_app.home') if kind=='owner' and session.get('institute_id')==school.id and session.get('owner_id') else url_for('teacher_app.home') if kind=='teacher' and session.get('institute_id')==school.id and session.get('staff_id') else url_for('ops.dashboard') if session.get('institute_id')==school.id and session.get('owner_id') else url_for('identity.login'))
                 if kind!='parents' and not (session.get('owner_id') or session.get('staff_id')):
                     import time
                     session.update(pending_institute=school.id,pending_at=time.time())

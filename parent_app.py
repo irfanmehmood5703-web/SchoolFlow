@@ -124,6 +124,8 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
                 for e in entries(s,d,kind)[:8]:add(kind+':'+str(e.id),(e.title,e.body,e.data),e.title,'Published '+str(e.starts),feature_link(s.id,feature),e.starts)
         if allowed(s,d,'results') and allowed(s,d,'marks'):
             for r in results(s.id)[:5]:add('result:'+str(r['id']),r['updated'],'Published result · '+r['name'],'Your child’s published report is available.',link('results',s.id),r['updated'])
+        if allowed(s,d,'notice'):
+            for event in app.extensions['teacher_app_helpers']['parent_reminders'](s,d):add(event['key'],event['revision'],event['title'],event['body'],link('notifications',s.id),event['when'])
         states={r.source:r.revision for r in NoticeState.query.filter_by(family_id=f.id,student_id=s.id).all()}
         for e in out:e['read']=states.get(e['key'])==e['revision']
         return sorted(out,key=lambda e:(e['when'],e['key']),reverse=True)[:40]

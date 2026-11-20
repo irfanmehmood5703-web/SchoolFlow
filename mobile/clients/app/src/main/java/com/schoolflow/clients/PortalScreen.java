@@ -14,7 +14,8 @@ import java.net.URL;
 import java.util.concurrent.*;
 final class PortalScreen {
  private final Activity a;private WebView web;private TextView status;
- private static final int MICROPHONE_PERMISSION=91;
+ private static final int MICROPHONE_PERMISSION=91,LOCATION_PERMISSION=92;
+ private GeolocationPermissions.Callback location;private String locationOrigin,locationPage;
  private PermissionRequest microphone;private boolean foreground;
  private ValueCallback<Uri[]> files;private String downloadUrl;private final ExecutorService io=Executors.newSingleThreadExecutor();
  PortalScreen(Activity activity){a=activity;}
@@ -25,14 +26,14 @@ final class PortalScreen {
   Button reload=new Button(a);reload.setText("Reload");reload.setOnClickListener(v->web.reload());bar.addView(reload);
   Button print=new Button(a);print.setText("Print");print.setOnClickListener(v->printPage());bar.addView(print);
   Button clear=new Button(a);clear.setText("Sign out");clear.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("Clear this app’s school session?").setPositiveButton("Sign out",(d,w)->{CookieManager.getInstance().removeAllCookies(ok->{web.clearHistory();web.clearCache(true);WebStorage.getInstance().deleteAllData();web.loadUrl(startUrl());});}).setNegativeButton("Cancel",null).show());bar.addView(clear);
-  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)))root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)))root.addView(brand);status=new TextView(a);status.setOnClickListener(v->{if(web!=null)web.reload();});root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
+  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE)))root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE)))root.addView(brand);status=new TextView(a);status.setOnClickListener(v->{if(web!=null)web.reload();});root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
   WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSafeBrowsingEnabled(true);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.setWebViewClient(new WebViewClient(){
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){if((EndpointPolicy.BASE+"/mobile/print-current").equals(req.getUrl().toString())&&EndpointPolicy.allowed(web.getUrl())){printPage();return true;}if(EndpointPolicy.allowed(req.getUrl().toString()))return false;String target=req.getUrl().toString();if(req.isForMainFrame()&&req.hasGesture()&&EndpointPolicy.external(target)){new AlertDialog.Builder(a).setTitle("Open outside the school app?").setMessage(target).setPositiveButton("Open",(d,w)->{try{a.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target)).addCategory(Intent.CATEGORY_BROWSABLE));}catch(ActivityNotFoundException e){status.setText("No app is available to open this link.");}}).setNegativeButton("Cancel",null).show();}else status.setText("This link cannot be opened from the school app.");return true;}
    @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest req){String url=req.getUrl().toString();if(EndpointPolicy.allowed(url)||url.startsWith("data:image/"))return null;return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));}
    @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler handler,android.net.http.SslError error){handler.cancel();status.setText("Secure connection failed. Check your phone date and network.");}
-   @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){status.setText("Loading school…");}
+   @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){denyLocation();denyMicrophone();status.setText("Loading school…");}
    @Override public void onPageFinished(WebView view,String url){status.setText("");if(EndpointPolicy.allowed(url))web.evaluateJavascript("window.print=function(){window.location.assign('"+EndpointPolicy.BASE+"/mobile/print-current');};",null);CookieManager.getInstance().flush();}
    @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error){if(req.isForMainFrame())status.setText("School unavailable. Check internet, then tap here to retry.");}
   });
@@ -41,6 +42,14 @@ final class PortalScreen {
    @Override public boolean onJsAlert(WebView view,String url,String message,JsResult result){if(!EndpointPolicy.allowed(url)){result.cancel();return true;}new AlertDialog.Builder(a).setMessage(message).setPositiveButton("OK",(d,w)->result.confirm()).setOnCancelListener(d->result.cancel()).show();return true;}
    @Override public boolean onJsConfirm(WebView view,String url,String message,JsResult result){if(!EndpointPolicy.allowed(url)){result.cancel();return true;}new AlertDialog.Builder(a).setMessage(message).setPositiveButton("Confirm",(d,w)->result.confirm()).setNegativeButton("Cancel",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;}
    @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){if(files!=null)files.onReceiveValue(null);files=callback;try{a.startActivityForResult(params.createIntent(),41);}catch(ActivityNotFoundException e){files.onReceiveValue(null);files=null;status.setText("No file chooser installed.");}return true;}
+   @Override public void onGeolocationPermissionsShowPrompt(String origin,GeolocationPermissions.Callback callback){
+    denyLocation();
+    if(!PortalPermissions.location(BuildConfig.ROLE,origin,web.getUrl(),foreground)){callback.invoke(origin,false,false);return;}
+    if(a.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED){callback.invoke(origin,true,false);return;}
+    location=callback;locationOrigin=origin;locationPage=web.getUrl();
+    a.requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},LOCATION_PERMISSION);
+   }
+   @Override public void onGeolocationPermissionsHidePrompt(){denyLocation();}
    @Override public void onPermissionRequest(PermissionRequest request){a.runOnUiThread(()->requestMicrophone(request));}
    @Override public void onPermissionRequestCanceled(PermissionRequest request){a.runOnUiThread(()->{if(microphone==request)microphone=null;});}
   });
@@ -51,6 +60,7 @@ final class PortalScreen {
  void result(int code,int result,Intent data){if(code==41&&files!=null){files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));files=null;}
   if(code==42&&result==Activity.RESULT_OK&&data!=null&&data.getData()!=null&&downloadUrl!=null){Uri target=data.getData();String url=downloadUrl;downloadUrl=null;String cookies=CookieManager.getInstance().getCookie(url);io.execute(()->{HttpURLConnection conn=null;try{conn=(HttpURLConnection)new URL(url).openConnection();conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(30000);if(cookies!=null)conn.setRequestProperty("Cookie",cookies);if(conn.getResponseCode()!=200)throw new IOException();try(InputStream in=conn.getInputStream();OutputStream out=a.getContentResolver().openOutputStream(target)){if(out==null)throw new IOException();byte[] buffer=new byte[8192];int n;long total=0;while((n=in.read(buffer))!=-1){total+=n;if(total>25*1024*1024)throw new IOException();out.write(buffer,0,n);}}a.runOnUiThread(()->status.setText("File saved."));}catch(Exception e){a.runOnUiThread(()->status.setText("Download failed. Sign in again and retry."));}finally{if(conn!=null)conn.disconnect();}});}
  }
+ private void denyLocation(){if(location!=null){GeolocationPermissions.Callback pending=location;String origin=locationOrigin;location=null;locationOrigin=null;locationPage=null;pending.invoke(origin,false,false);}}
  private void denyMicrophone(){if(microphone!=null){microphone.deny();microphone=null;}}
  private boolean permitted(PermissionRequest request){return !a.isFinishing()&&!a.isDestroyed()&&PortalPermissions.microphone(request.getOrigin().toString(),web.getUrl(),request.getResources(),foreground);}
  private void requestMicrophone(PermissionRequest request){
@@ -61,6 +71,10 @@ final class PortalScreen {
   a.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MICROPHONE_PERMISSION);
  }
  void permissions(int code,int[] results){
+  if(code==LOCATION_PERMISSION){
+   GeolocationPermissions.Callback pending=location;String origin=locationOrigin,page=locationPage;location=null;locationOrigin=null;locationPage=null;
+   if(pending!=null){boolean allowed=results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED&&page!=null&&page.equals(web.getUrl())&&!a.isFinishing()&&!a.isDestroyed()&&PortalPermissions.location(BuildConfig.ROLE,origin,web.getUrl(),foreground);pending.invoke(origin,allowed,false);if(!allowed)status.setText("Precise location was not allowed. Enable it and retry Geo Attendance.");}return;
+  }
   if(code!=MICROPHONE_PERMISSION)return;
   PermissionRequest request=microphone;microphone=null;
   if(request==null)return;
@@ -68,6 +82,6 @@ final class PortalScreen {
   else{request.deny();status.setText("Microphone unavailable. Retry Record while this app is open, or attach an audio file.");}
  }
  boolean back(){if(web.canGoBack()){web.goBack();return true;}return false;}
- void save(Bundle out){web.saveState(out);}void pause(){foreground=false;denyMicrophone();web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:pause'));",null);web.onPause();CookieManager.getInstance().flush();}void resume(){foreground=true;web.onResume();if("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE))web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:resume'));",null);}
- void destroy(){foreground=false;denyMicrophone();if(files!=null)files.onReceiveValue(null);web.destroy();io.shutdownNow();}
+ void save(Bundle out){web.saveState(out);}void pause(){foreground=false;denyMicrophone();denyLocation();web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:pause'));",null);web.onPause();CookieManager.getInstance().flush();}void resume(){foreground=true;web.onResume();if("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE))web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:resume'));",null);}
+ void destroy(){foreground=false;denyMicrophone();denyLocation();if(files!=null)files.onReceiveValue(null);web.destroy();io.shutdownNow();}
 }
