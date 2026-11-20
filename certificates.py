@@ -137,8 +137,7 @@ def configure_certificates(app,db,Student):
         return hmac.new(str(app.config['SECRET_KEY']).encode(),f'guardian-card:{iid}'.encode(),hashlib.sha256).hexdigest()[:32]
     def guardian_status(issue):
         if issue.snapshot.get('template',{}).get('key')!='guardian-card':return 'Not a guardian card'
-        if Audit.query.filter_by(action='Revoke guardian card').all():
-            if any((a.data or {}).get('issue_id')==issue.id for a in Audit.query.filter_by(action='Revoke guardian card').all()):return 'REVOKED'
+        if any((a.data or {}).get('issue_id')==issue.id for a in Audit.query.filter_by(action='Revoke guardian card').all()):return 'REVOKED'
         student=db.session.get(Student,issue.student_id)
         if not student or student.status!='Active':return 'INACTIVE'
         d=details(student);issued=issue.snapshot.get('student',{})
