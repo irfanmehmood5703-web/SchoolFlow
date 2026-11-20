@@ -275,7 +275,7 @@ def configure_certificates(app,db,Student):
             return csv_response([dict(qr_columns)[key] for key in columns],export_rows,'student-qr' if tab=='qr' else 'certificate-students')
         photos=photos_for([s for s,d in rows]);option_rows=rm['settings'].query.filter(rm['settings'].category.in_(['class_name','section','gender'])).all()
         catalog={**CATALOG,**{t.key:dict(name=t.name,captured=True) for t in templates if t.key not in CATALOG}}
-        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=catalog,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time)
+        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=catalog,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time,guardian_signature=guardian_signature)
     def local_time(value):
         return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p') if value.tzinfo is None else value.astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p')
 
