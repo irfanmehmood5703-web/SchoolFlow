@@ -1,5 +1,5 @@
 """Real private-school Owner app: campus totals, permissions and saved preferences."""
-import os,tempfile,unittest,secrets
+import os,tempfile,unittest,secrets,json
 from datetime import date
 from contextlib import contextmanager
 from flask import g,template_rendered
@@ -109,6 +109,17 @@ class OwnerAppTests(unittest.TestCase):
         r,ctx=self.page('/owner-app/reminders');self.assertIn(b'&lt;script&gt;Fictional task',r.data)
         key=ctx['owner_pref']['reminders'][0]['id'];self.assertEqual(self.post(action='done',key=key,version='4').status_code,302)
         _,ctx=self.page('/owner-app/notifications');self.assertEqual(ctx['reminders'],[])
+    def test_attendance_notifications_acknowledge_only_displayed_revisions(self):
+        _,ctx=self.page('/owner-app/notifications?campus=North');events=ctx['events'];student=next(e for e in events if e['key'].startswith('owner-attendance:student:'));self.assertIn('1 active records',student['detail'])
+        with self.c.session_transaction() as s:csrf=s['record_csrf']
+        def read(items):return self.c.post('/owner-app/notifications/read?campus=North',data=dict(_csrf=csrf,items=json.dumps(items)))
+        self.assertEqual(read([student]).status_code,204)
+        _,ctx=self.page('/owner-app/notifications?campus=North');self.assertTrue(next(e for e in ctx['events'] if e['key']==student['key'])['read'])
+        with self.tenant():
+            db.session.add(self.ops['daily'](kind='student',person_id=2,day=self.today,status='Present'));db.session.query(self.ops['daily']).filter_by(kind='student',person_id=1,day=self.today).delete();db.session.commit()
+        self.assertEqual(read([student]).status_code,204)
+        _,ctx=self.page('/owner-app/notifications?campus=North');current=next(e for e in ctx['events'] if e['key']==student['key']);self.assertFalse(current['read']);self.assertNotEqual(current['revision'],student['revision'])
+        self.assertEqual(read([dict(key='fake',revision='fake')]).status_code,204)
     def test_approval_counts_real_statuses_and_feedback_scope(self):
         _,ctx=self.page('/owner-app/approvals?campus=North');self.assertEqual(len(ctx['rows']),2);self.assertEqual({r['group'] for r in ctx['rows']},{'Students','Employees'})
         _,ctx=self.page('/owner-app/approvals?campus=South&state=Approved');self.assertEqual(len(ctx['rows']),1)

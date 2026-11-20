@@ -6,7 +6,7 @@ const fs=require('fs');
  const output=process.env.OWNER_UI_OUTPUT||'/tmp/owner-app-ui';fs.mkdirSync(output,{recursive:true});
  for(const width of [390,1280]){
   const context=await browser.newContext({viewport:{width,height:844}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(String(e)));
-  await page.goto('http://localhost:5057/qa/owner-entry');await page.locator('input[name=email]').fill('owner@example.invalid');await page.locator('input[name=password]').fill('Fictional-owner-2026-password');await page.locator('button[type=submit]').click();await page.waitForURL('**/owner-app');
+  await page.goto('http://localhost:5057/qa/owner-entry');await page.locator('input[name=email]').fill('owner@example.invalid');await page.locator('input[name=password]').fill('Fictional-owner-2026-password');await page.getByRole('button',{name:'Sign in →',exact:true}).click();await page.waitForURL('**/owner-app');
   const check=async label=>{if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error(label+' overflow '+width);if(errors.length)throw Error(errors.join('\n'));};
   await check('home');await page.screenshot({path:`${output}/home-${width}.png`});
   await page.locator('[data-open="campus-dialog"]').click();await page.getByRole('radio',{name:'North',exact:true}).check();await page.getByRole('button',{name:'Show campus figures'}).click();await page.waitForURL('**/owner-app?campus=North&month=*');await check('campus');

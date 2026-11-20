@@ -1,5 +1,5 @@
 """Owner mobile workspace: summaries first, scoped to the signed-in institute."""
-import calendar,hmac,secrets,time
+import calendar,hmac,secrets,time,hashlib,json
 from collections import Counter,defaultdict
 from datetime import date,datetime,timedelta,timezone
 from flask import Blueprint,abort,g,redirect,render_template,request,session,url_for
@@ -8,6 +8,7 @@ from urllib.parse import quote
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from school_clock import school_today
+from zoneinfo import ZoneInfo
 from widget_catalog import WIDGETS,KEYS
 from widget_sources import build_widgets
 
@@ -42,6 +43,7 @@ TOOLS={
  'staff-daily':('Daily Staff Attendance Register','/workspace/reports/attendance/staff-attendance-report'),
  'category-expenses':('Category-wise Expense Report','/workspace/finance/ledger/report/profit'),
  'quality':('System & Data Checks','/workspace/readiness'),
+ 'support':('SchoolFlow Support','/workspace/support'),
  'help':('SchoolFlow Help','/workspace/how-to'),
 }
 EXTRA_REPORTS=[
@@ -109,7 +111,7 @@ def configure_owner_app(app,db,Student,Employee):
     @bp.context_processor
     def context():
         pref,row=preference()
-        return dict(owner_link=link,owner_campus=g.owner_campus,owner_campuses=g.owner_campuses,owner_month=g.owner_month,owner_pref=pref,owner_revision=row.version if row else 0,money=cents,tools=TOOLS,app_version=APP_VERSION,owner_now=datetime.now(timezone.utc).isoformat(),owner_today=school_today(),previous_month=(g.owner_start-timedelta(days=1)).strftime('%Y-%m'),next_month=(g.owner_start+timedelta(days=32)).replace(day=1).strftime('%Y-%m'),owner_name=(g.school_identity or {}).get('name','Your school'))
+        return dict(owner_link=link,owner_campus=g.owner_campus,owner_campuses=g.owner_campuses,owner_month=g.owner_month,owner_pref=pref,owner_revision=row.version if row else 0,money=cents,tools=TOOLS,app_version=APP_VERSION,owner_now=datetime.now(ZoneInfo('Asia/Karachi')).isoformat(),owner_today=school_today(),previous_month=(g.owner_start-timedelta(days=1)).strftime('%Y-%m'),next_month=(g.owner_start+timedelta(days=32)).replace(day=1).strftime('%Y-%m'),owner_name=(g.school_identity or {}).get('name','Your school'))
     def people(active=False):
         q=db.session.query(Student,D).outerjoin(D,D.student_id==Student.id)
         if active:q=q.filter(Student.status=='Active')
@@ -170,14 +172,17 @@ def configure_owner_app(app,db,Student,Employee):
         return result
     def finance():
         J=app.extensions['ledger_models']['journal'];L=app.extensions['ledger_models']['line'];month=g.owner_start
-        previous=(month-timedelta(days=1)).replace(day=1);q=db.session.query(J.day,L.snapshot,L.debit,L.credit).join(L,L.journal_id==J.id).filter(J.day>=previous,J.day<=g.owner_end)
+        previous=(month-timedelta(days=1)).replace(day=1);q=db.session.query(J.day,L.snapshot,L.debit,L.credit).join(L,L.journal_id==J.id).filter(or_((J.day>=previous)&(J.day<=g.owner_end),J.day==school_today()))
         if g.owner_campus:q=q.filter(J.campus==g.owner_campus)
         income=expense=prior=today_in=today_out=0;days=defaultdict(lambda:[0,0])
         for day,snapshot,debit,credit in q.all():
             typ=snapshot.get('account_class');amount=credit-debit if typ=='Income' else debit-credit if typ=='Expense' else 0
-            if day<month:prior+=amount if typ=='Income' else -amount if typ=='Expense' else 0;continue
-            if typ=='Income':income+=amount;days[day][0]+=amount;today_in+=amount if day==school_today() else 0
-            elif typ=='Expense':expense+=amount;days[day][1]+=amount;today_out+=amount if day==school_today() else 0
+            if day==school_today():
+                today_in+=amount if typ=='Income' else 0;today_out+=amount if typ=='Expense' else 0
+            if previous<=day<month:prior+=amount if typ=='Income' else -amount if typ=='Expense' else 0
+            if not month<=day<=g.owner_end:continue
+            if typ=='Income':income+=amount;days[day][0]+=amount
+            elif typ=='Expense':expense+=amount;days[day][1]+=amount
         def line(index):
             values=[days[month+timedelta(days=i)][index] for i in range((g.owner_end-month).days+1)];low=min(values+[0]);high=max(values+[1]);return ' '.join(f'{i*260/max(len(values)-1,1):.1f},{65-(v-low)*55/max(high-low,1):.1f}' for i,v in enumerate(values))
         return dict(income=income,expense=expense,net=income-expense,today_income=today_in,today_expense=today_out,previous=prior,change=round((income-expense-prior)/abs(prior)*100,1) if prior else None,income_line=line(0),expense_line=line(1))
@@ -189,6 +194,9 @@ def configure_owner_app(app,db,Student,Employee):
             decision=decisions.get(s.id)
             state='Pending' if s.status=='Waiting' else 'Declined' if s.status in ('Refused','Rejected') else 'Approved' if decision and decision.action=='Admission allowed' else None
             if state:rows.append(dict(id='student:'+str(s.id),group='Students',kind='Admission Approval',label=s.name,state=state,url=link('owner_app.open_tool',key='admissions')))
+        student_names={s.id:s.name for s,_ in students}
+        for leave in app.extensions['general_leave_model'].query.filter_by(institute_scope=g.school_identity['scope']).all():
+            if leave.student_id in student_names:rows.append(dict(id='student-leave:'+str(leave.id),group='Students',kind='Leaves',label=student_names[leave.student_id],state='Declined' if leave.status=='Rejected' else leave.status,url=link('owner_app.open_tool',key='student-leaves')))
         names={str(e.id):e.name for e,_ in employees()}
         kinds={'salary-plans':'Salary Plan','increments':'Annual Increment','advances':'Advance Salary','leave-approvals':'Leaves','staff-payment-approval':'Fee Payment'}
         for row in workflows():
@@ -242,8 +250,37 @@ def configure_owner_app(app,db,Student,Employee):
         return {kind:dict(total=sum(r.kind==kind for r in rows),open=sum(r.kind==kind and r.status=='Open' for r in rows),done=sum(r.kind==kind and r.status!='Open' for r in rows)) for kind in ('complaint','suggestion')}
     @bp.get('/connect')
     def connect():return render('connect',engagement=engagement(),feedback=feedback_counts(),summaries=summaries(['complaints','complaints-chart','sms']))
+    def notification_events():
+        events=[dict(e) for e in app.extensions['notice_events']()]
+        for event in events:
+            tool=next((tool for prefix,tool in [('message:','messages'),('support:','support'),('payment:','payments')] if event['key'].startswith(prefix)),None)
+            if tool:event['url']=link('owner_app.open_tool',key=tool)
+        for kind,rows in [('student',people(True)),('staff',[(e,d) for e,d in employees() if e.status=='Active'])]:
+            ids={r.id for r,_ in rows};marked={r.person_id for r in ops['daily'].query.filter_by(kind=kind,day=school_today()).filter(ops['daily'].person_id.in_(ids)).all()};missing=sorted(ids-marked)
+            if missing:
+                key='owner-attendance:'+kind+':'+hashlib.sha256(g.owner_campus.encode()).hexdigest()[:12]
+                revision=hashlib.sha256((str(school_today())+':'+','.join(map(str,missing))).encode()).hexdigest()
+                events.insert(0,dict(key=key,revision=revision,title=('Student' if kind=='student' else 'Employee')+' attendance not marked',detail=str(len(missing))+' active records have no saved attendance for '+str(school_today())+' · '+(g.owner_campus or 'All campuses'),url=link('owner_app.report',key='attendance-donut' if kind=='student' else 'staff-attendance')))
+        I=app.extensions['client_subscription_models']['invoice'];invoice=I.query.filter_by(institute_id=session['institute_id']).order_by(I.month.desc()).first()
+        if invoice:
+            events.insert(0,dict(key='owner-subscription:'+invoice.month,revision=str(invoice.paid)+':'+str(invoice.discount)+':'+str(invoice.amount),title='SchoolFlow Subscription',detail=invoice.month+' · '+('Invoice paid' if invoice.remaining==0 else cents(invoice.remaining)+' outstanding'),url=link('owner_app.open_tool',key='subscription')))
+        events=events[:40];State=app.extensions['notice_model'];who='owner:'+str(session['owner_id']);states={r.source:r.revision for r in State.query.filter_by(actor=who).filter(State.source.in_([e['key'] for e in events])).all()}
+        for event in events:event['read']=states.get(event['key'])==event['revision']
+        return events
+    @bp.post('/notifications/read')
+    def read_notifications():
+        try:items=json.loads(request.form.get('items','[]'))
+        except ValueError:abort(422)
+        if not isinstance(items,list) or len(items)>40 or any(not isinstance(i,dict) for i in items):abort(422)
+        State=app.extensions['notice_model'];who='owner:'+str(session['owner_id'])
+        for event in notification_events():
+            if not any(i.get('key')==event['key'] and i.get('revision')==event['revision'] for i in items):continue
+            row=db.session.get(State,(who,event['key']))
+            if row:row.revision=event['revision'];row.read_at=time.time()
+            else:db.session.add(State(actor=who,source=event['key'],revision=event['revision']))
+        db.session.commit();return '',204
     @bp.get('/notifications')
-    def notifications():return render('notifications',events=app.extensions['notice_events'](),reminders=[r for r in preference()[0]['reminders'] if not r.get('done') and r['due']<=school_today().isoformat()])
+    def notifications():return render('notifications',events=notification_events(),reminders=[r for r in preference()[0]['reminders'] if not r.get('done') and r['due']<=school_today().isoformat()])
     @bp.get('/activity')
     def activity():
         A=ops['audit'];q=A.query
