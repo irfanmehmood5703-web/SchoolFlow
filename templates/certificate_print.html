@@ -63,4 +63,23 @@
  .issued-document:has(.certificate-sheet.document){padding:0!important}
  .issued-document .certificate-sheet.document{padding:10mm 12mm!important;break-inside:avoid!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
 }
+
+/* Guardian pick-up card: uniform rows, clear photo hierarchy, reliable print. */
+.issued-document .certificate-sheet.card article table.guardian-front>tbody>tr>td,
+.issued-document .certificate-sheet.card article table.guardian-back>tbody>tr>td{vertical-align:top!important;padding:3mm!important}
+.issued-document .certificate-sheet.card article table.guardian-front table>tbody>tr>td{vertical-align:top!important;padding:1.5mm 1mm!important}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts{border-collapse:collapse!important;width:100%!important}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts th,
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts td{padding:2.5mm 1.5mm!important;border:0!important;border-bottom:1px solid #8ab6a3!important;background:#176b4a!important;color:white!important;font-size:11px!important;line-height:1.3!important;vertical-align:middle!important}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts th{width:52%!important;text-align:left!important;font-weight:700!important}
+.issued-document .certificate-sheet.card article table.guardian-front table.guardian-facts td{text-align:right!important}
+.issued-document .certificate-sheet.card article table.guardian-front img[alt="Guardian photo"]{width:25mm!important;height:29mm!important;max-width:100%!important;object-fit:contain!important;border:2px solid white!important;border-radius:5px!important;background:#fff!important}
+.issued-document .certificate-sheet.card article table.guardian-front img[alt="Student photo"]{width:20mm!important;height:24mm!important;max-width:100%!important;object-fit:contain!important;border:2px solid white!important;border-radius:5px!important;background:#fff!important}
+.issued-document .certificate-sheet.card article table.guardian-front p{margin:3px 0!important;font-size:11px!important;line-height:1.3!important}
+.issued-document .certificate-sheet.card article table.guardian-back>tbody>tr>td>table{border-collapse:collapse!important;width:100%!important}
+.issued-document .certificate-sheet.card article table.guardian-back>tbody>tr>td>table th,
+.issued-document .certificate-sheet.card article table.guardian-back>tbody>tr>td>table td{padding:2mm 1.5mm!important;border:0!important;border-bottom:1px solid #a7c8b6!important;vertical-align:middle!important;font-size:11px!important;line-height:1.35!important}
+.issued-document .certificate-sheet.card article table.guardian-back>tbody>tr>td>table th{width:38%!important;text-align:left!important}
+.issued-document .certificate-sheet.card article table.guardian-back p{margin:4px 0!important;line-height:1.4!important}
+@media print{.issued-document .certificate-sheet.card article table.guardian-front img,.issued-document .certificate-sheet.card article table.guardian-back img{break-inside:avoid!important}}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
