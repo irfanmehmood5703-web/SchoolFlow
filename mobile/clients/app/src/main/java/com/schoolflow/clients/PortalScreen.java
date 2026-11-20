@@ -25,7 +25,7 @@ final class PortalScreen {
   Button reload=new Button(a);reload.setText("Reload");reload.setOnClickListener(v->web.reload());bar.addView(reload);
   Button print=new Button(a);print.setText("Print");print.setOnClickListener(v->printPage());bar.addView(print);
   Button clear=new Button(a);clear.setText("Sign out");clear.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("Clear this app’s school session?").setPositiveButton("Sign out",(d,w)->{CookieManager.getInstance().removeAllCookies(ok->{web.clearHistory();web.clearCache(true);WebStorage.getInstance().deleteAllData();web.loadUrl(startUrl());});}).setNegativeButton("Cancel",null).show());bar.addView(clear);
-  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);root.addView(brand);status=new TextView(a);root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
+  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);if(!"owner".equals(BuildConfig.ROLE))root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);if(!"owner".equals(BuildConfig.ROLE))root.addView(brand);status=new TextView(a);status.setOnClickListener(v->{if(web!=null)web.reload();});root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
   WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSafeBrowsingEnabled(true);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.setWebViewClient(new WebViewClient(){
@@ -34,7 +34,7 @@ final class PortalScreen {
    @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler handler,android.net.http.SslError error){handler.cancel();status.setText("Secure connection failed. Check your phone date and network.");}
    @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){status.setText("Loading school…");}
    @Override public void onPageFinished(WebView view,String url){status.setText("");if(EndpointPolicy.allowed(url))web.evaluateJavascript("window.print=function(){window.location.assign('"+EndpointPolicy.BASE+"/mobile/print-current');};",null);CookieManager.getInstance().flush();}
-   @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error){if(req.isForMainFrame())status.setText("School unavailable. Check internet, then tap Reload.");}
+   @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error){if(req.isForMainFrame())status.setText("School unavailable. Check internet, then tap here to retry.");}
   });
   web.setWebChromeClient(new WebChromeClient(){
    @Override public boolean onJsPrompt(WebView view,String url,String message,String value,JsPromptResult result){if(!EndpointPolicy.allowed(url)){result.cancel();return true;}EditText field=new EditText(a);field.setText(value==null?"":value);field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(5000)});new AlertDialog.Builder(a).setMessage(message).setView(field).setPositiveButton("Save",(d,w)->result.confirm(field.getText().toString())).setNegativeButton("Cancel",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;}
@@ -68,6 +68,6 @@ final class PortalScreen {
   else{request.deny();status.setText("Microphone unavailable. Retry Record while this app is open, or attach an audio file.");}
  }
  boolean back(){if(web.canGoBack()){web.goBack();return true;}return false;}
- void save(Bundle out){web.saveState(out);}void pause(){foreground=false;denyMicrophone();web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:pause'));",null);web.onPause();CookieManager.getInstance().flush();}void resume(){foreground=true;web.onResume();}
+ void save(Bundle out){web.saveState(out);}void pause(){foreground=false;denyMicrophone();web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:pause'));",null);web.onPause();CookieManager.getInstance().flush();}void resume(){foreground=true;web.onResume();if("owner".equals(BuildConfig.ROLE))web.evaluateJavascript("window.dispatchEvent(new Event('schoolflow:resume'));",null);}
  void destroy(){foreground=false;denyMicrophone();if(files!=null)files.onReceiveValue(null);web.destroy();io.shutdownNow();}
 }

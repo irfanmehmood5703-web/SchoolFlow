@@ -42,7 +42,7 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':2},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':3},headers=headers or self.headers)
     def key(self,job,other=False):
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
         subject=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'Fictional school signing')]);now=datetime.now(timezone.utc)
@@ -133,7 +133,7 @@ class SchoolAppTests(unittest.TestCase):
         old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
         update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
-        self.assertEqual(update['branding']['source_version'],2)
+        self.assertEqual(update['branding']['source_version'],3)
         self.assertEqual(self.claim().json['job']['id'],update['id'])
         self.assertEqual(self.M['build'].query.count(),2)
 
@@ -147,7 +147,7 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(c.post('/auth/institute',data={'_csrf':csrf,'code':self.schools[1][2]}).status_code,403)
         self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'owner@example.invalid','password':self.password}).status_code,302)
         self.assertEqual(c.get('/workspace/dashboard').status_code,200)
-        self.assertIn('/workspace/dashboard',c.get(entry).location)
+        self.assertIn('/owner-app',c.get(entry).location)
         with c.session_transaction() as session:csrf=session['record_csrf']
         self.assertIn('/mobile/owner',c.post('/auth/logout',data={'_csrf':csrf}).location)
         self.assertIn('/auth/login',c.get('/auth/institute').location)

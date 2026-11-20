@@ -9,13 +9,13 @@ def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').re
 android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
-    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 3; versionName '0.3-acceptance' }
+    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 4; versionName '0.4-acceptance' }
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
         buildConfigField 'String','SCHOOL_SCOPE',school ? '"'+school.school_key+'"' : '""'
         manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/schoolflow_icon']
-        if(school){ versionCode (school.sequence as int); versionName '0.2-school-test.'+school.sequence }
+        if(school){ versionCode (school.sequence as int); versionName '0.3-school-test.'+school.sequence }
     }
     if(school){
         sourceSets.main.res.srcDir rootProject.file('generated-school-res')

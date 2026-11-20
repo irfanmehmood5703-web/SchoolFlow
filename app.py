@@ -212,6 +212,8 @@ from assistant_service import configure_assistant
 configure_assistant(app,db,Student,Employee)
 from personal_notices import configure_notices
 configure_notices(app,db,Student)
+from owner_app import configure_owner_app
+configure_owner_app(app,db,Student,Employee)
 
 
 @app.route('/')

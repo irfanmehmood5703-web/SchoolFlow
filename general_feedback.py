@@ -22,6 +22,7 @@ def configure_general_feedback(app, db):
         created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
         updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
+    app.extensions['general_feedback_model']=Feedback
     bp = Blueprint("general_feedback", __name__, url_prefix="/api/general/feedback")
     def guard(write=False):
         identity = getattr(g, "school_identity", None)
