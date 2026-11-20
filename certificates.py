@@ -172,6 +172,13 @@ def configure_certificates(app,db,Student):
             if value is None:return str(escape(match.group(0)))
             return str(value) if isinstance(value,Markup) else str(escape(value))
         content=content or {key:getattr(t,key) for key in ('header','body','footer')}
+        # Upgrade only the original unlabelled ID-card template markup in memory.
+        # Do not overwrite campus-edited templates or historical issued snapshots.
+        if t.key in ('student-card-new','student-card','guardian-card'):
+            legacy='[stdPhoto]<h3>[studentName]</h3><p>[fatherName]</p><p>Class: [className] · Section: [sectionName]</p><p>SID: [sid] · Roll: [rollNo]</p>'
+            labelled='[stdPhoto]<p><b>Student Name:</b> [studentName]</p><p><b>Father Name:</b> [fatherName]</p><p><b>Class:</b> [className] &nbsp; <b>Section:</b> [sectionName]</p><p><b>Roll No.:</b> [rollNo] &nbsp; <b>Student ID:</b> [sid]</p>'
+            if legacy in content.get('body',''):
+                content=dict(content,body=content['body'].replace(legacy,labelled))
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
         html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
         return html,amounts,data
