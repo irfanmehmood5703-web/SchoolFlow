@@ -63,7 +63,17 @@ def verify():
                     latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
                     assert latest.state=='ready' and latest.sequence==2 and latest.spec['name']=='ISF & "Academy"'
                     assert db.session.get(models['signing'],scope).fingerprint==first_key
-            print('Verified 12 compiled school APKs: two distinct schools, labels, icons, packages, school isolation, private signing, anonymous APK-only sharing and stable-key/versioned updates.')
+                # Simulate a central client update after ready jobs discarded
+                # their temporary logo bytes. This must reload the tenant logo.
+                with app.app_context():
+                    latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
+                    assert latest.logo==b'';latest.spec={**latest.spec,'source_version':3};db.session.commit()
+                assert run(base,fixture_token=token)
+                with app.app_context():
+                    latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
+                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==4
+                    assert db.session.get(models['signing'],scope).fingerprint==first_key
+            print('Verified 16 compiled school APKs: two schools, real logo restoration after a central upgrade, labels, packages, private signing, APK-only sharing and stable-key updates.')
         finally:server.shutdown();thread.join(timeout=5)
 
 if __name__=='__main__':verify()

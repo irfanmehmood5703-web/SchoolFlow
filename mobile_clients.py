@@ -1,6 +1,6 @@
 """Android entry points. School binding narrows routing; normal auth authorises data."""
-import hmac,re,secrets
-from flask import Blueprint,abort,g,redirect,render_template,request,session,url_for
+import hmac,io,re,secrets
+from flask import Blueprint,abort,g,redirect,render_template,request,send_file,session,url_for
 from itsdangerous import URLSafeSerializer,BadSignature
 
 COOKIE='schoolflow_mobile'
@@ -18,6 +18,43 @@ def configure_mobile_clients(app):
         bound=binding()
         return not bound or bound['kind']==role
     app.extensions['mobile_client_helpers']=dict(binding=binding,role_allowed=role_allowed)
+
+    def school_brand(with_logo=False):
+        bound=binding()
+        if not bound:return None
+        School=app.extensions['identity_models']['institute']
+        school=School.query.filter_by(storage_key=bound['scope'],code=bound['code'],active=True).first()
+        if not school:return None
+        result=dict(name=school.name,code=school.code,scope=school.storage_key,kind=bound['kind'],has_logo=False,logo=b'',mime='')
+        engine=app.extensions['identity_helpers']['engine'](school.id)
+        # Separate identity maps are essential: every tenant has Profile(1).
+        with app.app_context(),app.test_request_context('/internal/mobile-school-brand'):
+            g.institute_engine=engine
+            Profile=app.extensions['institute_setup_models']['profile']
+            profile=db.session.query(Profile.data,Profile.logo_mime,db.func.length(Profile.logo)).filter(Profile.id==1).first()
+            if profile:
+                result['name']=profile[0].get('name') or result['name']
+                result['has_logo']=bool(profile[1] and profile[2])
+                if with_logo and result['has_logo']:result.update(logo=bytes(db.session.get(Profile,1).logo),mime=profile[1])
+            db.session.remove()
+        return result
+    # Flask-SQLAlchemy is already configured by the application factory.
+    db=app.extensions['sqlalchemy']
+    @app.context_processor
+    def branding_context():
+        if request.blueprint not in ('identity','mobile_clients','parent_portal'):return {}
+        brand=school_brand()
+        return dict(app_school_brand=brand) if brand else {}
+
+    @bp.get('/mobile/school-logo/<scope>')
+    def school_logo(scope):
+        bound=binding()
+        if not bound or bound['scope']!=scope:abort(404)
+        brand=school_brand(True)
+        if not brand or not brand['logo'] or brand['mime'] not in ('image/png','image/jpeg','image/webp'):abort(404)
+        response=send_file(io.BytesIO(brand['logo']),mimetype=brand['mime'])
+        response.headers['Cache-Control']='private, no-store';response.headers['X-Content-Type-Options']='nosniff'
+        return response
 
     @app.before_request
     def keep_school_binding():

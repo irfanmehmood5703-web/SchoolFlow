@@ -10,7 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
 
-SOURCE_VERSION=3
+SOURCE_VERSION=4
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -186,10 +186,17 @@ def configure_school_apps(app,db):
         for school_key,sequence in latest:
             previous=Build.query.filter_by(school_key=school_key,sequence=sequence).one()
             if previous.state!='ready' or previous.spec.get('source_version',1)>=SOURCE_VERSION:continue
-            if not School.query.filter_by(storage_key=school_key,active=True).first():continue
-            spec={**previous.spec,'source_version':SOURCE_VERSION}
-            fingerprint=hashlib.sha256(json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
-            db.session.add(Build(school_key=school_key,fingerprint=fingerprint,sequence=sequence+1,spec=spec,logo=previous.logo))
+            school=School.query.filter_by(storage_key=school_key,active=True).first()
+            if not school:continue
+            # Ready jobs discard their temporary logo bytes. Reload the current
+            # tenant's canonical profile in an isolated session, never the
+            # registry/default DB or a different school's cached Profile(1).
+            school_engine=app.extensions['identity_helpers']['engine'](school.id)
+            with app.app_context(),app.test_request_context('/internal/school-app-branding'):
+                g.institute_engine=school_engine
+                spec,logo,fingerprint,_=snapshot(school)
+                db.session.remove()
+            db.session.add(Build(school_key=school_key,fingerprint=fingerprint,sequence=sequence+1,spec=spec,logo=logo))
         db.session.flush()
         row=Build.query.filter_by(state='building',worker=worker(claims)).filter(Build.lease_until>stamp).first()
         if not row:
