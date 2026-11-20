@@ -3,3 +3,6 @@
 .teacher-photo{width:100px;height:100px;object-fit:cover;border-radius:24px;display:block;margin-bottom:16px}
 
 .teacher-shortcuts{max-width:1140px;margin:12px auto 0;padding:0 24px;display:flex;justify-content:flex-end;gap:18px;font-size:13px}.teacher-shortcuts a{color:var(--green)}
+
+.teacher-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.teacher-feature{display:flex;flex-direction:column;align-items:flex-start;gap:10px;color:var(--ink);padding:18px!important}.teacher-feature svg{width:30px;height:30px;color:var(--green)}.teacher-feature small{color:var(--muted);font-size:11px}@media(max-width:600px){.teacher-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.teacher-feature strong{font-size:14px}}
+.teacher-main .form-grid>*{min-width:0}.teacher-main input,.teacher-main select,.teacher-main textarea{min-width:0;max-width:100%}@media(max-width:600px){.teacher-main .form-grid{grid-template-columns:minmax(0,1fr)}}
