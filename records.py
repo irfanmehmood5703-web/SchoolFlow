@@ -314,7 +314,7 @@ def configure_records(app, db, Student, Employee):
     def incoming_files():
         errors, result = {}, []
         photo = request.files.get("photo")
-        guardian_photo = request.files.get("guardian_photo") if request.path.startswith("/workspace/records/student/") else None
+        guardian_photo = request.files.get("guardian_photo") if request.path.startswith("/records/student/") else None
         docs = request.files.getlist("documents")
         titles = request.form.getlist("document_title")
         if len(docs) > MAX_ATTACHMENTS:
@@ -329,7 +329,7 @@ def configure_records(app, db, Student, Employee):
                 errors["guardian_photo" if is_guardian else ("photo" if is_photo else "documents")] = "Use non-empty files up to 5 MB each."
                 continue
             if ext not in ALLOWED_DOCUMENTS:
-                errors["documents"] = "This file type is not supported."
+                errors["guardian_photo" if is_guardian else ("photo" if is_photo else "documents")] = "This file type is not supported."
                 continue
             mime = "application/octet-stream"
             if is_photo:
@@ -343,7 +343,7 @@ def configure_records(app, db, Student, Employee):
                 elif content[:4] == b"RIFF" and content[8:12] == b"WEBP":
                     mime = "image/webp"
                 else:
-                    errors["photo"] = "Use a JPG, PNG or WebP image."
+                    errors["guardian_photo" if is_guardian else "photo"] = "Use a JPG, PNG or WebP image."
                     continue
             doc_index = docs.index(item) if not is_photo else None
             title = ("Guardian Photo" if is_guardian else "Profile Photo") if is_photo else (titles[doc_index].strip() if doc_index < len(titles) else "")
