@@ -133,6 +133,45 @@ def configure_certificates(app,db,Student):
         namespace=(getattr(g,'school_identity',None) or {}).get('scope','DEMO')
         token=hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:student-qr:{namespace}:{s.id}:{s.admission_no}'.encode(),hashlib.sha256).hexdigest()
         return 'schoolflow:student:'+token
+    def guardian_signature(iid):
+        return hmac.new(str(app.config['SECRET_KEY']).encode(),f'guardian-card:{iid}'.encode(),hashlib.sha256).hexdigest()[:32]
+    def guardian_status(issue):
+        if issue.snapshot.get('template',{}).get('key')!='guardian-card':return 'Not a guardian card'
+        if Audit.query.filter_by(action='Revoke guardian card').all():
+            if any((a.data or {}).get('issue_id')==issue.id for a in Audit.query.filter_by(action='Revoke guardian card').all()):return 'REVOKED'
+        student=db.session.get(Student,issue.student_id)
+        if not student or student.status!='Active':return 'INACTIVE'
+        d=details(student);issued=issue.snapshot.get('student',{})
+        issued_session=issued.get('academic_session','')
+        current_session=d.get('academic_session','')
+        if not issued_session or not current_session:return 'SESSION NOT SET'
+        if str(issued_session)!=str(current_session) or issued.get('class_name')!=student.class_name or issued.get('section','')!=d.get('section',''):
+            return 'EXPIRED'
+        latest=CertificateIssue.query.join(CertificateTemplate,CertificateIssue.template_id==CertificateTemplate.id).filter(CertificateIssue.student_id==student.id,CertificateTemplate.key=='guardian-card',CertificateIssue.id>issue.id).first()
+        if latest:return 'SUPERSEDED'
+        return 'VALID'
+    @bp.get('/guardian-qr/<int:iid>.svg')
+    def guardian_qr_image(iid):
+        issue=db.get_or_404(CertificateIssue,iid)
+        if issue.snapshot.get('template',{}).get('key')!='guardian-card':abort(404)
+        response=app.response_class(guardian_qr(iid),mimetype='image/svg+xml');response.headers['Cache-Control']='private, no-store';return response
+    @bp.get('/guardian-verify/<int:iid>/<signature>')
+    def guardian_verify(iid,signature):
+        if not hmac.compare_digest(signature,guardian_signature(iid)):abort(404)
+        issue=db.get_or_404(CertificateIssue,iid)
+        status=guardian_status(issue)
+        response=app.response_class('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guardian card verification</title><main style="font:18px Arial;max-width:480px;margin:12vh auto;padding:25px;border:2px solid #176b4a;border-radius:12px"><h2>SchoolFlow Guardian Card</h2><h1>'+str(escape(status))+'</h1><p>Reference: '+str(escape(issue.reference))+'</p><p>Verify the guardian photo in person before releasing a student.</p></main>',mimetype='text/html')
+        response.headers['Cache-Control']='no-store';return response
+    @bp.post('/guardian-revoke/<int:iid>')
+    def guardian_revoke(iid):
+        issue=db.get_or_404(CertificateIssue,iid)
+        if issue.snapshot.get('template',{}).get('key')!='guardian-card':abort(404)
+        db.session.add(Audit(action='Revoke guardian card',data=dict(issue_id=issue.id,reference=issue.reference,campus=issue.campus)))
+        commit();flash('Guardian card revoked. Its verification will show REVOKED.','success')
+        return redirect(url_for('certificates.index',tab='logs',campus=issue.campus))
+    def guardian_qr(iid):
+        link=url_for('certificates.guardian_verify',iid=iid,signature=guardian_signature(iid),_external=True)
+        return qrcode.make(link,image_factory=SvgPathImage,box_size=5,border=4).to_string()
     @bp.get('/qr/<int:sid>.svg')
     def qr(sid):
         s=db.get_or_404(Student,sid);img=qrcode.make(qr_payload(s),image_factory=SvgPathImage,box_size=5,border=4)
@@ -170,6 +209,9 @@ def configure_certificates(app,db,Student):
     def document(s,c,t,ref,copy_type,content=None):
         from certificate_defaults import default_content
         values,amounts,data=mapping(s,c,ref,copy_type)
+        if t.key=='guardian-card':
+            d=details(s);values['sessionname']=str(d.get('academic_session') or 'Not set')
+            values['qrcode']=Markup(image_tag(url_for('certificates.guardian_qr_image',iid=int(ref)),'Student QR code')) if str(ref).isdigit() else Markup('<span>QR available after issuing</span>')
         values['reference']=f"{CATALOG.get(t.key,{'prefix':'DOC'})['prefix']}-{ref}"
         def replace(match):
             value=values.get(match.group(1).casefold())
@@ -353,12 +395,12 @@ def configure_certificates(app,db,Student):
                 elif src.startswith('/workspace/certificates/logo/'):
                     mime=c.logo_mime;content=c.logo
                 else:
-                    mime='image/svg+xml';content=qrcode.make(qr_payload(s),image_factory=SvgPathImage,box_size=5,border=4).to_string()
+                    mime='image/svg+xml';content=guardian_qr(issue.id) if t.key=='guardian-card' else qrcode.make(qr_payload(s),image_factory=SvgPathImage,box_size=5,border=4).to_string()
                 return 'src="data:'+mime+';base64,'+base64.b64encode(content).decode()+'"' if content and mime else 'alt="Image unavailable"'
             issue.html=re.sub(r'src="(/(?:records/files/\d+|workspace/certificates/(?:logo/\d+|qr/\d+\.svg)))"',freeze,issue.html)
             snapshot_bytes+=len(issue.html.encode())+sum(len(getattr(t,key).encode()) for key in ('header','body','footer'))
             if snapshot_bytes>20*1024*1024:raise ValueError('These documents are too large for one print batch. Select fewer students.')
-            issue.snapshot=dict(student=dict(id=s.id,name=s.name,father=d.get('father') or s.father,roll_no=d.get('roll_no') or s.admission_no,class_name=s.class_name,section=d.get('section','')),template=dict(name=t.name,key=t.key,version=t.version,**{key:getattr(t,key) for key in ('header','body','footer')}),fees=amounts,copy_type=copy_type)
+            issue.snapshot=dict(student=dict(id=s.id,name=s.name,father=d.get('father') or s.father,roll_no=d.get('roll_no') or s.admission_no,class_name=s.class_name,section=d.get('section',''),academic_session=d.get('academic_session','')),template=dict(name=t.name,key=t.key,version=t.version,**{key:getattr(t,key) for key in ('header','body','footer')}),fees=amounts,copy_type=copy_type)
         db.session.add(Audit(action='Generate certificates for printing',data=dict(template_id=t.id,student_ids=ids,batch_token=token)));commit()
         return redirect(url_for('certificates.batch_print',bid=batch.id))
 
