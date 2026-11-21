@@ -8,7 +8,7 @@
  .report-table-output td:first-child,.report-table-output td:last-child{white-space:nowrap}
 
  .fee-sheet-document th:nth-child(-n+6){white-space:nowrap}
- .report-print-document{page:sf-report-table}
+ .report-print-document:not(.detail-fee-print){page:sf-report-table}
  .report-table-output{break-inside:auto!important;padding:0!important;border:0!important;overflow:visible!important}
  .report-table-output table{width:100%;border-collapse:collapse;table-layout:auto;font-size:9px}
  .report-table-output thead{display:table-header-group}.report-table-output tfoot{display:table-footer-group}
@@ -16,35 +16,35 @@
  .table-search,.report-controls{display:none!important}
 }
 
-/* A readable, compact landscape printout for the detailed fee ledger only.
-   Keep all data columns and the user's selected paper size (A4 or Letter). */
-@page sf-detail-fee { size: landscape; margin: 11mm 12mm; }
+
+/* Detailed fee report: one continuous print flow, no orphaned branding page. */
 @media print {
-  .report-print-document.detail-fee-print { page: sf-detail-fee; width: 100% !important; max-width: none !important; color: #193b31; }
-  .detail-fee-print .report-table-output { margin-top: 12px !important; }
-  .detail-fee-print .report-table-output h2 { font-size: 14px !important; margin: 0 0 9px !important; color: #173e32; }
-  .detail-fee-print .report-table-output .table { width: 100%; overflow: visible !important; }
-  .detail-fee-print .report-table-output table { width: 100% !important; table-layout: fixed; font-size: 10px !important; line-height: 1.35; }
-  .detail-fee-print .report-table-output th { background: #e9f3ed !important; color: #173e32 !important; font-size: 9.5px; font-weight: 700; border-bottom: 1.5px solid #3b795f; padding: 7px 5px !important; }
-  .detail-fee-print .report-table-output td { padding: 7px 5px !important; border-bottom: 1px solid #dce8e0; vertical-align: top; }
+  .report-print-document.detail-fee-print,
+  .detail-fee-print .report-table-output,
+  .detail-fee-print .report-table-output .table,
+  .detail-fee-print .report-table-output table,
+  .detail-fee-print .report-table-output tbody,
+  .detail-fee-print .report-table-output tr,
+  .detail-fee-print .report-table-output td {
+    page: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+  .detail-fee-print { width: 100% !important; max-width: 100% !important; }
+  .detail-fee-print .report-table-output { margin-top: 8px !important; }
+  .detail-fee-print .report-table-output h2 { font-size: 12px !important; margin: 0 0 5px !important; }
+  .detail-fee-print .report-table-output .table { overflow: visible !important; }
+  .detail-fee-print .report-table-output table { table-layout: auto !important; width: 100% !important; font-size: 9px !important; line-height: 1.25 !important; border-collapse: collapse !important; }
+  .detail-fee-print .report-table-output thead { display: table-header-group !important; }
+  .detail-fee-print .report-table-output tbody { display: table-row-group !important; }
+  .detail-fee-print .report-table-output tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .detail-fee-print .report-table-output th { background: #e9f3ed !important; color: #173e32 !important; font-weight: 700; border-bottom: 1px solid #3b795f; padding: 5px 3px !important; }
+  .detail-fee-print .report-table-output td { padding: 5px 3px !important; border-bottom: 1px solid #dce8e0; vertical-align: middle !important; }
   .detail-fee-print .report-table-output tr:nth-child(even) td { background: #f7faf8 !important; }
-  .detail-fee-print .report-table-output tr { break-inside: avoid; page-break-inside: avoid; }
-  .detail-fee-print .cards { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 10px !important; margin: 12px 0 !important; }
-  .detail-fee-print .cards .card { padding: 12px 14px !important; border: 1px solid #cbded1 !important; border-radius: 6px; background: #f8fbf9 !important; }
-  .detail-fee-print .cards .card span { display: block; font-size: 10px !important; margin-bottom: 5px; }
-  .detail-fee-print .cards .card b { display: block; font-size: 17px !important; line-height: 1.25; color: #176548 !important; }
-  .detail-fee-print .report-table-output th:nth-child(1), .detail-fee-print .report-table-output td:nth-child(1) { width: 4%; }
-  .detail-fee-print .report-table-output th:nth-child(2), .detail-fee-print .report-table-output td:nth-child(2) { width: 5%; }
-  .detail-fee-print .report-table-output th:nth-child(3), .detail-fee-print .report-table-output td:nth-child(3) { width: 12%; }
-  .detail-fee-print .report-table-output th:nth-child(4), .detail-fee-print .report-table-output td:nth-child(4) { width: 11%; }
-  .detail-fee-print .report-table-output th:nth-child(5), .detail-fee-print .report-table-output td:nth-child(5) { width: 9%; }
-  .detail-fee-print .report-table-output th:nth-child(6), .detail-fee-print .report-table-output td:nth-child(6) { width: 7%; }
-  .detail-fee-print .report-table-output th:nth-child(7), .detail-fee-print .report-table-output td:nth-child(7) { width: 5%; }
-  .detail-fee-print .report-table-output th:nth-child(8), .detail-fee-print .report-table-output td:nth-child(8) { width: 6%; }
-  .detail-fee-print .report-table-output th:nth-child(9), .detail-fee-print .report-table-output td:nth-child(9) { width: 7%; }
-  .detail-fee-print .report-table-output th:nth-child(10), .detail-fee-print .report-table-output td:nth-child(10) { width: 9%; }
-  .detail-fee-print .report-table-output th:nth-child(11), .detail-fee-print .report-table-output td:nth-child(11) { width: 8%; }
-  .detail-fee-print .report-table-output th:nth-child(12), .detail-fee-print .report-table-output td:nth-child(12) { width: 8%; }
-  .detail-fee-print .report-table-output th:nth-child(13), .detail-fee-print .report-table-output td:nth-child(13) { width: 9%; }
+  .detail-fee-print .cards { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 7px !important; margin: 8px 0 !important; }
+  .detail-fee-print .cards .card { min-height: 0 !important; padding: 8px 10px !important; border: 1px solid #cbded1 !important; background: #f8fbf9 !important; }
+  .detail-fee-print .cards .card span { display: block; font-size: 9px !important; margin-bottom: 3px; }
+  .detail-fee-print .cards .card b { display: block; font-size: 15px !important; color: #176548 !important; }
   .detail-fee-print .report-table-output td:nth-child(n+10) { font-variant-numeric: tabular-nums; text-align: right; }
 }
