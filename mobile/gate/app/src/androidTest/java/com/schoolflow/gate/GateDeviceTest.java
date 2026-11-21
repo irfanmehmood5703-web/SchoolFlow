@@ -62,7 +62,10 @@ public class GateDeviceTest {
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
    scenario.onActivity(activity->{
     View root=activity.findViewById(android.R.id.content);
-    assertNotNull(textView(root,"SchoolFlow Gate  ·  attended test build"));
+    String appName=activity.getString(R.string.app_name);
+    assertEquals("SchoolFlow QR Attendance (Trial)",appName);
+    assertEquals(appName,activity.getApplicationInfo().loadLabel(activity.getPackageManager()).toString());
+    assertNotNull(textView(root,appName));
     View confirmation=textView(root,"Confirm identity & mark");assertNotNull(confirmation);assertFalse(confirmation.isEnabled());
     View connection=textView(root,"Connection");assertNotNull(connection);connection.performClick();assertFalse(activity.isFinishing());
    });
