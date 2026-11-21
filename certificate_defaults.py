@@ -146,7 +146,21 @@ def default_content(key):
         '<p>Thank you for considering our request. We look forward to your confirmation.</p>'
         '<p><b>School Administration</b> · [instName] · [instContact]</p>'
       ),
-      'fee-clearance':identity+'<p>Fee position for the academic session [SessionName], as recorded on [todayDate]:</p><table style="width:100%"><tr><th>Decided Tuition Fee</th><td>[tuitionFee]</td></tr><tr><th>Current Month Payable</th><td>[currPayable]</td></tr><tr><th>Current Month Remaining</th><td>[curRemaining]</td></tr><tr><th>Total Outstanding</th><td>[totalRemPayable]</td></tr></table><p>This clearance is issued against the fee records held by the school.</p>'+copy,
+      'fee-clearance':(
+        '<h3>STUDENT INFORMATION</h3>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th>Student</th><td>[studentName]</td><th>Father / Guardian</th><td>[fatherName]</td></tr>'
+        '<tr><th>Registration No.</th><td>[sid]</td><th>Class / Section</th><td>[className] / [sectionName]</td></tr>'
+        '<tr><th>Campus</th><td>[campusName]</td><th>Session</th><td>[SessionName]</td></tr></table>'
+        '<h3>FEE ACCOUNT SUMMARY</h3><p>School fee record as of <b>[todayDate]</b>:</p>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th>Agreed Tuition Fee</th><td>[tuitionFee]</td></tr>'
+        '<tr><th>Current Month Payable</th><td>[currPayable]</td></tr>'
+        '<tr><th>Current Month Outstanding</th><td>[curRemaining]</td></tr>'
+        '<tr><th>Total Outstanding Dues</th><td><b>[totalRemPayable]</b></td></tr></table>'
+        '<h3>CLEARANCE VERIFICATION</h3>'
+        '<p>A No-Dues Certificate is valid only after authorised school staff confirm that all applicable fees are settled and the total outstanding balance is zero.</p>'
+        '<p><b>Verified By:</b> ____________________ &nbsp; <b>Date:</b> ______________</p>'
+        '<p style="font-size:10px">Note: This preview is not proof of clearance. Issuance is blocked while dues remain outstanding.</p>'+copy
+      ),
       'admission-confirmation':identity+'<p>Admission at [instName] is recorded from [admissionDate].</p><h3>Basic Fee Plan</h3><table style="width:100%"><tr><th>Admission Fee</th><td>[admissionfee]</td></tr><tr><th>Tuition Fee</th><td>[tuitionFee]</td></tr></table><h3>Current Fee Status</h3><table style="width:100%"><tr><th>Payable</th><td>[currPayable]</td></tr><tr><th>Paid</th><td>[currentPaid]</td></tr><tr><th>Remaining</th><td>[curRemaining]</td></tr></table>'+copy,
       'birth':identity+'<p>Is studying at <b>[instName]</b>.</p>'+registration+'<p>The date of birth above is reproduced from the school’s admission record. This is a school-issued record certificate.</p>'+copy,
       'appreciation':identity+'<h3 style="text-align:center">Awarded for Excellence</h3><p>Has achieved position __________ in ____________________ examination / activity.</p><p>We recognise the student’s effort, participation and progress, and wish them continued success.</p>'+copy,
