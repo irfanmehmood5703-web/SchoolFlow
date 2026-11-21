@@ -52,7 +52,25 @@ def default_content(key):
         '<tr><th style="border:1px solid #8ba99a;padding:12px;text-align:left">Official Remarks</th><td style="border:1px solid #8ba99a;padding:12px">____________________________</td></tr></table>'
         '<p style="text-align:justify;line-height:1.8">This certificate shall be considered duly authenticated only when the assessment has been completed and the document bears the signature of the authorised official and the official stamp of the institution.</p>'
         '<p style="text-align:justify;line-height:1.8">We extend our best wishes to the student for continued progress and success in future educational endeavours.</p>'+copy),
-      'migration':identity+'<p>Migration from campus: [campusName]</p><p>Migration to campus: ____________________</p><p>Effective date: ____________________</p><p>Reason / remarks: ________________________________________</p>'+registration+copy,
+      'migration':(
+        '<h3 style="color:#176b4a;margin:18px 0 8px">STUDENT INFORMATION</h3>'
+        '<table style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:25%">Student Name</th><td>[studentName]</td><th style="width:25%">Father / Guardian</th><td>[fatherName]</td></tr>'
+        '<tr><th>Registration No.</th><td>[regNo]</td><th>Class / Section</th><td>[className] / [sectionName]</td></tr>'
+        '<tr><th>Date of Birth</th><td>[dob]</td><th>Academic Session</th><td>[SessionName]</td></tr>'
+        '</table>'
+        '<h3 style="color:#176b4a;margin:20px 0 8px">CAMPUS TRANSFER DETAILS</h3>'
+        '<table style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:35%">Current / From Campus</th><td>[campusName]</td></tr>'
+        '<tr><th>Receiving / To Campus</th><td>________________________________</td></tr>'
+        '<tr><th>Effective Transfer Date</th><td>________________________________</td></tr>'
+        '<tr><th>Reason / Remarks</th><td style="height:48px">________________________________</td></tr>'
+        '</table>'
+        '<p style="line-height:1.65;margin:16px 0">This slip records a proposed transfer between campuses of <b>[instName]</b>. '
+        'The receiving campus and effective date must be confirmed by the authorised school administration before the transfer is processed.</p>'
+        +copy
+        +'<p style="margin-top:26px;font-size:12px">Transferring Campus Authorisation: ____________________ &nbsp;&nbsp; Receiving Campus Acknowledgement: ____________________</p>'
+      ),
       'rustication':identity+'<p>This notice records an administrative decision concerning the student’s enrolment.</p><p>Effective date: ____________________</p><p>Reason and supporting record: ______________________________</p><p>Parent / guardian acknowledgement: ________________________</p><p>This document does not change the student’s saved status.</p>'+copy,
       'warning':identity+'<h3>Subject: Attendance and academic progress</h3><p>Dear parent / guardian,</p><p>Please meet the school to discuss the student’s attendance, academic progress and agreed steps for improvement.</p><p>Areas requiring attention: ______________________________</p><p>Meeting date and time: _________________________________</p><p>Review date: _________________________________________</p><p>Sincerely,<br>Principal, [instName]</p>',
       'trip':'<h3>Educational and Recreational School Trip</h3><p>Respected Sir / Madam,</p><p>[instName] requests permission to arrange an educational visit to your venue.</p><p>Venue / destination: ______________________________</p><p>Trip date: ______________________________________</p><table style="width:100%"><tr><td>Total students: __________</td><td>Total staff: __________</td></tr></table><p>Regards,<br>Principal<br>[instName]<br>[instContact]</p>',
