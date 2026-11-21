@@ -184,33 +184,43 @@
   max-height:19mm!important;object-fit:contain!important;
  }
 }
-/* Rustication notice: retain legible type and keep signatures on page one. */
+/* Rustication: readable full-page layout, Letter-safe; no forced tiny scaling. */
 @media print {
  .issued-document.rustication-one-page .certificate-sheet.document{
-  padding:5mm 7mm!important;font-size:11px!important;line-height:1.33!important;
+  box-sizing:border-box!important;
+  min-height:226mm!important;
+  padding:8mm 10mm!important;
+  display:flex!important;flex-direction:column!important;
+  font-size:12px!important;line-height:1.45!important;
   break-inside:avoid!important;page-break-inside:avoid!important;
  }
+ .issued-document.rustication-one-page .certificate-sheet.document article{
+  flex:0 0 auto!important;
+ }
  .issued-document.rustication-one-page .certificate-sheet.document article>h1{
-  font-size:18px!important;margin:8px 0 9px!important;
+  font-size:20px!important;margin:12px 0 13px!important;
  }
  .issued-document.rustication-one-page .certificate-sheet.document article>h3{
-  font-size:12px!important;margin:8px 0 4px!important;
+  font-size:13px!important;margin:12px 0 6px!important;
  }
  .issued-document.rustication-one-page .certificate-sheet.document article>p{
-  font-size:10.5px!important;line-height:1.35!important;margin:5px 0!important;
+  font-size:11.5px!important;line-height:1.5!important;margin:7px 0!important;
  }
  .issued-document.rustication-one-page .certificate-sheet.document article>table{
-  margin:4px 0!important;font-size:10.5px!important;
+  margin:7px 0!important;font-size:11.5px!important;
  }
  .issued-document.rustication-one-page .certificate-sheet.document article th,
  .issued-document.rustication-one-page .certificate-sheet.document article td{
-  padding:3.5px 5px!important;line-height:1.25!important;
+  padding:5px 6px!important;line-height:1.35!important;
+ }
+ .issued-document.rustication-one-page .certificate-sheet.document footer{
+  margin-top:auto!important;padding-top:14px!important;
  }
  .issued-document.rustication-one-page .certificate-sheet.document footer>table{
-  margin-top:9px!important;
+  margin-top:8px!important;
  }
  .issued-document.rustication-one-page .certificate-sheet.document header img{
-  max-height:18mm!important;object-fit:contain!important;
+  max-height:20mm!important;object-fit:contain!important;
  }
 }
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document{% if issue.document_name == 'Student Character Certificate' %} character-one-page{% endif %}{% if issue.document_name == 'Migration Slip Campus - Campus' %} migration-one-page{% endif %}{% if issue.document_name == 'Student Rustication Notice' %} rustication-one-page{% endif %}"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
