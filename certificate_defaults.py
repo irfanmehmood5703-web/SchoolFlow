@@ -77,7 +77,28 @@ def default_content(key):
         '<p style="font-size:11px;margin:8px 0">Note: Update the student\'s campus in SchoolFlow only after approval.</p>'
         +copy
       ),
-      'rustication':identity+'<p>This notice records an administrative decision concerning the student’s enrolment.</p><p>Effective date: ____________________</p><p>Reason and supporting record: ______________________________</p><p>Parent / guardian acknowledgement: ________________________</p><p>This document does not change the student’s saved status.</p>'+copy,
+      'rustication':(
+        '<h3 style="color:#176b4a;margin:15px 0 7px">STUDENT DETAILS</h3>'
+        '<table style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:26%">Student Name</th><td>[studentName]</td><th style="width:24%">Father / Guardian</th><td>[fatherName]</td></tr>'
+        '<tr><th>Registration No.</th><td>[regNo]</td><th>Class / Section</th><td>[className] / [sectionName]</td></tr>'
+        '<tr><th>Campus</th><td>[campusName]</td><th>Academic Session</th><td>[SessionName]</td></tr>'
+        '</table>'
+        '<h3 style="color:#176b4a;margin:15px 0 7px">ADMINISTRATIVE NOTICE</h3>'
+        '<p style="line-height:1.5;margin:8px 0">This notice documents a proposed or approved disciplinary action concerning the student named above. '
+        'The school must confirm the decision, grounds and applicable procedures before it takes effect.</p>'
+        '<table style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:37%">Decision / Status</th><td>Proposed / Approved (mark one)</td></tr>'
+        '<tr><th>Effective Date</th><td>____________________________</td></tr>'
+        '<tr><th>Reason / Supporting Record</th><td style="height:42px">____________________________</td></tr>'
+        '<tr><th>Approved By / Date</th><td>____________________________</td></tr>'
+        '<tr><th>Guardian Notified / Date</th><td>____________________________</td></tr>'
+        '<tr><th>Guardian Acknowledgement</th><td>____________________________</td></tr>'
+        '</table>'
+        '<p style="font-size:11px;margin:10px 0">Note: Issuing this notice does not automatically change the student\'s enrolment status in SchoolFlow. '
+        'Any approved action must be recorded separately by authorised staff.</p>'
+        +copy
+      ),
       'warning':identity+'<h3>Subject: Attendance and academic progress</h3><p>Dear parent / guardian,</p><p>Please meet the school to discuss the student’s attendance, academic progress and agreed steps for improvement.</p><p>Areas requiring attention: ______________________________</p><p>Meeting date and time: _________________________________</p><p>Review date: _________________________________________</p><p>Sincerely,<br>Principal, [instName]</p>',
       'trip':'<h3>Educational and Recreational School Trip</h3><p>Respected Sir / Madam,</p><p>[instName] requests permission to arrange an educational visit to your venue.</p><p>Venue / destination: ______________________________</p><p>Trip date: ______________________________________</p><table style="width:100%"><tr><td>Total students: __________</td><td>Total staff: __________</td></tr></table><p>Regards,<br>Principal<br>[instName]<br>[instContact]</p>',
       'fee-clearance':identity+'<p>Fee position for the academic session [SessionName], as recorded on [todayDate]:</p><table style="width:100%"><tr><th>Decided Tuition Fee</th><td>[tuitionFee]</td></tr><tr><th>Current Month Payable</th><td>[currPayable]</td></tr><tr><th>Current Month Remaining</th><td>[curRemaining]</td></tr><tr><th>Total Outstanding</th><td>[totalRemPayable]</td></tr></table><p>This clearance is issued against the fee records held by the school.</p>'+copy,
