@@ -429,9 +429,8 @@ def configure_certificates(app,db,Student):
     def get_selection(t,allow_first=False):
         ids=list(dict.fromkeys(num(x,'student selection') for x in request.form.getlist('student_ids')))
         c=campus_for(t)
-        if not ids and allow_first:
-            options=filtered_students(c.campus)
-            if options:ids=[options[0][0].id]
+        # Never populate a certificate with another student's details unless
+        # that student was explicitly selected by the operator.
         if not ids or len(ids)>100:raise ValueError('Select between 1 and 100 students.')
         rows=[]
         for sid in ids:
@@ -445,7 +444,7 @@ def configure_certificates(app,db,Student):
         action=request.form.get('action','')
         template_id=request.form.get('template_id','')
         if action.startswith('preview:'):template_id=action.split(':',1)[1];action='preview'
-        t=db.get_or_404(CertificateTemplate,num(template_id,'template'));c,students=get_selection(t,allow_first=action=='preview')
+        t=db.get_or_404(CertificateTemplate,num(template_id,'template'));c,students=get_selection(t)
         copy_type=request.form.get('copy_type','Original')
         if copy_type not in ('Original','Duplicate'):raise ValueError('Choose Original or Duplicate copy.')
         token=request.form.get('token','')
