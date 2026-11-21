@@ -66,6 +66,7 @@ public class GateDeviceTest {
     assertEquals("SchoolFlow QR Attendance (Trial)",appName);
     assertEquals(appName,activity.getApplicationInfo().loadLabel(activity.getPackageManager()).toString());
     assertNotNull(textView(root,appName));
+    assertEquals(0,activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE);
     View confirmation=textView(root,"Confirm identity & mark");assertNotNull(confirmation);assertFalse(confirmation.isEnabled());
     View connection=textView(root,"Connection");assertNotNull(connection);connection.performClick();assertFalse(activity.isFinishing());
    });

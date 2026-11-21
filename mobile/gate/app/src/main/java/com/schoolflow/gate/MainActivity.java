@@ -52,7 +52,8 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private void resetFace(){observation=new Observation(null,null,0,false);stable.reset();ui.post(()->{if(confirm!=null)confirm.setEnabled(false);});}
  private boolean contactValid(){return connected&&clockOK&&SystemClock.elapsedRealtime()-lastContact<80000;}
  @Override public void onCreate(Bundle saved){
-  super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+  super.onCreate(saved);
+  if(!BuildConfig.DEBUG)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   getWindow().setStatusBarColor(Color.rgb(23,107,74));
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,250,250));root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
   TextView title=text(getString(R.string.app_name),23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
