@@ -48,3 +48,50 @@
   .detail-fee-print .cards .card b { display: block; font-size: 15px !important; color: #176548 !important; }
   .detail-fee-print .report-table-output td:nth-child(n+10) { font-variant-numeric: tabular-nums; text-align: right; }
 }
+
+/* Detail Fee Report: readable, compact print typography on A4 and Letter.
+   Keep paper size controlled by the printer; do not hard-code A4. */
+@media print {
+  .detail-fee-print .report-table-output table {
+    font-size: 10.5px !important;
+    line-height: 1.4 !important;
+    table-layout: fixed !important;
+  }
+  .detail-fee-print .report-table-output th,
+  .detail-fee-print .report-table-output td {
+    padding: 6px 4px !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+  }
+  .detail-fee-print .report-table-output th {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+  .detail-fee-print .report-table-output td {
+    font-size: 10.5px !important;
+  }
+  .detail-fee-print .report-table-output th:nth-child(1),
+  .detail-fee-print .report-table-output td:nth-child(1) { width: 4%; }
+  .detail-fee-print .report-table-output th:nth-child(2),
+  .detail-fee-print .report-table-output td:nth-child(2) { width: 5%; }
+  .detail-fee-print .report-table-output th:nth-child(3),
+  .detail-fee-print .report-table-output td:nth-child(3) { width: 11%; }
+  .detail-fee-print .report-table-output th:nth-child(4),
+  .detail-fee-print .report-table-output td:nth-child(4) { width: 10%; }
+  .detail-fee-print .report-table-output th:nth-child(5),
+  .detail-fee-print .report-table-output td:nth-child(5) { width: 8%; }
+  .detail-fee-print .report-table-output th:nth-child(6),
+  .detail-fee-print .report-table-output td:nth-child(6) { width: 6%; }
+  .detail-fee-print .report-table-output th:nth-child(7),
+  .detail-fee-print .report-table-output td:nth-child(7) { width: 5%; }
+  .detail-fee-print .report-table-output th:nth-child(8),
+  .detail-fee-print .report-table-output td:nth-child(8) { width: 6%; }
+  .detail-fee-print .report-table-output th:nth-child(9),
+  .detail-fee-print .report-table-output td:nth-child(9) { width: 6%; }
+  .detail-fee-print .report-table-output th:nth-child(10),
+  .detail-fee-print .report-table-output td:nth-child(10) { width: 5%; }
+  .detail-fee-print .report-table-output th:nth-child(n+11),
+  .detail-fee-print .report-table-output td:nth-child(n+11) { width: auto; }
+  .detail-fee-print .cards .card b { font-size: 17px !important; }
+  .detail-fee-print .report-table-output h2 { font-size: 14px !important; }
+}
