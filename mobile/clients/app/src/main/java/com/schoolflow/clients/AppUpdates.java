@@ -33,7 +33,7 @@ final class AppUpdates {
     String installedLabel=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName;
     String latestLabel=info.optString("version_name","School build "+info.optInt("version_code"));
     String changes=info.optString("whats_new","Improvements and fixes for your school app.");
-    boolean required=info.optBoolean("required",false);
+    boolean required=installed<info.optInt("minimum_supported_version_code",0);
     activity.runOnUiThread(()->{
      AlertDialog.Builder dialog=new AlertDialog.Builder(activity)
       .setTitle(required?"Update required":"Update available")
