@@ -155,33 +155,33 @@
   max-height:22mm!important;object-fit:contain!important;
  }
 }
-/* Migration slips: compact only in print, including already-issued MIG-33 snapshots. */
+/* Balanced one-page migration slip on A4 and Letter: no tiny print. */
 @media print {
  .issued-document.migration-one-page .certificate-sheet.document{
-  padding:5mm 7mm!important;font-size:10.5px!important;line-height:1.3!important;
+  padding:6mm 8mm!important;font-size:11.5px!important;line-height:1.38!important;
   break-inside:avoid!important;page-break-inside:avoid!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document article>h1{
-  font-size:17px!important;margin:7px 0 9px!important;
+  font-size:19px!important;margin:9px 0 11px!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document article>h3{
-  font-size:11.5px!important;margin:8px 0 4px!important;
+  font-size:12.5px!important;margin:11px 0 5px!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document article>p{
-  font-size:10.5px!important;line-height:1.35!important;margin:5px 0!important;
+  font-size:11px!important;line-height:1.43!important;margin:6px 0!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document article>table{
-  margin:4px 0!important;font-size:10px!important;
+  margin:6px 0!important;font-size:11px!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document article th,
  .issued-document.migration-one-page .certificate-sheet.document article td{
-  padding:3px 5px!important;line-height:1.2!important;
+  padding:4.5px 6px!important;line-height:1.3!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document footer>table{
-  margin-top:9px!important;
+  margin-top:13px!important;
  }
  .issued-document.migration-one-page .certificate-sheet.document header img{
-  max-height:18mm!important;object-fit:contain!important;
+  max-height:19mm!important;object-fit:contain!important;
  }
 }
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document{% if issue.document_name == 'Student Character Certificate' %} character-one-page{% endif %}{% if issue.document_name == 'Migration Slip Campus - Campus' %} migration-one-page{% endif %}"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
