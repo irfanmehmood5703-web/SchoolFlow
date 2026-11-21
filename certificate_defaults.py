@@ -99,7 +99,27 @@ def default_content(key):
         'Any approved action must be recorded separately by authorised staff.</p>'
         +copy
       ),
-      'warning':identity+'<h3>Subject: Attendance and academic progress</h3><p>Dear parent / guardian,</p><p>Please meet the school to discuss the student’s attendance, academic progress and agreed steps for improvement.</p><p>Areas requiring attention: ______________________________</p><p>Meeting date and time: _________________________________</p><p>Review date: _________________________________________</p><p>Sincerely,<br>Principal, [instName]</p>',
+      'warning':(
+        '<h3 style="color:#176b4a;margin:10px 0 6px">STUDENT INFORMATION</h3>'
+        '<table class="certificate-record-grid" style="width:100%;border-collapse:collapse">'
+        '<tr><th>Student Name</th><td>[studentName]</td><th>Father / Guardian</th><td>[fatherName]</td></tr>'
+        '<tr><th>Registration No.</th><td>[regNo]</td><th>Class / Section</th><td>[className] / [sectionName]</td></tr>'
+        '<tr><th>Campus</th><td>[campusName]</td><th>Academic Session</th><td>[SessionName]</td></tr></table>'
+        '<h3 style="color:#176b4a;margin:12px 0 6px">NOTICE TO PARENT / GUARDIAN</h3>'
+        '<p>Dear Parent / Guardian,</p>'
+        '<p>This letter is to bring to your attention a matter concerning the student named above. '
+        'Please review the details below and cooperate with the school in agreeing on appropriate improvement steps.</p>'
+        '<table class="certificate-record-grid" style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:37%">Subject / Concern</th><td>____________________________________</td></tr>'
+        '<tr><th>Details / Supporting Record</th><td>____________________________________</td></tr>'
+        '<tr><th>Required Improvement</th><td>____________________________________</td></tr>'
+        '<tr><th>Meeting Date / Time</th><td>____________________________________</td></tr>'
+        '<tr><th>Review Date</th><td>____________________________________</td></tr>'
+        '<tr><th>Guardian Acknowledgement</th><td>____________________________________</td></tr></table>'
+        '<p style="font-size:11px">Please contact the school office if you require clarification. '
+        'This notice is intended to support constructive communication and does not by itself change the student\'s enrolment status.</p>'
+        +copy
+      ),
       'trip':'<h3>Educational and Recreational School Trip</h3><p>Respected Sir / Madam,</p><p>[instName] requests permission to arrange an educational visit to your venue.</p><p>Venue / destination: ______________________________</p><p>Trip date: ______________________________________</p><table style="width:100%"><tr><td>Total students: __________</td><td>Total staff: __________</td></tr></table><p>Regards,<br>Principal<br>[instName]<br>[instContact]</p>',
       'fee-clearance':identity+'<p>Fee position for the academic session [SessionName], as recorded on [todayDate]:</p><table style="width:100%"><tr><th>Decided Tuition Fee</th><td>[tuitionFee]</td></tr><tr><th>Current Month Payable</th><td>[currPayable]</td></tr><tr><th>Current Month Remaining</th><td>[curRemaining]</td></tr><tr><th>Total Outstanding</th><td>[totalRemPayable]</td></tr></table><p>This clearance is issued against the fee records held by the school.</p>'+copy,
       'admission-confirmation':identity+'<p>Admission at [instName] is recorded from [admissionDate].</p><h3>Basic Fee Plan</h3><table style="width:100%"><tr><th>Admission Fee</th><td>[admissionfee]</td></tr><tr><th>Tuition Fee</th><td>[tuitionFee]</td></tr></table><h3>Current Fee Status</h3><table style="width:100%"><tr><th>Payable</th><td>[currPayable]</td></tr><tr><th>Paid</th><td>[currentPaid]</td></tr><tr><th>Remaining</th><td>[curRemaining]</td></tr></table>'+copy,
