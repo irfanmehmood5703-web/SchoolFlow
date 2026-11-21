@@ -71,7 +71,7 @@ def verify():
                 assert run(base,fixture_token=token)
                 with app.app_context():
                     latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
-                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==8
+                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==9
                     assert db.session.get(models['signing'],scope).fingerprint==first_key
             print('Verified 16 compiled school APKs: two schools, real logo restoration after a central upgrade, labels, packages, private signing, APK-only sharing and stable-key updates.')
         finally:server.shutdown();thread.join(timeout=5)

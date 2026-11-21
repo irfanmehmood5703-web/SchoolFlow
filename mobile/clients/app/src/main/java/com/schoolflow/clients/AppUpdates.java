@@ -11,7 +11,7 @@ import java.util.concurrent.*;
 final class AppUpdates {
  private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
  static void check(Activity activity) {
-  if(BuildConfig.SCHOOL_SCOPE.isEmpty()||"sms".equals(BuildConfig.ROLE))return;
+  if(BuildConfig.SCHOOL_SCOPE.isEmpty())return;
   WORK.execute(()->{
    HttpURLConnection connection=null;
    try {
@@ -30,11 +30,19 @@ final class AppUpdates {
     if(info.optInt("version_code",0)<=installed)return;
     String link=info.optString("url","");
     if(!link.startsWith(EndpointPolicy.BASE+"/apps/school/")||!link.endsWith("/"+BuildConfig.ROLE+".apk"))return;
-    activity.runOnUiThread(()->new AlertDialog.Builder(activity)
-      .setTitle("SchoolFlow update available")
-      .setMessage("A new version of your school app is ready. Download and install it to update. Your school account stays on the server.")
-      .setPositiveButton("Update", (d,w)->activity.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(link))))
-      .setNegativeButton("Later",null).show());
+    String installedLabel=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName;
+    String latestLabel=info.optString("version_name","School build "+info.optInt("version_code"));
+    String changes=info.optString("whats_new","Improvements and fixes for your school app.");
+    boolean required=installed<info.optInt("minimum_supported_version_code",0);
+    activity.runOnUiThread(()->{
+     AlertDialog.Builder dialog=new AlertDialog.Builder(activity)
+      .setTitle(required?"Update required":"Update available")
+      .setMessage("Installed: "+installedLabel+" ("+installed+")\\nLatest: "+latestLabel+" ("+info.optInt("version_code")+")\\n\\nWhat's new\\n"+changes)
+      .setPositiveButton("UPDATE",(d,w)->activity.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(link))));
+     if(required){dialog.setNegativeButton("EXIT",(d,w)->activity.finishAffinity()).setCancelable(false);}
+     else dialog.setNegativeButton("LATER",null);
+     dialog.show();
+    });
    }catch(Exception ignored){}finally{if(connection!=null)connection.disconnect();}
   });
  }
