@@ -263,6 +263,19 @@ def configure_certificates(app,db,Student):
                     old_approval,
                     'Transfer is effective only after school approval and receiving-campus acknowledgement. Until then, the student remains enrolled at the current campus.'
                 ).replace(old_note,"Note: Update the student's campus in SchoolFlow only after approval."))
+        # Existing campus databases retain the original rustication starter.
+        # Upgrade only its distinctive unedited text for new previews/issues;
+        # issued document snapshots and customised templates are not changed.
+        if t.key == 'rustication':
+            old_rustication=(
+                '<p>This notice records an administrative decision concerning the student’s enrolment.</p>'
+                '<p>Effective date: ____________________</p>'
+                '<p>Reason and supporting record: ______________________________</p>'
+                '<p>Parent / guardian acknowledgement: ________________________</p>'
+                '<p>This document does not change the student’s saved status.</p>'
+            )
+            if old_rustication in content.get('body',''):
+                content=dict(content,body=default_content('rustication')['body'])
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'character':
