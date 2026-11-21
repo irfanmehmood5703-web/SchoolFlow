@@ -549,7 +549,16 @@ def configure_operations(app, db, Student, Employee):
         rows=filtered_bills(mode)
         receipts=Receipt.query.filter_by(voided=False).order_by(Receipt.id.desc()).all() if mode in ('paid-challans','discount-challans') else []
         if mode=='discount-challans': receipts=[r for r in receipts if r.discount]
-        return render('fees.html',title={'inactive-fees':'Inactive Student Fee','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details)
+        status_students = []
+        if mode == 'inactive-fees':
+            student_q = request.args.get('student_q', '').strip()[:120]
+            query = Student.query
+            if student_q:
+                pattern = '%' + student_q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+                from sqlalchemy import or_
+                query = query.filter(or_(Student.name.ilike(pattern, escape='\\'), Student.admission_no.ilike(pattern, escape='\\'), Student.phone.ilike(pattern, escape='\\')))
+            status_students = query.order_by(Student.id.desc()).limit(100).all()
+        return render('fees.html',title={'inactive-fees':'Inactive Student Fee','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students)
 
     @bp.route('/generate-challans',methods=['GET','POST'])
     def generate_challans():
