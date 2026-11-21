@@ -161,9 +161,43 @@ def default_content(key):
         '<p><b>Verified By:</b> ____________________ &nbsp; <b>Date:</b> ______________</p>'
         '<p style="font-size:10px">Note: This preview is not proof of clearance. Issuance is blocked while dues remain outstanding.</p>'+copy
       ),
-      'admission-confirmation':identity+'<p>Admission at [instName] is recorded from [admissionDate].</p><h3>Basic Fee Plan</h3><table style="width:100%"><tr><th>Admission Fee</th><td>[admissionfee]</td></tr><tr><th>Tuition Fee</th><td>[tuitionFee]</td></tr></table><h3>Current Fee Status</h3><table style="width:100%"><tr><th>Payable</th><td>[currPayable]</td></tr><tr><th>Paid</th><td>[currentPaid]</td></tr><tr><th>Remaining</th><td>[curRemaining]</td></tr></table>'+copy,
-      'birth':identity+'<p>Is studying at <b>[instName]</b>.</p>'+registration+'<p>The date of birth above is reproduced from the school’s admission record. This is a school-issued record certificate.</p>'+copy,
-      'appreciation':identity+'<h3 style="text-align:center">Awarded for Excellence</h3><p>Has achieved position __________ in ____________________ examination / activity.</p><p>We recognise the student’s effort, participation and progress, and wish them continued success.</p>'+copy,
+      'admission-confirmation':(
+        '<h3>STUDENT ADMISSION DETAILS</h3>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th>Student Name</th><td>[studentName]</td><th>Father / Guardian</th><td>[fatherName]</td></tr>'
+        '<tr><th>Registration No.</th><td>[regNo]</td><th>Class / Section</th><td>[className] / [sectionName]</td></tr>'
+        '<tr><th>Campus</th><td>[campusName]</td><th>Academic Session</th><td>[SessionName]</td></tr>'
+        '<tr><th>Date of Admission</th><td>[admissionDate]</td><th>Date of Issue</th><td>[todayDate]</td></tr></table>'
+        '<h3>OFFICIAL CONFIRMATION</h3>'
+        '<p>This is to confirm that <b>[studentName]</b> has been admitted to <b>[instName]</b> in the class and academic session stated above, according to the school admission register.</p>'
+        '<h3>ADMISSION FEE PLAN</h3>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th>Admission Fee</th><td>[admissionfee]</td><th>Tuition Fee</th><td>[tuitionFee]</td></tr></table>'
+        '<h3>FEE ACCOUNT AT ISSUE DATE</h3>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th>Current Payable</th><td>[currPayable]</td><th>Amount Paid</th><td>[currentPaid]</td></tr>'
+        '<tr><th>Balance Remaining</th><td>[curRemaining]</td><th>Academic Session</th><td>[SessionName]</td></tr></table>'
+        '<p style="font-size:11px">This letter confirms admission only; it does not certify payment of outstanding fees or replace an official fee receipt.</p>'+copy
+      ),
+      'birth':(
+        '<h3>STUDENT BIRTH RECORD</h3>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th>Student Name</th><td>[studentName]</td><th>Father / Guardian</th><td>[fatherName]</td></tr>'
+        '<tr><th>Date of Birth</th><td>[dob]</td><th>Registration No.</th><td>[regNo]</td></tr>'
+        '<tr><th>Class / Section</th><td>[className] / [sectionName]</td><th>Academic Session</th><td>[SessionName]</td></tr>'
+        '<tr><th>Campus</th><td>[campusName]</td><th>Admission Date</th><td>[admissionDate]</td></tr></table>'
+        '<h3>CERTIFICATION OF SCHOOL RECORD</h3>'
+        '<p>This is to certify that the date of birth shown above is recorded in the admission register of <b>[instName]</b> for the named student. This document is issued upon request for school-record and educational purposes.</p>'
+        '<p><b>Record Verified By:</b> ____________________ &nbsp; <b>Date:</b> ______________</p>'
+        '<p style="font-size:11px">Important: This is a school-issued birth record extract, not a government-issued birth certificate or civil registration document. Any missing or unverified date of birth must be confirmed against the admission record.</p>'+copy
+      ),
+      'appreciation':(
+        '<h3 style="text-align:center;color:#176b4a;letter-spacing:1px;margin:12px 0">CERTIFICATE OF RECOGNITION</h3>'
+        '<p style="text-align:center">Proudly presented to</p>'
+        '<h2 style="text-align:center;color:#176b4a;margin:10px 0">[studentName]</h2>'
+        '<p style="text-align:center">Class <b>[className]</b> / Section <b>[sectionName]</b> &nbsp; | &nbsp; Session <b>[SessionName]</b></p>'
+        '<p style="text-align:center">In recognition of dedication, positive participation and commitment to learning.</p>'
+        '<table class="certificate-record-grid" style="width:100%"><tr><th style="width:34%">Achievement / Activity</th><td>__________________________________</td></tr>'
+        '<tr><th>Position / Award</th><td>__________________________________</td></tr>'
+        '<tr><th>Date of Recognition</th><td>[todayDate]</td></tr></table>'
+        '<p style="text-align:center">We celebrate this achievement and encourage continued growth, confidence and excellence.</p>'+copy
+      ),
     }
     if key in ('student-card-new','student-card','guardian-card'):
         front='''<table style="width:100%;background-color:#176b4a;color:#ffffff"><tr><td style="text-align:center">[instLogo]<h3>[instName]</h3>[stdPhoto]<p><b>Student Name:</b> [studentName]</p><p><b>Father Name:</b> [fatherName]</p><p><b>Class:</b> [className] &nbsp; <b>Section:</b> [sectionName]</p><p><b>Roll No.:</b> [rollNo] &nbsp; <b>Student ID:</b> [sid]</p><p>Admission: [admissionDate]</p></td></tr></table>'''
@@ -173,7 +207,27 @@ def default_content(key):
             back='''<table class="guardian-back" style="width:100%;height:100%;border-collapse:collapse"><tr><td style="padding:12px;vertical-align:top"><h3 style="text-align:center;margin:3px 0 10px;color:#176b4a">GUARDIAN VERIFICATION</h3><table class="guardian-verification-facts" style="width:100%;border-collapse:collapse"><tr><th style="width:38%;text-align:left;border-bottom:1px solid #a7c8b6;padding:6px 4px">Guardian</th><td style="border-bottom:1px solid #a7c8b6;padding:6px 4px">[fatherName]</td></tr><tr><th style="text-align:left;border-bottom:1px solid #a7c8b6;padding:6px 4px">Mobile</th><td style="border-bottom:1px solid #a7c8b6;padding:6px 4px">[fatherMobile]</td></tr><tr><th style="text-align:left;border-bottom:1px solid #a7c8b6;padding:6px 4px">Student</th><td style="border-bottom:1px solid #a7c8b6;padding:6px 4px">[studentName]</td></tr><tr><th style="text-align:left;border-bottom:1px solid #a7c8b6;padding:6px 4px">Valid Session</th><td style="border-bottom:1px solid #a7c8b6;padding:6px 4px">[SessionName]</td></tr></table><p style="margin:10px 0 4px"><b>School Gate Instructions</b></p><p style="margin:3px 0 8px">Present this card at pick-up. School staff must verify the authorised guardian before releasing the student.</p><p style="text-align:center;margin:7px 0">[qrCode]</p><p style="text-align:center;margin:4px 0"><b>[instName]</b></p><p style="text-align:center;margin:3px 0">[instContact]</p></td></tr></table>'''
         return dict(header='',body='<table style="width:100%;height:86mm"><tr><td style="width:50%;vertical-align:top">'+front+'</td><td style="width:50%;vertical-align:top">'+back+'</td></tr></table>',footer='')
     if key in ('envelope','admitted-card'):
-        label='<table style="width:100%"><tr><td>[instLogo]</td><td><b>[instName]</b><br>[instAddress]</td></tr><tr><td colspan="2">SID: [sid] · Roll No.: [rollNo]</td></tr><tr><td colspan="2"><b>[studentName]</b> S/D/O [fatherName]<br>[className] · [sectionName] · [SessionName]</td></tr></table>'
-        if key=='admitted-card':label+='<p>Admission Date: [admissionDate]</p><p>Admission Fee: [admissionfee] · Tuition Fee: [tuitionFee]</p><p>Payable: [totalPayable] · Paid: [totalPaidAmount] · Remaining: [curRemaining]</p><p>ACCOUNTANT SIGNATURE __________ PRINCIPAL SIGNATURE __________</p>'
+        label=(
+          '<table class="schoolflow-student-label" style="width:100%;border-collapse:collapse;border:2px solid #176b4a">'
+          '<tr><td style="width:24%;text-align:center;vertical-align:middle">[instLogo]</td>'
+          '<td colspan="3" style="vertical-align:middle"><b style="color:#176b4a;font-size:15px">[instName]</b><br>[instAddress]</td></tr>'
+          '<tr><th>Student</th><td colspan="3"><b>[studentName]</b></td></tr>'
+          '<tr><th>Father / Guardian</th><td colspan="3">[fatherName]</td></tr>'
+          '<tr><th>Class / Section</th><td>[className] / [sectionName]</td><th>Session</th><td>[SessionName]</td></tr>'
+          '<tr><th>Student ID</th><td>[sid]</td><th>Roll No.</th><td>[rollNo]</td></tr>'
+          '</table>'
+        )
+        if key=='admitted-card':
+            label=(
+              '<h3 style="color:#176b4a;text-align:center;margin:5px 0 9px">STUDENT ADMISSION CARD</h3>'
+              +label+
+              '<table class="schoolflow-student-label" style="width:100%;margin-top:8px;border-collapse:collapse">'
+              '<tr><th>Admission Date</th><td>[admissionDate]</td><th>Campus</th><td>[campusName]</td></tr>'
+              '<tr><th>Admission Fee</th><td>[admissionfee]</td><th>Tuition Fee</th><td>[tuitionFee]</td></tr>'
+              '<tr><th>Payable</th><td>[totalPayable]</td><th>Paid</th><td>[totalPaidAmount]</td></tr>'
+              '<tr><th>Balance</th><td colspan="3">[curRemaining]</td></tr></table>'
+              '<p style="font-size:10px">This card records admission details and does not replace an official payment receipt.</p>'
+              '<table style="width:100%;margin-top:14px"><tr><td style="text-align:center">__________________<br>ACCOUNTANT</td><td style="text-align:center">__________________<br>PRINCIPAL</td></tr></table>'
+            )
         return dict(header='',body=label,footer='')
     return dict(header=HEADER,body=date+title+body[key],footer=FOOTER)
