@@ -55,7 +55,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   getWindow().setStatusBarColor(Color.rgb(23,107,74));
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,250,250));root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
-  TextView title=text("SchoolFlow Gate  ·  attended test build",23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
+  TextView title=text(getString(R.string.app_name),23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
   if(BuildConfig.DEBUG)root.addView(text("Fictional trial only · "+EndpointPolicy.BASE,12));
   LinearLayout toolbar=new LinearLayout(this);toolbar.addView(button("Connection",()->protect(this::connectionDialog)));toolbar.addView(button("Enroll face",()->protect(this::enrollmentDialog)));toolbar.addView(button("Manage faces",()->protect(this::manageDialog)));
   Button mode=button("QR Attendance",()->switchAttendanceMode(!qrAttendance));
@@ -179,7 +179,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   if(protectedAction!=null)return;
   KeyguardManager manager=(KeyguardManager)getSystemService(KEYGUARD_SERVICE);
   if(manager==null||!manager.isDeviceSecure()){new AlertDialog.Builder(this).setTitle("Set a device screen lock").setMessage("Connection changes and enrollment require this tablet’s PIN, pattern or password.").setNegativeButton("Cancel",null).setPositiveButton("Open security settings",(d,w)->startActivity(new Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS))).show();return;}
-  Intent intent=manager.createConfirmDeviceCredentialIntent("SchoolFlow Gate administrator","Unlock this device to manage connection or face enrollment.");
+  Intent intent=manager.createConfirmDeviceCredentialIntent(getString(R.string.app_name)+" administrator","Unlock this device to manage connection or face enrollment.");
   if(intent==null){show("A secure device credential is required.");return;}
   protectedAction=action;startActivityForResult(intent,LOCK_REQUEST);
  }
@@ -195,7 +195,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
    EditText device=input(box,"Registered face gate ID",old==null?"":String.valueOf(old.getInt("device")),InputType.TYPE_CLASS_NUMBER);
    EditText token=input(box,"Device connection key",old==null?"":old.getString("token"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
    box.addView(text("Use the key from Face Attendance Gates → Connect. Changing institute or gate clears this device’s local face enrollment and pending mark after confirmation.",14));
-   AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Connect SchoolFlow Gate").setView(scroll(box)).setNegativeButton("Cancel",null).setPositiveButton("Save connection",null).create();dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+   AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Connect "+getString(R.string.app_name)).setView(scroll(box)).setNegativeButton("Cancel",null).setPositiveButton("Save connection",null).create();dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
     try {
      String school=code.getText().toString().trim().toUpperCase(Locale.ROOT),secret=token.getText().toString().trim();int id=Integer.parseInt(device.getText().toString());EndpointPolicy.validate(EndpointPolicy.BASE,school,id,secret);
      Runnable save=()->{try{if(busy.get())throw new IllegalStateException();vault.configure(school,id,secret);known=vault.people();connected=false;clockOK=false;resetFace();dialog.dismiss();heartbeat();}catch(Exception e){show("Connection was not changed. Resolve the current request and retry.");}};
@@ -264,7 +264,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   worker.execute(()->{
    try{
     JSONObject config=vault.config();if(config==null){show("Connect your private institute gate first.");return;}
-    GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow Gate 0.2-trial"));
+    GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow QR Attendance "+BuildConfig.VERSION_NAME));
     if(reply.code!=200){connected=false;clockOK=false;show("Connection refused ("+reply.code+"). Check the gate key/status.");return;}
     if(!reply.json.optString("scope_id").matches("[a-f0-9]{64}")){connected=false;clockOK=false;resetFace();show("Server enrollment update is required before this app can connect. Attendance is paused; ask the software owner to review the gate backend update.");return;}
     boolean changed=vault.bindScope(reply.json.getString("scope_id"));if(changed){known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}
@@ -284,7 +284,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject pending=vault.pending();if(pending==null)return;JSONObject body=pending.getJSONObject("body"),config=vault.config();if(config==null)return;
     long age=System.currentTimeMillis()-pending.getLong("captured_ms");
     if(age< -60000||age>14*60*1000){vault.finish(body.getString("event_id"),"Pending event expired. Check web history and use manual attendance if necessary.");show(vault.lastResult());return;}
-    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","SchoolFlow Gate 0.2-trial"));
+    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","SchoolFlow QR Attendance "+BuildConfig.VERSION_NAME));
     if(check.code!=200){connected=false;show("Cannot verify the gate before retry. Pending mark retained.");return;}
     String scope=check.json.getString("scope_id");
     if(!scope.equals(pending.getString("scope_id"))){vault.bindScope(scope);known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}

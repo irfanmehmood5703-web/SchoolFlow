@@ -1,4 +1,4 @@
-# SchoolFlow Gate — attended school and isolated trial builds
+# SchoolFlow QR Attendance — school and isolated trial builds
 
 Native QR and face attendance companion for SchoolFlow's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
 
