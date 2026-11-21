@@ -1,5 +1,5 @@
 """Tenant-specific APK queue and private delivery. Central builder keeps signing control."""
-import base64,hashlib,hmac,io,json,re,secrets,time,zipfile
+import base64,hashlib,hmac,io,json,os,re,secrets,time,zipfile
 from datetime import datetime,timezone
 from flask import Blueprint,abort,flash,g,jsonify,redirect,render_template,request,send_file,session,url_for
 from cryptography.fernet import Fernet
@@ -10,7 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
 
-SOURCE_VERSION=8
+SOURCE_VERSION=9
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -176,7 +176,8 @@ def configure_school_apps(app,db):
         file=Artifact.query.filter_by(build_id=build.id,role=role).first()
         key=Signing.query.filter_by(school_key=scope).first()
         if not file or not key or not key.fingerprint:return jsonify(available=False)
-        return jsonify(available=True,version_code=build.sequence,version_name="0.3-school-test."+str(build.sequence),\n                       whats_new="SchoolFlow app improvements and fixes.",required=False,sha256=file.sha256,
+        return jsonify(available=True,version_code=build.sequence,version_name="0.3-school-test."+str(build.sequence),
+                       whats_new="SchoolFlow app improvements and fixes.",minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),sha256=file.sha256,
                        url=url_for('school_apps.public_download',token=key.download_token,role=role,_external=True))
     def payload():
         if len(request.get_data(cache=True))>12*1024*1024:abort(413)
