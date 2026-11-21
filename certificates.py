@@ -229,6 +229,23 @@ def configure_certificates(app,db,Student):
             content=dict(content,body=default_content('guardian-card')['body'])
         if t.key=='guardian-card' and 'Valid Until' in content.get('body','') and 'GUARDIAN VERIFICATION' in content.get('body',''):
             content=dict(content,body=content['body'].replace('Valid Until','Valid Session').replace('________________','[SessionName]'))
+        # Existing campuses keep their original database template after a code deploy.
+        # Recognise the exact shipped migration starter (not school-edited templates)
+        # and use the current design for NEW previews/issues only. Issued HTML is immutable.
+        if t.key == 'migration':
+            old_identity='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p>'
+            old_registration='<table style="width:100%"><tr><td>Registration No.: [regNo]</td><td>Date of Birth: [dob]</td><td>Session: [SessionName]</td></tr></table>'
+            old_copy='<p>Certificate copy: [copyType]</p>'
+            old_body=(old_identity+'<p>Migration from campus: [campusName]</p>'
+                +'<p>Migration to campus: ____________________</p>'
+                +'<p>Effective date: ____________________</p>'
+                +'<p>Reason / remarks: ________________________________________</p>'
+                +old_registration+old_copy)
+            old_prefix=('<table style="width:100%"><tr><td>Date: [todayDate]</td>'
+                +'<td style="text-align:right">Ref: [reference]</td></tr></table>'
+                +'<h1 style="text-align:center;color:#176b4a">MIGRATION SLIP CAMPUS - CAMPUS</h1>')
+            if content.get('body','') == old_prefix + old_body:
+                content=dict(content,body=default_content('migration')['body'])
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'character':
