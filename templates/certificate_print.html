@@ -125,4 +125,34 @@
 .issued-document .certificate-sheet.card article table.guardian-back table.guardian-verification-facts td{
  -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
 }}
-</style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
+
+/* Character certificate: keep the complete issued document on one A4 or Letter sheet. */
+@media print {
+ .issued-document.character-one-page .certificate-sheet.document{
+  padding:5mm 8mm!important;font-size:10.5px!important;line-height:1.32!important;
+  break-inside:auto!important;page-break-inside:auto!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document article>p{
+  font-size:10.5px!important;line-height:1.38!important;margin:6px 0!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document article>h1{
+  font-size:17px!important;margin:9px 0 10px!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document article>h3{
+  font-size:12px!important;margin:8px 0 4px!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document article>table{
+  margin:6px 0!important;font-size:10px!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document article td,
+ .issued-document.character-one-page .certificate-sheet.document article th{
+  padding:4px 5px!important;line-height:1.25!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document footer>table{
+  margin-top:10px!important;
+ }
+ .issued-document.character-one-page .certificate-sheet.document header img{
+  max-height:18mm!important;object-fit:contain!important;
+ }
+}
+</style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document{% if issue.document_name == 'Student Character Certificate' %} character-one-page{% endif %}"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
