@@ -31,4 +31,20 @@
 .certificate-sheet.card img[alt="Student QR code"]{border:2px solid #d3e4da!important;padding:2px!important;background:#fff!important}
 @media print{.certificate-sheet.card article>table>tbody>tr>td{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
 </style>
+<style>
+/* Centre school logo and student photo inside their header cells, in both
+   saved issued certificates and fresh previews; do not affect ID cards. */
+.certificate-sheet.document>header>table>tbody>tr>td:first-child,
+.certificate-sheet.document>header>table>tbody>tr>td:last-child{
+ text-align:center!important;
+ vertical-align:middle!important;
+}
+.certificate-sheet.document>header>table>tbody>tr>td:first-child img,
+.certificate-sheet.document>header>table>tbody>tr>td:last-child img{
+ display:block!important;
+ margin-left:auto!important;
+ margin-right:auto!important;
+ object-fit:contain!important;
+}
+</style>
 <section class="certificate-sheet {{layout}}"><header>{{sections.header|safe}}</header><article>{{sections.body|safe}}</article><footer style="margin-top:24px">{{sections.footer|safe}}</footer></section>
