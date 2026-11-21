@@ -300,6 +300,21 @@ def configure_certificates(app,db,Student):
             legacy_start='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p><p>Was admitted on'
             if legacy_start in content.get('body',''):
                 content=dict(content,body=default_content('school-leaving')['body'])
+        # Refresh only identifiable SchoolFlow starter templates stored before the
+        # redesigned defaults shipped. Never rewrite custom school templates or
+        # historical issued HTML snapshots.
+        starter_markers = {
+            'envelope': ('SID: [sid]', 'Roll No.: [rollNo]', '[studentName]'),
+            'admitted-card': ('ACCOUNTANT SIGNATURE', 'PRINCIPAL SIGNATURE', '[admissionDate]'),
+            'birth': ('The date of birth above is reproduced from the school', 'Registration No.: [regNo]'),
+            'appreciation': ('Awarded for Excellence', 'Has achieved position'),
+            'admission-confirmation': ('Basic Fee Plan', 'Current Fee Status', '[admissionfee]'),
+            'fee-clearance': ('Decided Tuition Fee', 'Current Month Remaining', '[totalRemPayable]'),
+            'trip': ('Educational and Recreational School Trip', 'Venue / destination'),
+        }
+        markers = starter_markers.get(t.key)
+        if markers and all(marker.casefold() in content.get('body','').casefold() for marker in markers):
+            content=dict(content,body=default_content(t.key)['body'])
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
         html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
         return html,amounts,data
@@ -447,6 +462,7 @@ def configure_certificates(app,db,Student):
             return redirect(url_for('certificates.batch_print',bid=batch.id))
         if not c.data.get('name'):raise ValueError('Configure the school name in School heading, logo & colours before issuing documents.')
         if t.key=='fee-clearance' and any(sum(b.remaining for b in Bill.query.filter_by(student_id=s.id).all())>0 for s in students):raise ValueError('Fee clearance cannot be issued while a selected student has outstanding dues.')
+        if t.key=='birth' and any(not str(details(s).get('birth_date') or '').strip() for s in students):raise ValueError('Enter and verify the student date of birth in the admission record before issuing a school birth certificate.')
         batch=CertificateBatch(token=token,template_id=t.id,student_ids=ids,copy_type=copy_type);db.session.add(batch);db.session.flush()
         snapshot_bytes=0
         for s in students:
