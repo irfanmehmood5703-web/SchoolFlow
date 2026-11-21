@@ -11,13 +11,18 @@ from werkzeug.security import check_password_hash,generate_password_hash
 from identity import InstituteSession
 from werkzeug.datastructures import MultiDict
 
-MODULES={'assistant':'SchoolFlow Guide','support':'Support','messages':'Internal Messages','apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
+MODULES={'teacher':'Teacher App','assistant':'SchoolFlow Guide','support':'Support','messages':'Internal Messages','apps':'App Links','widgets':'Widgets','dashboard':'Dashboard','admissions':'Admissions','fees':'Student fees','exam':'Examination','attendance':'Attendance','hrm':'Employees / HRM','payroll':'Payroll','certificates':'Certificates','parents':'Parents App','ptm':'Parent Teacher Meetings','student_extras':'Student Extras','communication':'Communication requests','requisitions':'Requisitions','finance':'Finance accounting','core':'Core Settings','access':'Users & Privileges','logs':'User Logging'}
 ACTIONS=('view','create','update','delete','approve','export','print','pay','reverse','import')
 PERMISSIONS={m+'.'+a:label+' · '+a.title() for m,label in MODULES.items() for a in ACTIONS}
 PERMISSIONS['fees.adjust']='Student fees · Change generated challan amounts'
 PERMISSIONS['requisitions.manage']='Requisitions · Management reports'
 PERMISSIONS['widgets.manage']='Widgets · Manage role visibility'
 PERMISSIONS['parents.codes']='Parents App · View sensitive login codes'
+PERMISSIONS['teacher.leave_view']='Teacher App · View assigned student leave requests'
+PERMISSIONS['teacher.leave_approve']='Teacher App · Decide assigned student leave requests'
+PERMISSIONS['attendance.own']='My Attendance · View own records only'
+PERMISSIONS['payroll.self']='My Salary · View own salary only'
+PERMISSIONS['hrm.self_requests']='My HRM Requests · Request own advance and leave'
 PERMISSIONS['attendance.self']='My Geo Attendance · self only'
 PERMISSIONS['messages.manage']='Messages · Institute settings'
 PERMISSIONS['messages.report']='Messages · Campus reports'
@@ -57,9 +62,18 @@ def configure_staff_access(app,db,Student,Employee):
         if not row or not row.active or row.version!=version:return None
         employee=db.session.get(Employee,row.employee_id)
         return row if employee and employee.status=='Active' else None
+    def phone_key(value):
+        value=re.sub(r'[\s()+.-]','',str(value or ''))
+        if value.startswith('0092'):value=value[2:]
+        if re.fullmatch(r'03\d{9}',value):value='92'+value[1:]
+        return value if re.fullmatch(r'923\d{9}',value) else None
     def authenticate(school,login,password):
         g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
-        try:row=Staff.query.filter(or_(Staff.username==login,Staff.email==login)).first()
+        try:
+            row=Staff.query.filter(or_(Staff.username==login,Staff.email==login)).first()
+            if row is None and phone_key(login):
+                matches=[r for r in Staff.query.filter_by(active=True).all() if phone_key(r.data.get('contact'))==phone_key(login)]
+                row=matches[0] if len(matches)==1 else None
         except OperationalError:db.session.rollback();check_password_hash(dummy,password[:129]);return None
         valid=check_password_hash(row.password_hash if row else dummy,password[:129])
         if not row or not valid or len(password)>128 or not resolve(row.id,row.version):return None
@@ -75,6 +89,13 @@ def configure_staff_access(app,db,Student,Employee):
         except (IntegrityError,StaleDataError):db.session.rollback();raise ValueError('An account changed or the username/email/employee is already linked. Reload before saving.')
     def check_version(row):
         if request.form.get('version')!=str(row.version if row else 0):raise ValueError('This account changed. Reload first.')
+    @bp.post('/<int:sid>/teacher-qr')
+    def teacher_qr(sid):
+        if not is_owner():abort(403)
+        if not session.get('record_csrf') or not hmac.compare_digest(session['record_csrf'],request.form.get('_csrf','')):abort(400)
+        app.extensions['admission_capacity']['lock']();row=db.get_or_404(Staff,sid);check_version(row)
+        return app.extensions['teacher_login_helpers']['issue'](row)
+
     def staff_snapshot(row):
         return dict(row.data,username=row.username,email=row.email,employee_id=row.employee_id,active=row.active) if row else {}
     def linked_employee(value):
@@ -412,7 +433,7 @@ def configure_staff_access(app,db,Student,Employee):
         p=getattr(g,'staff_principal',None)
         if p is None:return
         # Notices apply each source module's grants and actor ownership themselves.
-        if request.blueprint=='notices':return
+        if request.blueprint in ('notices','teacher_login','teacher_app'):return
         # Static instructions contain no school records and grant no target-page
         # access. Institute authentication above still applies to these GETs.
         if request.blueprint == 'how_to' and request.method in ('GET', 'HEAD'):return

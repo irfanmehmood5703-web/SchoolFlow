@@ -214,6 +214,10 @@ from personal_notices import configure_notices
 configure_notices(app,db,Student)
 from owner_app import configure_owner_app
 configure_owner_app(app,db,Student,Employee)
+from teacher_login import configure_teacher_login
+configure_teacher_login(app,db,Employee)
+from teacher_app import configure_teacher_app
+configure_teacher_app(app,db,Student,Employee)
 
 
 @app.route('/')
