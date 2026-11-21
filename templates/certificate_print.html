@@ -253,4 +253,19 @@
   break-inside:avoid;
  }
 }
+
+/* Centre school logo and student photo inside their header cells, in both
+   saved issued certificates and fresh previews; do not affect ID cards. */
+.certificate-sheet.document>header>table>tbody>tr>td:first-child,
+.certificate-sheet.document>header>table>tbody>tr>td:last-child{
+ text-align:center!important;
+ vertical-align:middle!important;
+}
+.certificate-sheet.document>header>table>tbody>tr>td:first-child img,
+.certificate-sheet.document>header>table>tbody>tr>td:last-child img{
+ display:block!important;
+ margin-left:auto!important;
+ margin-right:auto!important;
+ object-fit:contain!important;
+}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document{% if issue.document_name == 'Student Character Certificate' %} character-one-page{% endif %}{% if issue.document_name == 'Migration Slip Campus - Campus' %} migration-one-page{% endif %}{% if issue.document_name == 'Student Rustication Notice' %} rustication-one-page{% endif %}"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
