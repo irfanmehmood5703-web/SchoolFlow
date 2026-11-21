@@ -520,6 +520,58 @@ def configure_records(app, db, Student, Employee):
             return redirect(url_for("records.salary_handoff", id=obj.id))
         return redirect(url_for("records.record_list", kind=kind))
 
+    @bp.route("/student/bulk-status", methods=["POST"])
+    def bulk_student_status():
+        """Change selected student statuses without touching fees or other profile fields."""
+        statuses = {
+            "Active", "Inactive", "Admission Query", "Waiting", "Refused",
+            "Withdrawn", "Passed Out", "Left", "Expelled", "Suspended",
+            "Struck Off", "Duplicate Record",
+        }
+        status = request.form.get("status", "").strip()
+        raw_ids = request.form.getlist("student_ids")
+        reason = request.form.get("reason", "").strip()
+        effective_date = request.form.get("effective_date", "").strip()
+        if status not in statuses or not raw_ids or len(raw_ids) > 100 or len(reason) > 500:
+            abort(400, "Select students and a valid status (up to 100 students).")
+        if not effective_date:
+            abort(400, "Enter a status change date.")
+        try:
+            date.fromisoformat(effective_date)
+            ids = sorted({int(value) for value in raw_ids if value.isdecimal()})
+        except ValueError:
+            abort(400, "Invalid date or student selection.")
+        if len(ids) != len(set(raw_ids)) or not ids or any(value <= 0 for value in ids):
+            abort(400, "Invalid student selection.")
+        app.extensions['admission_capacity']['lock']()
+        students = Student.query.filter(Student.id.in_(ids)).with_for_update().all()
+        if len(students) != len(ids):
+            db.session.rollback()
+            abort(404, "One or more students could not be found.")
+        from user_logging import safe
+        Audit = app.extensions['ops_models']['audit']
+        for obj in students:
+            before = obj.status
+            if before == status:
+                continue
+            detail = StudentDetails.query.filter_by(student_id=obj.id).first()
+            obj.status = status
+            if detail:
+                updated = dict(detail.data or {})
+                updated["status"] = status
+                updated["status_change_date"] = effective_date
+                updated["status_change_reason"] = reason
+                detail.data = updated
+            db.session.add(RecordEvent(owner_kind="student", owner_id=obj.id,
+                                       action="Status: " + before + " -> " + status))
+            db.session.add(Audit(action="Student status change",
+                                 data=dict(record_kind="student", record_id=obj.id,
+                                           before=safe(dict(status=before)),
+                                           after=safe(dict(status=status, effective_date=effective_date, reason=reason)))))
+        db.session.commit()
+        flash(f"Status updated for {len(students)} selected student(s). Existing fees and records are preserved.", "success")
+        return redirect(url_for("ops.fees", mode="inactive-fees"))
+
     @bp.route("/<kind>/new", methods=["GET", "POST"])
     def new_record(kind):
         if kind not in ("student", "employee"):
