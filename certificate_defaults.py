@@ -120,7 +120,32 @@ def default_content(key):
         'This notice is intended to support constructive communication and does not by itself change the student\'s enrolment status.</p>'
         +copy
       ),
-      'trip':'<h3>Educational and Recreational School Trip</h3><p>Respected Sir / Madam,</p><p>[instName] requests permission to arrange an educational visit to your venue.</p><p>Venue / destination: ______________________________</p><p>Trip date: ______________________________________</p><table style="width:100%"><tr><td>Total students: __________</td><td>Total staff: __________</td></tr></table><p>Regards,<br>Principal<br>[instName]<br>[instContact]</p>',
+      'trip':(
+        '<h3 style="color:#176b4a;margin:10px 0 6px">EDUCATIONAL TRIP — PERMISSION REQUEST</h3>'
+        '<p><b>To:</b> The Manager / Concerned Authority</p>'
+        '<p><b>Subject: Request for an Educational Visit</b></p>'
+        '<p>Respected Sir / Madam,</p>'
+        '<p>On behalf of <b>[instName]</b>, we request permission to arrange a supervised educational visit to your premises. '
+        'The proposed visit aims to provide students with practical learning opportunities and meaningful educational exposure.</p>'
+        '<h3 style="color:#176b4a;margin:11px 0 5px">PROPOSED VISIT DETAILS</h3>'
+        '<table class="certificate-record-grid" style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:32%">Venue / Destination</th><td>________________________________</td></tr>'
+        '<tr><th>Proposed Visit Date</th><td>________________________________</td></tr>'
+        '<tr><th>Arrival / Departure Time</th><td>________________________________</td></tr>'
+        '<tr><th>Number of Students</th><td>________________</td></tr>'
+        '<tr><th>Accompanying Staff</th><td>________________</td></tr>'
+        '<tr><th>Contact Person</th><td>________________________________</td></tr>'
+        '</table>'
+        '<h3 style="color:#176b4a;margin:11px 0 5px">SUPERVISION &amp; CONFIRMATION</h3>'
+        '<p>The school will arrange appropriate staff supervision and ensure that students follow the venue\'s safety and conduct instructions. '
+        'Kindly confirm availability, entry requirements and any applicable charges before the visit.</p>'
+        '<table class="certificate-record-grid" style="width:100%;border-collapse:collapse">'
+        '<tr><th style="width:32%">Venue Approval / Date</th><td>________________________________</td></tr>'
+        '<tr><th>Remarks / Conditions</th><td>________________________________</td></tr>'
+        '</table>'
+        '<p>Thank you for considering our request. We look forward to your confirmation.</p>'
+        '<p><b>School Administration</b> · [instName] · [instContact]</p>'
+      ),
       'fee-clearance':identity+'<p>Fee position for the academic session [SessionName], as recorded on [todayDate]:</p><table style="width:100%"><tr><th>Decided Tuition Fee</th><td>[tuitionFee]</td></tr><tr><th>Current Month Payable</th><td>[currPayable]</td></tr><tr><th>Current Month Remaining</th><td>[curRemaining]</td></tr><tr><th>Total Outstanding</th><td>[totalRemPayable]</td></tr></table><p>This clearance is issued against the fee records held by the school.</p>'+copy,
       'admission-confirmation':identity+'<p>Admission at [instName] is recorded from [admissionDate].</p><h3>Basic Fee Plan</h3><table style="width:100%"><tr><th>Admission Fee</th><td>[admissionfee]</td></tr><tr><th>Tuition Fee</th><td>[tuitionFee]</td></tr></table><h3>Current Fee Status</h3><table style="width:100%"><tr><th>Payable</th><td>[currPayable]</td></tr><tr><th>Paid</th><td>[currentPaid]</td></tr><tr><th>Remaining</th><td>[curRemaining]</td></tr></table>'+copy,
       'birth':identity+'<p>Is studying at <b>[instName]</b>.</p>'+registration+'<p>The date of birth above is reproduced from the school’s admission record. This is a school-issued record certificate.</p>'+copy,
