@@ -558,7 +558,7 @@ def configure_operations(app, db, Student, Employee):
                 from sqlalchemy import or_
                 query = query.filter(or_(Student.name.ilike(pattern, escape='\\'), Student.admission_no.ilike(pattern, escape='\\'), Student.phone.ilike(pattern, escape='\\')))
             status_students = query.order_by(Student.id.desc()).limit(100).all()
-        return render('fees.html',title={'inactive-fees':'Inactive Student Fee','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students)
+        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students)
 
     @bp.route('/generate-challans',methods=['GET','POST'])
     def generate_challans():
