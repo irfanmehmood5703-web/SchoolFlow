@@ -88,16 +88,36 @@ def configure_reports(app,db,Student,Employee):
             for (day,account),values in sorted(group.items()):rows.append([day,account,values[2],cash(values[0]),cash(values[1])])
             return response(view,['Payment Date','Receiving Account','Receipts','Collected','Discount'],rows,dict(Collected=cash(sum(v[0] for v in group.values())),Discount=cash(sum(v[1] for v in group.values()))))
         if view=='class-fees':
-            particular=app.extensions['fee_setup_helpers']['resolve'](request.args.get('particular',''));groups=defaultdict(lambda:[0,0,0,0,False])
+            helpers=app.extensions['fee_setup_helpers']
+            requested=helpers['resolve'](request.args.get('particular',''))
+            def head_name(value):
+                # Normalize labels for reporting only; do not modify saved fee heads or bills.
+                return ' '.join(str(helpers['label'](value or '')).split())
+            selected=head_name(requested).casefold() if requested else ''
+            groups=defaultdict(lambda:[0,0,0,0,False])
+            labels={}
             for b in billing:
+                if request.args.get('defaulters') and b.remaining<=0:continue
+                # Merge duplicate/case-variant lines within the same challan before
+                # counting challans or determining whether allocation is possible.
+                bill_heads=defaultdict(int)
                 for line in b.lines:
-                    if particular and line['particular']!=particular:continue
-                    if request.args.get('defaulters') and b.remaining<=0:continue
-                    key=(students[b.student_id].class_name or 'Unassigned',line['particular']);g=groups[key];g[0]+=line['amount'];g[3]+=1
-                    if len(b.lines)==1:g[1]+=b.paid;g[2]+=b.discount
-                    else:g[4]=True
-            rows=[[cls,app.extensions['fee_setup_helpers']['label'](part),count,cash(billed),cash(paid) if not unknown else 'Allocation unavailable',cash(discount) if not unknown else 'Allocation unavailable',cash(billed-paid-discount) if not unknown else 'Allocation unavailable'] for (cls,part),(billed,paid,discount,count,unknown) in sorted(groups.items())]
-            return response(view,['Class','Particular','Challans','Payable','Paid','Discount','Remaining'],rows,note='Payments on older multi-particular challans have no line allocation. Such values are explicitly unavailable, rather than estimated.')
+                    name=head_name(line.get('particular',''))
+                    if not name:continue
+                    normalized=name.casefold()
+                    bill_heads[normalized]+=int(line.get('amount',0))
+                    labels.setdefault(normalized,name)
+                for normalized,amount in bill_heads.items():
+                    if selected and normalized!=selected:continue
+                    key=(students[b.student_id].class_name or 'Unassigned',normalized)
+                    g=groups[key];g[0]+=amount;g[3]+=1
+                    if len(bill_heads)==1:
+                        g[1]+=b.paid;g[2]+=b.discount
+                    else:
+                        # Historic mixed-head receipts have no trustworthy line allocation.
+                        g[4]=True
+            rows=[[cls,labels[part],count,cash(billed),cash(paid) if not unknown else 'Allocation unavailable',cash(discount) if not unknown else 'Allocation unavailable',cash(billed-paid-discount) if not unknown else 'Allocation unavailable'] for (cls,part),(billed,paid,discount,count,unknown) in sorted(groups.items())]
+            return response(view,['Class','Particular','Challans','Payable','Paid','Discount','Remaining'],rows,note='Fee-head names differing only by capitalization are combined for this report. Payments on multi-particular challans without saved line allocations remain unavailable rather than estimated.')
         if view=='monthly-defaulters':
             groups=defaultdict(lambda:[0,0,0,0])
             for b in billing:
