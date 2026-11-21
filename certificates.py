@@ -276,6 +276,20 @@ def configure_certificates(app,db,Student):
             )
             if old_rustication in content.get('body',''):
                 content=dict(content,body=default_content('rustication')['body'])
+        # Upgrade the exact shipped warning-letter starter in school databases.
+        # Preserve customized templates and immutable previously issued snapshots.
+        if t.key == 'warning':
+            old_warning=(
+                '<h3>Subject: Attendance and academic progress</h3>'
+                '<p>Dear parent / guardian,</p>'
+                '<p>Please meet the school to discuss the student’s attendance, academic progress and agreed steps for improvement.</p>'
+                '<p>Areas requiring attention: ______________________________</p>'
+                '<p>Meeting date and time: _________________________________</p>'
+                '<p>Review date: _________________________________________</p>'
+                '<p>Sincerely,<br>Principal, [instName]</p>'
+            )
+            if old_warning in content.get('body',''):
+                content=dict(content,body=default_content('warning')['body'])
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'character':
