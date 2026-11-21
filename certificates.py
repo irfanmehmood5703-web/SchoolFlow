@@ -246,6 +246,23 @@ def configure_certificates(app,db,Student):
                 +'<h1 style="text-align:center;color:#176b4a">MIGRATION SLIP CAMPUS - CAMPUS</h1>')
             if content.get('body','') == old_prefix + old_body:
                 content=dict(content,body=default_content('migration')['body'])
+        # Shorten only the exact previously shipped migration paragraphs in saved
+        # templates; never overwrite school-edited text or historical issued HTML.
+        if t.key == 'migration':
+            old_approval=(
+                'This document records a campus transfer request for the above-named student within <b>[instName]</b>. '
+                'The transfer becomes effective only after approval by the authorised school administration and acknowledgement by the receiving campus. '
+                'Until then, the student remains enrolled at the transferring campus.'
+            )
+            old_note=(
+                'Note: This slip does not itself change the student\'s campus or enrolment record. '
+                'The authorised transfer must be recorded separately in the school system.'
+            )
+            if old_approval in content.get('body','') and old_note in content.get('body',''):
+                content=dict(content,body=content['body'].replace(
+                    old_approval,
+                    'Transfer is effective only after school approval and receiving-campus acknowledgement. Until then, the student remains enrolled at the current campus.'
+                ).replace(old_note,"Note: Update the student's campus in SchoolFlow only after approval."))
         # Upgrade only the untouched starter wording for future certificates.
         # Campus-customized wording and previously issued documents remain unchanged.
         if t.key == 'character':
