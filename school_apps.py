@@ -10,7 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
 
-SOURCE_VERSION=7
+SOURCE_VERSION=8
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -165,6 +165,19 @@ def configure_school_apps(app,db):
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
         response=send_file(io.BytesIO(file.content),mimetype='application/vnd.android.package-archive',as_attachment=True,download_name='School-'+school.code+'-'+role+'.apk')
         response.headers['Cache-Control']='private, no-store';response.headers['X-APK-SHA256']=file.sha256;return response
+    @bp.get('/api/mobile-app/update/<scope>/<role>')
+    def mobile_update(scope,role):
+        # An installed school-specific client checks for a newer signed APK.
+        if role not in ROLES or not re.fullmatch(r'[0-9a-f]{32}',scope):abort(404)
+        school=School.query.filter_by(storage_key=scope,active=True).first_or_404()
+        g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
+        spec,build,_=current(school)
+        if not build or build.state!='ready':return jsonify(available=False)
+        file=Artifact.query.filter_by(build_id=build.id,role=role).first()
+        key=Signing.query.filter_by(school_key=scope).first()
+        if not file or not key or not key.fingerprint:return jsonify(available=False)
+        return jsonify(available=True,version_code=build.sequence,sha256=file.sha256,
+                       url=url_for('school_apps.public_download',token=key.download_token,role=role,_external=True))
     def payload():
         if len(request.get_data(cache=True))>12*1024*1024:abort(413)
         data=request.get_json(silent=True)
