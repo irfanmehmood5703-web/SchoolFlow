@@ -5,7 +5,7 @@ import android.view.WindowManager;
 public final class MainActivity extends Activity {
  private PortalScreen portal;
  private SmsScreen sms;
- @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(android.graphics.Color.rgb(23,107,74));getWindow().setNavigationBarColor(android.graphics.Color.rgb(23,107,74));getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,WindowManager.LayoutParams.FLAG_SECURE);
+ @Override public void onCreate(Bundle state){super.onCreate(state);getWindow().setStatusBarColor(android.graphics.Color.rgb(23,107,74));getWindow().setNavigationBarColor(android.graphics.Color.rgb(23,107,74));if(!"parents".equals(BuildConfig.ROLE)&&!"owner".equals(BuildConfig.ROLE))getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,WindowManager.LayoutParams.FLAG_SECURE);
   if("sms".equals(BuildConfig.ROLE)){sms=new SmsScreen(this);sms.show();}else{portal=new PortalScreen(this);portal.show(state);}
  }
  @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(portal!=null)portal.permissions(request,results);if(sms!=null)sms.permissions(request);}
