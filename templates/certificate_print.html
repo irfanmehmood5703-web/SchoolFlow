@@ -286,4 +286,16 @@
  margin-right:auto!important;
  object-fit:contain!important;
 }
+/* A4 label-sheet contract: preserve real label/card dimensions, never stretch to a full-page certificate. */
+.issued-document .certificate-sheet.label{width:100%!important;max-width:120mm!important;margin:0 auto!important;padding:5mm!important;font:12px/1.4 Arial,sans-serif!important;min-height:0!important;height:auto!important}
+.issued-document .certificate-sheet.label article>table.schoolflow-student-label{width:100%!important;table-layout:auto!important;border:2px solid #176b4a!important}
+.issued-document .certificate-sheet.label article>table.schoolflow-student-label th,.issued-document .certificate-sheet.label article>table.schoolflow-student-label td{border:1px solid #cdded3!important;padding:6px 7px!important;vertical-align:middle!important;text-align:left!important}
+.issued-document .certificate-sheet.label article>table.schoolflow-student-label th{font-weight:700!important;color:#176b4a!important}
+.issued-document .certificate-sheet.label article img{max-width:17mm!important;max-height:17mm!important;object-fit:contain!important;display:block!important;margin:auto!important}
+@media print{
+ .issued-document:has(.certificate-sheet.label){padding:0!important;margin:0!important;break-after:page!important}
+ .issued-document:last-child:has(.certificate-sheet.label){break-after:auto!important}
+ .issued-document .certificate-sheet.label{break-inside:avoid!important;page-break-inside:avoid!important;padding:4mm!important;max-width:120mm!important}
+ .issued-document .certificate-sheet.label article>table{break-inside:avoid!important}
+}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document{% if issue.document_name == 'Student Character Certificate' %} character-one-page{% endif %}{% if issue.document_name == 'Migration Slip Campus - Campus' %} migration-one-page{% endif %}{% if issue.document_name == 'Student Rustication Notice' %} rustication-one-page{% endif %}"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
