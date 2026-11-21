@@ -26,7 +26,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private Vault vault;private volatile FaceEngine engine;
  private volatile List<RecognitionPolicy.Identity> known=Collections.emptyList();
  private JavaCameraView camera;private TextView status,personText,detail;
- private Button start,confirm;private Spinner direction;
+ private Button start,confirm,qrModeButton;private Spinner direction;
  private volatile boolean running=false,visible=false,connected=false,clockOK=false;
  private volatile String marks="";
  /** Publish each camera result atomically; never mix a new identity with an
@@ -37,6 +37,12 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  }
  private volatile Observation observation=new Observation(null,null,0,false);
  private volatile boolean readEnrollmentQr;private volatile EditText enrollmentQrTarget;
+ private static final java.util.regex.Pattern ATTENDANCE_QR =
+     java.util.regex.Pattern.compile("schoolflow:(student|employee):[a-f0-9]{64}");
+ private volatile boolean qrAttendance;
+ private volatile long qrCaptureSession;
+ private String lastSubmittedQr="", lastSubmittedQrDirection="";
+ private long lastQrSubmission;
  private long processedAt,lastContact;private Runnable protectedAction;
  private final Runnable poll=new Runnable(){public void run(){if(!visible)return;try{if(vault!=null&&vault.pending()!=null)deliver();else if(vault!=null&&(!contactValid()||SystemClock.elapsedRealtime()-lastContact>40000))heartbeat();}catch(Exception e){show("Protected storage error. Reconnect only after reviewing local data.");}ui.postDelayed(this,15000);}};
  private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -52,8 +58,11 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   TextView title=text("SchoolFlow Gate  ·  attended test build",23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
   if(BuildConfig.DEBUG)root.addView(text("Fictional trial only · "+EndpointPolicy.BASE,12));
   LinearLayout toolbar=new LinearLayout(this);toolbar.addView(button("Connection",()->protect(this::connectionDialog)));toolbar.addView(button("Enroll face",()->protect(this::enrollmentDialog)));toolbar.addView(button("Manage faces",()->protect(this::manageDialog)));
+  Button mode=button("QR Attendance",()->switchAttendanceMode(!qrAttendance));
+  qrModeButton=mode;
+  toolbar.addView(mode);
   start=button("Start camera",()->{if(running)stopCamera();else startCamera();});toolbar.addView(start);
-  direction=new Spinner(this);direction.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"IN","OUT"}));toolbar.addView(direction);direction.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int n,long id){resetFace();}public void onNothingSelected(android.widget.AdapterView<?> p){}});
+  direction=new Spinner(this);direction.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"IN","OUT"}));toolbar.addView(direction);direction.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int n,long id){qrCaptureSession++;resetFace();}public void onNothingSelected(android.widget.AdapterView<?> p){}});
   HorizontalScrollView toolbarScroll=new HorizontalScrollView(this);toolbarScroll.addView(toolbar);root.addView(toolbarScroll);
   LinearLayout body=new LinearLayout(this);
   camera=new JavaCameraView(this,CameraBridgeViewBase.CAMERA_ID_FRONT);camera.setVisibility(View.VISIBLE);camera.setMaxFrameSize(640,480);camera.setCvCameraViewListener(this);
@@ -75,17 +84,35 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  @Override public void onResume(){super.onResume();visible=true;ui.removeCallbacks(poll);ui.postDelayed(poll,1000);}
  @Override public void onPause(){visible=false;ui.removeCallbacks(poll);stopCamera();super.onPause();}
  @Override public void onDestroy(){if(camera!=null)camera.disableView();worker.shutdown();initializer.shutdown();super.onDestroy();}
+ private void switchAttendanceMode(boolean useQr){
+  stopCamera();
+  qrAttendance=useQr;
+  boolean hasRearCamera=getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA);
+  camera.setCameraIndex(useQr&&hasRearCamera?CameraBridgeViewBase.CAMERA_ID_BACK:CameraBridgeViewBase.CAMERA_ID_FRONT);
+  qrModeButton.setText(useQr?"Face Attendance":"QR Attendance");
+  personText.setText(useQr?"Student, teacher and staff QR attendance":"One clear face at a time.");
+  detail.setText(useQr?"Select IN or OUT, start the camera and present a SchoolFlow identity card. Wait for the result before scanning the next card.":"Verify the person, then confirm the selected IN or OUT. Use fictional identities until physical testing is complete.");
+  confirm.setVisibility(useQr?View.GONE:View.VISIBLE);
+ }
  private void startCamera(){
   if(engine==null){show("Wait for the face engine to load.");return;}
   running=true;resetFace();camera.enableView();getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);start.setText("Stop camera");
  }
- private void stopCamera(){running=false;resetFace();if(camera!=null)camera.disableView();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);if(start!=null)start.setText("Start camera");}
+ private void stopCamera(){running=false;qrCaptureSession++;resetFace();if(camera!=null)camera.disableView();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);if(start!=null)start.setText("Start camera");}
  public void onCameraViewStarted(int width,int height){}
  public void onCameraViewStopped(){resetFace();}
  public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame frame){
   Mat rgba=frame.rgba();long now=SystemClock.elapsedRealtime();
   if(!running||engine==null||now-processedAt<500)return rgba;processedAt=now;
   try {
+   long session=qrCaptureSession;
+   if(qrAttendance){
+    String token=engine.readQr(rgba);
+    if(token!=null&&ATTENDANCE_QR.matcher(token).matches()){
+     ui.post(()->submitAttendanceQr(token,session,now));
+    }
+    return rgba;
+   }
    if(readEnrollmentQr&&enrollmentQrTarget!=null){
     EditText target=enrollmentQrTarget;String qr=engine.readQr(rgba);
     if(qr.matches("schoolflow:(student|employee):[a-f0-9]{64}")){readEnrollmentQr=false;ui.post(()->{if(enrollmentQrTarget==target){target.setText(qr);show("Identity QR read. Press Verify card before enrolling the face.");}});}
@@ -103,10 +130,35 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  }
  private boolean canConfirm(){return canConfirm(observation);}
  private boolean canConfirm(Observation frame){
-  if(!visible||!running||!contactValid()||!frame.stable||frame.match==null||SystemClock.elapsedRealtime()-frame.capturedAt>1500||busy.get())return false;
+  if(qrAttendance||!visible||!running||!contactValid()||!frame.stable||frame.match==null||SystemClock.elapsedRealtime()-frame.capturedAt>1500||busy.get())return false;
   String dir=direction.getSelectedItemPosition()==0?"in":"out";
   if(!marks.equals("both")&&!marks.equals(dir))return false;
   try{return vault!=null&&vault.pending()==null;}catch(Exception e){return false;}
+ }
+ private void submitAttendanceQr(String token,long session,long capturedAt){
+  if(!qrAttendance||!visible||!running||session!=qrCaptureSession
+      ||SystemClock.elapsedRealtime()-capturedAt>1500||busy.get()||vault==null)return;
+  if(!contactValid()){show("Reconnect the registered gate before scanning.");return;}
+  String dir=direction.getSelectedItemPosition()==0?"in":"out";
+  if(!marks.equals("both")&&!marks.equals(dir)){
+   show("This gate cannot mark the selected IN or OUT direction.");return;
+  }
+  long now=SystemClock.elapsedRealtime();
+  if(token.equals(lastSubmittedQr)&&dir.equals(lastSubmittedQrDirection)
+      &&now-lastQrSubmission<10000)return;
+  try{
+   if(vault.pending()!=null)return;
+   JSONObject body=new JSONObject()
+       .put("event_id",UUID.randomUUID().toString().replace("-",""))
+       .put("qr_token",token).put("direction",dir)
+       .put("occurred_at",Instant.now().toString());
+   vault.queue(body);
+   lastSubmittedQr=token;
+   lastSubmittedQrDirection=dir;
+   lastQrSubmission=now;
+   show("Submitting "+dir.toUpperCase(Locale.ROOT)+" attendance…");
+   deliver();
+  }catch(Exception e){show("Submission was not saved locally. No new mark was sent.");}
  }
  private void confirmIdentity(){
   Observation frame=observation;
@@ -154,6 +206,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  }
  private void enrollmentDialog(){
   if(!contactValid()){show("Verify the connection and automatic device time before enrollment.");return;}
+  if(qrAttendance)switchAttendanceMode(false);
   startCamera();LinearLayout box=form();
   EditText qr=input(box,"SchoolFlow student / employee QR value","",InputType.TYPE_CLASS_TEXT);
   enrollmentQrTarget=qr;JSONObject[] verified={null};ArrayList<float[]> samples=new ArrayList<>();long[] sampled={0};

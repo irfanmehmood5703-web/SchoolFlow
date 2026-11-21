@@ -1,10 +1,10 @@
 # SchoolFlow Gate — attended school and isolated trial builds
 
-Native face-attendance companion for SchoolFlow's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
+Native QR and face attendance companion for SchoolFlow's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
 
 ## Test installation
 
-Download **SchoolFlow-Gate-Trial.apk** from a successful **SchoolFlow Gate Android** Actions run's **SchoolFlow-Gate-test** artifact (extract the ZIP first), or use the directly supplied APK. Check SOURCE-COMMIT.txt and SHA256SUMS.txt. This 0.2 build has a separate package ID (`com.schoolflow.gate.trial`) and can coexist with the older test app. It is debug-signed for fictional trials, not production-signed. Targets are ARM64 Android 8+ and emulator x86_64.
+Download **SchoolFlow-Gate-Trial.apk** from a successful **SchoolFlow Gate Android** Actions run's **SchoolFlow-Gate-test** artifact (extract the ZIP first), or use the directly supplied APK. Check SOURCE-COMMIT.txt and SHA256SUMS.txt. This test build has a separate package ID (`com.schoolflow.gate.trial`) and can coexist with the older test app. It is debug-signed for fictional trials, not production-signed. Targets are ARM64 Android 8+ and emulator x86_64.
 
 **The debug trial APK is pinned to https://schoolflow-gate-trial-irfan.onrender.com**, a separate free server with a fictional private institute. It does not contact or update the original SchoolFlow service. Credentials are delivered privately, never in the APK or source. The release build retains the original fixed SchoolFlow host; a future production rollout still requires protected storage and schema upgrades.
 
@@ -17,6 +17,10 @@ Use only fictional identities. Free trial storage may reset after sleep/restart;
 5. Test suspension, foreign-campus refusal, repeated IN/OUT, loss of connectivity and key rotation before considering any operational use.
 
 Settings and enrollment require the device's own screen-lock credential. Local templates can be deleted in Manage faces. Changing institute or gate explicitly clears local enrollment and pending submission after confirmation. A changed server-institute incarnation also invalidates old local enrollment, with a visible message; pending events cannot be posted into the new scope. This does not erase attendance already saved by the server. Do not share a tablet screen-lock credential or connection key with unauthorized people.
+
+## QR Attendance
+
+Connect the app to the registered campus gate. Choose **QR Attendance**, set **IN** or **OUT**, and start the camera. Show a SchoolFlow student identity card or an employee identity card for a teacher or another staff member. The app submits the scanned card and displays the server result. Wait for the result before presenting the next card. Check **Which gate marked whom** in the web portal to review scans. A pending response pauses new marks while the saved event is retried.
 
 ## Recognition and privacy
 
