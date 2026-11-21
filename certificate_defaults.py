@@ -67,17 +67,14 @@ def default_content(key):
         '<tr><th>Reason / Remarks</th><td style="height:38px">________________________________</td></tr>'
         '</table>'
         '<h3 style="color:#176b4a;margin:16px 0 7px">TRANSFER AUTHORISATION</h3>'
-        '<p style="line-height:1.55;margin:8px 0">This document records a campus transfer request for the above-named student within <b>[instName]</b>. '
-        'The transfer becomes effective only after approval by the authorised school administration and acknowledgement by the receiving campus. '
-        'Until then, the student remains enrolled at the transferring campus.</p>'
+        '<p style="line-height:1.5;margin:8px 0">Transfer is effective only after school approval and receiving-campus acknowledgement. Until then, the student remains enrolled at the current campus.</p>'
         '<table style="width:100%;border-collapse:collapse">'
         '<tr><th style="width:35%">Transfer Status</th><td>Pending approval / Approved (mark one)</td></tr>'
         '<tr><th>Approved By / Designation</th><td>________________________________</td></tr>'
         '<tr><th>Approval Date</th><td>________________________________</td></tr>'
         '<tr><th>Receiving Campus Acknowledgement</th><td>________________________________</td></tr>'
         '</table>'
-        '<p style="font-size:11px;margin:9px 0">Note: This slip does not itself change the student\'s campus or enrolment record. '
-        'The authorised transfer must be recorded separately in the school system.</p>'
+        '<p style="font-size:11px;margin:8px 0">Note: Update the student\'s campus in SchoolFlow only after approval.</p>'
         +copy
       ),
       'rustication':identity+'<p>This notice records an administrative decision concerning the student’s enrolment.</p><p>Effective date: ____________________</p><p>Reason and supporting record: ______________________________</p><p>Parent / guardian acknowledgement: ________________________</p><p>This document does not change the student’s saved status.</p>'+copy,
