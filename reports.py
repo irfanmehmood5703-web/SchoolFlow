@@ -1,5 +1,5 @@
 """Database-backed pre-test reports. Unknown allocations are never fabricated."""
-import calendar,csv,io
+import calendar,csv,io,json
 from collections import Counter,defaultdict
 from datetime import date,timedelta
 from school_clock import school_today
@@ -96,28 +96,61 @@ def configure_reports(app,db,Student,Employee):
             selected=head_name(requested).casefold() if requested else ''
             groups=defaultdict(lambda:[0,0,0,0,False])
             labels={}
-            for b in billing:
-                if request.args.get('defaulters') and b.remaining<=0:continue
-                # Merge duplicate/case-variant lines within the same challan before
-                # counting challans or determining whether allocation is possible.
+            for bill in billing:
+                if request.args.get('defaulters') and bill.remaining<=0:continue
+                # Group repeated/case-variant particulars on each challan.
                 bill_heads=defaultdict(int)
-                for line in b.lines:
+                positions=defaultdict(list)
+                for index,line in enumerate(bill.lines):
                     name=head_name(line.get('particular',''))
                     if not name:continue
                     normalized=name.casefold()
                     bill_heads[normalized]+=int(line.get('amount',0))
+                    positions[normalized].append(index)
                     labels.setdefault(normalized,name)
+                # Only explicit, validated receipt allocations may be attributed
+                # to individual heads. Historic mixed-head payments remain unknown.
+                head_paid=defaultdict(int);head_discount=defaultdict(int)
+                unknown=False
+                for receipt in Receipt.query.filter_by(bill_id=bill.id,voided=False).order_by(Receipt.id).all():
+                    allocations=None
+                    notes=receipt.notes or ''
+                    if notes.startswith('[SF-LINES]'):
+                        try:allocations=json.loads(notes.split('\\n',1)[0][10:])
+                        except (ValueError,TypeError):allocations=None
+                    valid=(isinstance(allocations,list) and len(allocations)==len(bill.lines)
+                           and all(isinstance(pair,list) and len(pair)==2 and
+                                   all(type(value) is int and value>=0 for value in pair)
+                                   for pair in allocations)
+                           and sum(pair[0] for pair in allocations)==receipt.amount
+                           and sum(pair[1] for pair in allocations)==receipt.discount)
+                    if valid:
+                        for name,indexes in positions.items():
+                            head_paid[name]+=sum(allocations[i][0] for i in indexes)
+                            head_discount[name]+=sum(allocations[i][1] for i in indexes)
+                    elif len(bill_heads)==1:
+                        name=next(iter(bill_heads))
+                        head_paid[name]+=receipt.amount
+                        head_discount[name]+=receipt.discount
+                    else:
+                        unknown=True
+                # A discrepancy between receipt totals and challan totals also
+                # makes allocation unsafe (e.g. older imported transactions).
+                if sum(head_paid.values())!=bill.paid or sum(head_discount.values())!=bill.discount:
+                    unknown=True
                 for normalized,amount in bill_heads.items():
                     if selected and normalized!=selected:continue
-                    key=(students[b.student_id].class_name or 'Unassigned',normalized)
-                    g=groups[key];g[0]+=amount;g[3]+=1
-                    if len(bill_heads)==1:
-                        g[1]+=b.paid;g[2]+=b.discount
-                    else:
-                        # Historic mixed-head receipts have no trustworthy line allocation.
-                        g[4]=True
-            rows=[[cls,labels[part],count,cash(billed),cash(paid) if not unknown else 'Allocation unavailable',cash(discount) if not unknown else 'Allocation unavailable',cash(billed-paid-discount) if not unknown else 'Allocation unavailable'] for (cls,part),(billed,paid,discount,count,unknown) in sorted(groups.items())]
-            return response(view,['Class','Particular','Challans','Payable','Paid','Discount','Remaining'],rows,note='Fee-head names differing only by capitalization are combined for this report. Payments on multi-particular challans without saved line allocations remain unavailable rather than estimated.')
+                    key=(students[bill.student_id].class_name or 'Unassigned',normalized)
+                    group=groups[key]
+                    group[0]+=amount;group[1]+=head_paid[normalized]
+                    group[2]+=head_discount[normalized];group[3]+=1
+                    group[4]=group[4] or unknown
+            rows=[[cls,labels[part],count,cash(billed),
+                   cash(paid) if not unknown else 'Allocation unavailable',
+                   cash(discount) if not unknown else 'Allocation unavailable',
+                   cash(billed-paid-discount) if not unknown else 'Allocation unavailable']
+                  for (cls,part),(billed,paid,discount,count,unknown) in sorted(groups.items())]
+            return response(view,['Class','Particular','Challans','Payable','Paid','Discount','Remaining'],rows,note='Fee-head totals use verified saved payment allocations. Historic multi-head receipts without allocations remain unavailable until reconciled; no estimated amounts are reported.')
         if view=='monthly-defaulters':
             groups=defaultdict(lambda:[0,0,0,0])
             for b in billing:
