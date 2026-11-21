@@ -223,4 +223,34 @@
   max-height:20mm!important;object-fit:contain!important;
  }
 }
+/* Shared full-page certificate composition: use available page height rather
+   than shrinking every document to the top half. Cards/labels are excluded. */
+@media print {
+ .issued-document .certificate-sheet.document{
+  box-sizing:border-box!important;
+  min-height:222mm;
+  display:flex!important;
+  flex-direction:column!important;
+  padding:8mm 9mm!important;
+  break-inside:avoid!important;
+ }
+ .issued-document .certificate-sheet.document>header,
+ .issued-document .certificate-sheet.document>article{
+  flex:0 0 auto;
+ }
+ .issued-document .certificate-sheet.document>footer{
+  margin-top:auto!important;
+  padding-top:12px;
+ }
+ .issued-document .certificate-sheet.document>footer>table{
+  margin-top:8px!important;
+ }
+ .issued-document .certificate-sheet.document>article>h1{
+  margin-top:13px;
+  margin-bottom:13px;
+ }
+ .issued-document .certificate-sheet.document>article>table{
+  break-inside:avoid;
+ }
+}
 </style></head><body><nav class="print-toolbar"><button onclick="window.print()">Print / Save PDF</button><a href="{{url_for('certificates.index',tab='logs')}}">Certificate Logs</a><span>{{issues|length}} generated document{{'s' if issues|length>1 else ''}}. Reprinting preserves the issued reference.</span></nav>{% for issue in issues %}<div class="issued-document{% if issue.document_name == 'Student Character Certificate' %} character-one-page{% endif %}{% if issue.document_name == 'Migration Slip Campus - Campus' %} migration-one-page{% endif %}{% if issue.document_name == 'Student Rustication Notice' %} rustication-one-page{% endif %}"><p class="reference-label">{{issue.reference}} · {{issue.document_name}} · {{issue.student_name}}</p>{{issue.html|safe}}</div>{% endfor %}</body></html>
