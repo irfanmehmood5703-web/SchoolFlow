@@ -37,6 +37,14 @@
 <tr class="challan-total" data-bill="{{b.id}}" data-remaining="{{b.remaining/100}}"><td colspan="2"><strong>Challan #{{b.id}} total</strong></td><td>{{b.remaining|cash}}</td><td class="bill-discount">0.00</td><td class="bill-after-discount">{{b.remaining|cash}}</td><td class="bill-paid">0.00</td><td class="bill-balance">{{b.remaining|cash}}</td></tr>
 {% else %}<tr><td colspan="7">No unpaid challans.</td></tr>{% endfor %}
 </tbody></table></div>
+<div class="form-card" style="margin-top:14px;padding:14px;border:1px solid #c4d9ce;background:#f5faf7;border-radius:10px">
+<strong>Optional Auto Distribute</strong>
+<p style="margin:6px 0 10px">Manual entry is the default. Enter an amount and use Auto Distribute to fill available fee heads in challan order. Review the allocation before submitting.</p>
+<label for="auto-distribute-amount">Amount to distribute (PKR)</label>
+<input id="auto-distribute-amount" type="number" min="0" step="0.01" inputmode="decimal" style="max-width:190px;margin:0 10px 8px 0;border:1px solid #a9c8ba;border-radius:6px;padding:9px">
+<button type="button" id="auto-distribute-btn" class="button secondary">Auto Distribute</button>
+<p id="auto-distribute-message" role="status" style="margin:6px 0 0"></p>
+</div>
 <p id="particular-validation" role="alert" style="color:#a12727" hidden>Payment plus discount must not exceed the remaining amount for any particular.</p>
 <script>
 (function(){const form=document.currentScript.closest('form');if(!form)return;
@@ -63,6 +71,26 @@ function calculate(){
  form.querySelectorAll('button[type=submit],button[name=action]').forEach(btn=>btn.disabled=invalid);
  return !invalid;
 }
+const autoButton=form.querySelector('#auto-distribute-btn');
+autoButton.addEventListener('click',()=>{
+ const field=form.querySelector('#auto-distribute-amount'),message=form.querySelector('#auto-distribute-message');
+ let requested=Math.round(Number(field.value)*100);
+ if(!Number.isSafeInteger(requested)||requested<=0){message.textContent='Enter a valid positive amount.';return}
+ const rows=[...form.querySelectorAll('.particular-payment-row')].filter(row=>!row.querySelector('.particular-paid').disabled);
+ // Never silently replace a manually entered payment or discount.
+ if(rows.some(row=>Number(row.querySelector('.particular-paid').value)>0||Number(row.querySelector('.particular-discount').value)>0)){
+   message.textContent='Clear existing manual payments and discounts before using Auto Distribute.';return
+ }
+ const capacity=rows.reduce((sum,row)=>sum+Math.round(Number(row.dataset.remaining)*100),0);
+ if(requested>capacity){message.textContent='Amount exceeds the total remaining fee heads.';return}
+ for(const row of rows){
+  const available=Math.round(Number(row.dataset.remaining)*100);
+  const used=Math.min(available,requested);
+  row.querySelector('.particular-paid').value=(used/100).toFixed(2);
+  requested-=used;
+ }
+ calculate();message.textContent='Distribution filled. Review each fee head before submitting.';
+});
 form.addEventListener('input',calculate);form.addEventListener('submit',e=>{if(!calculate())e.preventDefault()});calculate();})();
 </script>
 {{m.communication()}}<div class="form-actions"><a class="button secondary" href="/workspace/fees/payments">Cancel</a><button name="action" value="save">Submit payment</button><button name="action" value="send">Submit & request receipt message</button></div></form>{% endblock %}
