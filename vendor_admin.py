@@ -180,6 +180,30 @@ def configure_vendor_admin(app, db):
         flash('Owner password reset for '+school.code+'. Previous owner sessions are signed out.','success')
         return redirect(url_for('vendor.schools',q=school.code))
 
+    @bp.post('/schools/<int:school_id>/access')
+    @required
+    def school_access(school_id):
+        """Central vendor-only school access switch; never deletes tenant data."""
+        helpers['csrf']()
+        if helpers['limited']('vendor-access',current().email):abort(429)
+        action=request.form.get('action','')
+        if action not in ('suspend','activate'):abort(400)
+        lock()
+        school=db.session.get(School,school_id)
+        if not school:abort(404)
+        if request.form.get('code','').strip().upper()!=school.code:
+            abort(400,'Confirm the exact Institute Code.')
+        target=action=='activate'
+        if school.active!=target:
+            school.active=target
+            # Invalidate owner sessions in addition to the active-school gate.
+            for owner in Owner.query.filter_by(institute_id=school.id).all():
+                owner.version+=1
+            db.session.add(Audit(actor=current().email,action='school-'+action,school_code=school.code))
+            db.session.commit()
+        flash('School '+school.code+(' activated.' if target else ' suspended. Existing logins are blocked; school data is retained.'),'success')
+        return redirect(url_for('vendor.schools',q=school.code))
+
     @bp.route('/password',methods=['GET','POST'])
     @required
     def password():
