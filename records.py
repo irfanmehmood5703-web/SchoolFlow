@@ -698,8 +698,15 @@ def configure_records(app, db, Student, Employee):
         if category not in CATEGORIES or not value or len(value) > 160 or len(cls) > 160:
             return jsonify(error="Choose a field and enter an option up to 160 characters."), 422
         existing = RecordSettings.query.filter_by(category=category, value=value, class_name=cls).first()
-        if not existing and value not in STANDARD_CHOICES.get(category, []):
+        new_option = not existing and value not in STANDARD_CHOICES.get(category, [])
+        if new_option:
             db.session.add(RecordSettings(category=category, value=value, class_name=cls))
+        # A school's new academic subject also becomes usable in Exam Settings.
+        # Both writes share the authenticated institute transaction.
+        synced = (app.extensions['school_settings_helpers']['register_catalog_subject'](value)
+                  if category == 'subject' and app.extensions.get('school_settings_helpers')
+                  else False)
+        if new_option or synced:
             try:
                 db.session.commit()
             except IntegrityError:
@@ -723,6 +730,8 @@ def configure_records(app, db, Student, Employee):
                 errors["form"] = "That option is already configured."
             else:
                 db.session.add(RecordSettings(category=category, value=value, class_name=class_name))
+                if category == 'subject' and app.extensions.get('school_settings_helpers'):
+                    app.extensions['school_settings_helpers']['register_catalog_subject'](value)
                 db.session.commit()
                 flash("Record option added.", "success")
                 return redirect(url_for("records.settings",category=category,**({"class_name":class_name} if class_name else {})))
