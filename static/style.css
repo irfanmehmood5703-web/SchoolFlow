@@ -184,3 +184,12 @@ html,body{max-width:100%}
 .settings-edit-notice a{font-weight:700;text-decoration:underline}
 .settings-edit-link{min-height:35px;padding:7px 13px!important;margin:2px 5px}
 }
+
+
+/* Keep editing title, instructions, and cancel link on distinct lines. */
+@media screen{
+.settings-edit-notice{display:grid!important;grid-template-columns:minmax(0,1fr);justify-items:start;align-items:start;gap:8px!important}
+.settings-edit-notice strong{display:block;font-size:15px;line-height:1.5}
+.settings-edit-notice p{display:block;margin:0;color:#355c45;font-size:13px;line-height:1.5}
+.settings-edit-notice a{display:inline-flex;margin-top:3px;padding:6px 10px;background:#fff;border:1px solid #9bc4aa;border-radius:7px}
+}
