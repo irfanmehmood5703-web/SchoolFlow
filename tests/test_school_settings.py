@@ -63,7 +63,13 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertNotIn(b'Subjects from this school',page.data)
         self.assertNotIn(b'Automatically available school subjects',page.data)
         self.assertIn(b'Customise settings',page.data)
+        self.assertNotIn(b'id="settings-editor"',page.data)
         self.assertIn(b'Advanced: saved subject settings (0)',page.data)
+        chosen=self.c.get('/workspace/core/exam/subjects?prefill_subject=English')
+        self.assertEqual(chosen.status_code,200)
+        self.assertIn(b'id="settings-editor"',chosen.data)
+        self.assertIn(b'Save subject settings',chosen.data)
+        self.assertIn(b'value="English"',chosen.data)
         self.assertEqual(self.m['item'].query.count(),0)
 
     def test_new_school_subject_auto_syncs_into_exam_settings_once(self):
