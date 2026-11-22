@@ -1,0 +1,70 @@
+name: QR Attendance release
+on:
+  push:
+    branches: [main]
+    paths:
+      - mobile/gate/**
+      - scripts/publish_qr_attendance.py
+      - .github/workflows/qr-attendance-release.yml
+  pull_request:
+    paths:
+      - mobile/gate/**
+      - scripts/publish_qr_attendance.py
+      - .github/workflows/qr-attendance-release.yml
+      - school_apps.py
+      - app_builder_auth.py
+      - identity.py
+      - tests/test_school_apps.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qr-attendance-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with: {gradle-version: '8.9', cache-disabled: true}
+      - name: Build and test production QR Attendance APK
+        working-directory: mobile/gate
+        run: |
+          python3 download_models.py
+          gradle --no-daemon :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: qr-attendance-unsigned
+          path: mobile/gate/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: qr-attendance-unsigned
+          path: apk
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '17'}
+      - name: Sign, verify and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/qr-release-python"
+          "${RUNNER_TEMP}/qr-release-python/bin/pip" install Pillow==13.0.0
+          "${RUNNER_TEMP}/qr-release-python/bin/python" scripts/publish_qr_attendance.py apk/app-release-unsigned.apk

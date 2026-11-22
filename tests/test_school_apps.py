@@ -68,6 +68,35 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(self.prepare(1).status_code,302);self.assertEqual(self.M['build'].query.count(),2)
         response=self.claim();self.assertEqual(response.status_code,200);self.assertEqual(response.json['job']['branding']['name'],'ISF School System')
         self.assertEqual(self.claim().json['job']['id'],response.json['job']['id'])
+
+    def test_qr_release_uses_a_separate_workflow_and_persistent_key(self):
+        manifest='/api/mobile-app/update/qr-attendance'
+        signing='/api/app-builder/qr-attendance/signing'
+        publish='/api/app-builder/qr-attendance/publish'
+        self.assertEqual(self.worker.get(manifest).json,{'available':False})
+        self.assertEqual(self.worker.post(signing).status_code,401)
+        self.assertEqual(self.worker.post(signing,headers=self.headers).status_code,403)
+        qr=self.token(workflow_ref=auth.QR_WORKFLOW)
+        self.assertEqual(self.claim(qr).status_code,403)
+        first=self.worker.post(signing,headers=qr)
+        self.assertEqual(first.status_code,200)
+        credentials=first.json
+        self.assertEqual(self.worker.post(signing,headers=self.token(workflow_ref=auth.QR_WORKFLOW,run_id='56')).json,credentials)
+        key,cert,_=pkcs12.load_key_and_certificates(base64.b64decode(credentials['keystore']),credentials['password'].encode())
+        self.assertEqual(cert.fingerprint(hashes.SHA256()).hex(),credentials['fingerprint'])
+        self.assertEqual(key.key_size,3072)
+        release=dict(package='com.schoolflow.gate',version_code=7,version_name='0.7',
+                     size=120000000,sha256='c'*64,fingerprint=credentials['fingerprint'],source_commit='a'*40)
+        self.assertEqual(self.worker.post(publish,json={**release,'fingerprint':'f'*64},headers=qr).status_code,422)
+        self.assertEqual(self.worker.post(publish,json=release,headers=qr).status_code,200)
+        self.assertEqual(self.worker.post(publish,json=release,headers=qr).status_code,200)
+        self.assertEqual(self.worker.post(publish,json={**release,'version_code':6},headers=qr).status_code,409)
+        public=self.worker.get(manifest)
+        self.assertTrue(public.json['available'])
+        self.assertEqual(public.json['version_code'],7)
+        self.assertNotIn('keystore',public.json)
+        self.assertIn('/qr-attendance-7-55-1/SchoolFlow-QR-Attendance.apk',public.json['url'])
+        self.assertIn(public.json['url'].encode(),self.clients[0].get('/workspace/general/app-links').data)
         self.assertNotIn(b'signing',self.clients[0].get('/workspace/general/school-apps/status').data)
     def test_oidc_rejects_foreign_repo_branch_workflow_expiry_and_missing_auth(self):
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={}).status_code,401)

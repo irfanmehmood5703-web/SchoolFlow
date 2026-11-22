@@ -6,14 +6,15 @@ android {
         applicationId 'com.schoolflow.gate'
         minSdk 26
         targetSdk 35
-        versionCode 6
-        versionName '0.6-test'
+        versionCode 7
+        versionName '0.7'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
     }
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-phase1.onrender.com"'
+        buildConfigField 'boolean', 'CHECK_FOR_UPDATES', 'false'
         resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
     }
     buildTypes {
@@ -29,7 +30,10 @@ android {
             buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-phase1.onrender.com"'
             resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
         }
-        release { minifyEnabled false }
+        release {
+            minifyEnabled false
+            buildConfigField 'boolean', 'CHECK_FOR_UPDATES', 'true'
+        }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
