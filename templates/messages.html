@@ -1,1 +1,37 @@
-{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}{{m.heading(title,'Prepare communication requests for later provider integration.')}}<form method="get" class="form-card filter-grid">{{m.input('campus','Campus',value=request.args.get('campus',''),options=choices('campus'))}}<button>Load campus templates</button></form><form method="post" class="form-card"><div class="field"><label for="sms-template">Saved template</label><select id="sms-template"><option value="">Write a message</option>{% for name,text in sms_templates.items() if text %}<option value="{{text}}">{{name}}</option>{% endfor %}</select></div>{{m.csrf()}}{{m.input('message','Message','textarea','',true)}}{{m.communication()}}<div class="table"><table><thead><tr><th><input type="checkbox" data-select-all></th><th>SID</th><th>Student</th></tr></thead><tbody>{% for s in students %}<tr><td><input type="checkbox" name="student_ids" value="{{s.id}}"></td><td>{{s.id}}</td><td>{{s.name}}</td></tr>{% endfor %}</tbody></table></div><button data-needs-selection>Record communication request</button></form><script src="{{asset_url('school_settings.js')}}" defer></script>{% endblock %}
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}
+{% block content %}
+{{m.heading(title,'Select recipients, choose a template and save a communication request. Actual SMS delivery requires a verified SMS connection.')}}
+<div class="form-card" style="border-left:4px solid #176b52">
+<strong>{{'Fee Intimation — outstanding balances only' if fee_mode else 'SMS Blaster — general school announcements'}}</strong>
+<p class="muted">This page saves requests only. It does not send SMS or claim delivery. Use the SMS Report to review recorded requests.</p>
+<p><a href="{{url_for('ops.messages')}}">SMS Blaster</a> · <a href="{{url_for('ops.fee_intimation')}}">Fee Intimation</a></p>
+</div>
+<form method="get" class="form-card filter-grid">
+{{m.input('campus','Campus',value=request.args.get('campus',''),options=choices('campus'))}}
+<button type="submit">Filter students / Load templates</button>
+</form>
+<form method="post" class="form-card" id="communication-form">
+{{m.csrf()}}
+<input type="hidden" name="campus" value="{{request.args.get('campus','')}}">
+<div class="field"><label for="sms-template">Message template</label>
+<select id="sms-template"><option value="">Choose a template or write your own</option>
+{% for name,text in sms_templates.items() if text %}<option value="{{text}}">{{name}}</option>{% endfor %}
+</select></div>
+{{m.input('message','Message','textarea','',true)}}
+<p class="muted">Available placeholders: {student_name}, {father_name}, {school_name}{% if fee_mode %}, {remaining_fee}, {fee_month}{% endif %}. Personalisation requires saved student information and a connected delivery service.</p>
+{{m.communication()}}
+<h3>{{'Students with unpaid challans' if fee_mode else 'Select students'}}</h3>
+<div class="table"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="Select all students"></th><th>SID</th><th>Student</th><th>Class</th>{% if fee_mode %}<th>Outstanding (Rs.)</th>{% endif %}</tr></thead><tbody>
+{% for s in students %}<tr><td><input type="checkbox" name="student_ids" value="{{s.id}}"></td><td>{{s.id}}</td><td>{{s.name}}</td><td>{{s.class_name}}</td>{% if fee_mode %}<td>{{balances[s.id]|cash}}</td>{% endif %}</tr>
+{% else %}<tr><td colspan="{{5 if fee_mode else 4}}">No matching {{'students with outstanding challans' if fee_mode else 'students'}} found.</td></tr>{% endfor %}
+</tbody></table></div>
+<button type="submit" data-needs-selection>Save communication request (not sent)</button>
+</form>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+ const select=document.getElementById('sms-template'),message=document.querySelector('#communication-form [name="message"]');
+ if(select&&message)select.addEventListener('change',function(){if(this.value)message.value=this.value;});
+});
+</script>
+<script src="{{asset_url('school_settings.js')}}" defer></script>
+{% endblock %}
