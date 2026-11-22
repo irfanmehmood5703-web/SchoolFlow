@@ -280,9 +280,6 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/register/<kind>',methods=['GET','POST'])
     def register(kind):
         if kind not in SCHEMAS: abort(404)
-        if kind=='auto-reminders' and request.method=='POST' and request.form.get('action')=='preview_reminders':
-            # Preview-only request; do not create a workflow or submit SMS.
-            pass
         if kind=='fee-plans':
             if request.method=='POST':raise ValueError('Configure fee schedules in Core Settings → Fee Settings.')
             return redirect(url_for('fee_setup.schedules'))
@@ -433,7 +430,7 @@ def configure_operations(app, db, Student, Employee):
             commit()
             flash('Admission inquiry updated.','success')
             return redirect(url_for('ops.register',kind='queries'))
-        if request.method=='POST':
+        if request.method=='POST' and not (kind=='auto-reminders' and request.form.get('action')=='preview_reminders'):
             action=request.form.get('action','save')
             if action in ('approve','reject','delete'):
                 if kind not in ('increments','advances','leave-approvals','lecture-register'): raise ValueError('This record type does not use approval actions.')
