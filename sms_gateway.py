@@ -87,6 +87,59 @@ def configure_sms_gateway(app,db,Student):
         jobs=Job.query.order_by(Job.created.desc()).limit(100).all()
         auto=next((x for x in Workflow.query.filter_by(kind='sms-auto-config',status='Active').order_by(Workflow.id.desc()).all() if x.data.get('owner_id')==session.get('owner_id')),None)
         return render_template('sms_gateway.html',title='School SIM SMS',auto_config=auto.data if auto else {},devices=Device.query.order_by(Device.id).all(),jobs=jobs,campuses=[(c,c) for c in app.extensions['staff_access_helpers']['campuses']()])
+    @bp.route('/workspace/fee-reminder-send',methods=['POST'])
+    def fee_reminder_send():
+        """Queue only explicitly confirmed, currently outstanding, school-scoped fee SMS."""
+        owner();csrf()
+        token=request.form.get('sms_token','')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{20,100}',token):raise ValueError('Reload the reminders page before sending.')
+        try:ids=list(dict.fromkeys(int(x) for x in request.form.getlist('reminder_student_ids')))
+        except ValueError:raise ValueError('Invalid student selection.')
+        if not ids or len(ids)>100:raise ValueError('Select 1 to 100 students.')
+        template=request.form.get('reminder_message','').strip()
+        if not 1<=len(template)<=1000:raise ValueError('Enter a reminder message up to 1,000 characters.')
+        device=db.get_or_404(Device,request.form.get('device_id',type=int))
+        if not device.active:raise ValueError('Choose an active school SMS device.')
+        Bill=app.extensions['ops_models']['bill']
+        StudentDetail=rm['student']
+        profile_model=app.extensions.get('institute_setup_models',{}).get('profile')
+        profile=db.session.get(profile_model,1) if profile_model else None
+        identity=getattr(g,'school_identity',None) or {}
+        school_name=str((profile.data or {}).get('name') if profile else '' or '').strip() or identity.get('name') or 'School'
+        students=Student.query.filter(Student.id.in_(ids)).all()
+        if len(students)!=len(ids):raise ValueError('A selected student is unavailable.')
+        student_map={x.id:x for x in students}
+        balances={x:0 for x in ids};months={}
+        for bill in Bill.query.filter(Bill.student_id.in_(ids)).all():
+            if bill.remaining>0:
+                balances[bill.student_id]+=bill.remaining
+                if bill.student_id not in months or bill.month<months[bill.student_id]:months[bill.student_id]=bill.month
+        details={x.student_id:(x.data or {}) for x in StudentDetail.query.filter(StudentDetail.student_id.in_(ids)).all()}
+        items=[]
+        for sid in ids:
+            student=student_map[sid]
+            if student.status!='Active' or balances[sid]<=0:raise ValueError('A selected student no longer has outstanding fees.')
+            data=details.get(sid,{})
+            campus=str(data.get('campus') or '').strip()
+            if campus and campus!=device.campus:raise ValueError('Select a school SMS device for '+student.name+' campus.')
+            raw=next((str(data.get(k) or '').strip() for k in ('father_phone','guardian_phone','parent_phone','phone','mobile','contact','father_mobile') if data.get(k)), '')
+            recipient=phone(raw)
+            body=template
+            for key,value in {'student_name':student.name,'father_name':data.get('father_name') or data.get('father') or '', 'remaining_fee':f"{balances[sid]/100:,.2f}".rstrip('0').rstrip('.'),'fee_month':months.get(sid,''),'school_name':school_name}.items():
+                body=body.replace('{'+key+'}',str(value))
+            if not 1<=len(body)<=1000:raise ValueError('Personalized message exceeds 1,000 characters.')
+            items.append((sid,recipient,body))
+        count=0
+        for sid,recipient,body in items:
+            source='fee-reminder:'+token+':'+str(sid)
+            if Job.query.filter_by(source=source).first():continue
+            db.session.add(Job(source=source,device_id=device.id,phone=recipient,text=body,generation=device.generation,detail='Fee reminder student #'+str(sid)))
+            count+=1
+        audit('Queue selected fee reminder SMS',student_ids=ids,device_id=device.id,count=count)
+        db.session.commit()
+        flash(str(count)+' fee reminder SMS queued for the school SMS App. Delivery is not yet confirmed.','success')
+        return redirect(url_for('ops.register',kind='auto-reminders'))
+
     @bp.route('/workspace/admission-query-sms',methods=['POST'])
     def admission_query_sms():
         owner();csrf()
