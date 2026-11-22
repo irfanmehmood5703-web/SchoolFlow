@@ -33,9 +33,9 @@ def configure_reports(app,db,Student,Employee):
     def match(person,kind='student'):
         d=details(person,kind)
         for key in ('campus','class_name','section','academic_session','gender','group_name'):
-            value=request.args.get(key,'')
+            values=[v for v in request.args.getlist(key) if v]
             actual=person.class_name if key=='class_name' and kind=='student' else d.get(key,'')
-            if value and actual!=value:return False
+            if values and actual not in values:return False
         if request.args.get('enrolled')=='1' and person.status!='Active':return False
         if request.args.get('status') and person.status!=request.args['status']:return False
         if request.args.get('person_id') and str(person.id)!=request.args['person_id']:return False
@@ -250,8 +250,8 @@ def configure_reports(app,db,Student,Employee):
         if not passmark.is_finite() or not 0<=passmark<=100:fail('Pass mark must be 0 to 100.')
         teachers={e.id:e for e in Employee.query.all() if 'teacher' in (e.role or '').lower()};groups=defaultdict(lambda:dict(appeared=0,absent=0,leave=0,passed=0,percentages=[],papers=set()))
         for award in Workflow.query.filter_by(kind='awards').all():
-            if request.args.get('class_name') and award.data.get('class_name')!=request.args['class_name']:continue
-            if request.args.get('campus') and award.data.get('campus')!=request.args['campus']:continue
+            if any(request.args.getlist('class_name')) and award.data.get('class_name') not in request.args.getlist('class_name'):continue
+            if any(request.args.getlist('campus')) and award.data.get('campus') not in request.args.getlist('campus'):continue
             for score in Score.query.filter_by(award_id=award.id).all():
                 if score.paper>=len(award.data['papers']):continue
                 paper=award.data['papers'][score.paper];teacher=paper.get('teacher','')
