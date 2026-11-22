@@ -1238,10 +1238,10 @@ def configure_operations(app, db, Student, Employee):
         attendance=Counter(dict(db.session.query(Daily.status,db.func.count(Daily.id)).filter(Daily.kind=='student',Daily.day==today).group_by(Daily.status).all()))
         staff_counts=Counter(dict(db.session.query(Daily.status,db.func.count(Daily.id)).filter(Daily.kind=='staff',Daily.day>=today.replace(day=1),Daily.day<=today).group_by(Daily.status).all()))
         pending,queries=db.session.query(db.func.sum(case((Workflow.status=='Pending',1),else_=0)),db.func.sum(case((Workflow.kind=='queries',1),else_=0))).one()
-        bill_months={};billed=Counter();due=0;unpaid=0;defaulters=set()
+        bill_months={};billed=Counter();remaining_months=Counter();due=0;unpaid=0;defaulters=set()
         for row in db.session.query(Bill.id,Bill.student_id,Bill.month,Bill.lines,Bill.paid,Bill.discount).all():
             total=sum(line['amount'] for line in row.lines);remaining=total-row.paid-row.discount
-            bill_months[row.id]=row.month;billed[row.month]+=total;due+=remaining
+            bill_months[row.id]=row.month;billed[row.month]+=total;remaining_months[row.month]+=remaining;due+=remaining
             if remaining>0:unpaid+=1;defaulters.add(row.student_id)
         collected=this_month=discount=0;by_bill_month=Counter()
         for row in db.session.query(Receipt.bill_id,Receipt.amount,Receipt.discount,Receipt.day).filter(Receipt.voided==False).all():
@@ -1258,7 +1258,7 @@ def configure_operations(app, db, Student, Employee):
         return dict(students=student_count,active=active or 0,employees=employee_count,active_employees=active_employees or 0,
                     present=attendance['Present'],marked=sum(attendance.values()),attendance=attendance,staff_counts=staff_counts,
                     collected=collected,this_month=this_month,due=due,discount=discount,unpaid=unpaid,defaulters=len(defaulters),
-                    pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months)
+                    pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months,remaining_months=dict(remaining_months))
 
     @bp.route('/dashboard')
     def dashboard():
