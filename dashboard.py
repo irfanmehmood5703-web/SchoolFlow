@@ -98,6 +98,22 @@ def configure_dashboard(app, db):
             models=app.extensions['ledger_models']
             J,L=models['journal'],models['line']
             stats['expenses']=sum(debit-credit for snapshot,debit,credit in db.session.query(L.snapshot,L.debit,L.credit).join(J,J.id==L.journal_id).filter(J.day>=today.replace(day=1),J.day<=today).all() if snapshot.get('account_class')=='Expense')
+        if any(item['key']=='months' for item in selected):
+            # Cashflow by actual receipt and ledger posting dates; unlike the fee chart,
+            # these totals are not attributed to the original challan billing month.
+            from collections import defaultdict
+            from datetime import timedelta
+            year=today.year
+            cash_received=defaultdict(int)
+            for day,amount in db.session.query(app.extensions['ops_models']['receipt'].day,app.extensions['ops_models']['receipt'].amount).filter(app.extensions['ops_models']['receipt'].voided==False,app.extensions['ops_models']['receipt'].day>=date(year,1,1),app.extensions['ops_models']['receipt'].day<=today).all():
+                cash_received[day.month]+=amount
+            models=app.extensions['ledger_models']
+            J,L=models['journal'],models['line']
+            cash_expenses=defaultdict(int)
+            for day,snapshot,debit,credit in db.session.query(J.day,L.snapshot,L.debit,L.credit).join(L,L.journal_id==J.id).filter(J.day>=date(year,1,1),J.day<=today).all():
+                if (snapshot or {}).get('account_class')=='Expense':
+                    cash_expenses[day.month]+=debit-credit
+            stats['monthly_cashflow']=[dict(month=date(year,m,1).strftime('%b %Y'),received=cash_received[m],expenses=cash_expenses[m],net=cash_received[m]-cash_expenses[m]) for m in range(1,today.month+1)]
         if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
         return render_template('dashboard.html',title='Dashboard',stats=stats,
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
