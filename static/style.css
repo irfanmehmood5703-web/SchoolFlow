@@ -246,3 +246,13 @@ html,body{max-width:100%}
 .subject-unified-section .subject-auto-grid{grid-template-columns:1fr}
 .subject-unified-header h2{font-size:19px}
 }
+
+
+/* Clear subject status and uncluttered default exam settings view. */
+@media screen{
+.subject-unified-section .subject-tile-top{display:flex!important;flex-wrap:wrap;align-items:center;gap:9px 12px!important;min-height:30px}
+.subject-unified-section .subject-tile-top strong{display:inline-block;min-width:0;line-height:1.45}
+.subject-unified-section .subject-state{display:inline-flex!important;align-items:center;white-space:nowrap;margin-inline-start:8px;line-height:1.35}
+.subject-unified-section .subject-auto-tile{gap:11px}
+.subject-unified-section .subject-auto-tile .button{margin-top:auto}
+}
