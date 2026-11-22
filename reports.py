@@ -50,7 +50,7 @@ def configure_reports(app,db,Student,Employee):
             try:return report_xlsx(headers,rows,view)
             except ValueError as error:fail(str(error))
         return render_template('reports.html',title=TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=school_today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
-    def cash(value):return f'{value/100:,.2f}'
+    def cash(value):return f'{value/100:,.2f}'.rstrip('0').rstrip('.')
 
     @bp.route('/fees/<view>')
     def fees(view):
