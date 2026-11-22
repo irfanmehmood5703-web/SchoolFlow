@@ -193,3 +193,13 @@ html,body{max-width:100%}
 .settings-edit-notice p{display:block;margin:0;color:#355c45;font-size:13px;line-height:1.5}
 .settings-edit-notice a{display:inline-flex;margin-top:3px;padding:6px 10px;background:#fff;border:1px solid #9bc4aa;border-radius:7px}
 }
+
+
+/* Distinct edit heading and help text, regardless of browser desktop-site scaling. */
+@media screen{
+#settings-editor .settings-edit-notice{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:12px!important;padding:18px 20px!important;margin-bottom:22px!important;background:#eef8f1;border:1px solid #a3cbb1;border-left:5px solid #176b4a;border-radius:12px}
+#settings-editor .settings-edit-copy{display:block!important;width:100%;min-width:0}
+#settings-editor .settings-edit-copy strong{display:block!important;margin:0 0 7px!important;font-size:16px!important;line-height:1.45}
+#settings-editor .settings-edit-copy p{display:block!important;margin:0!important;line-height:1.65!important;color:#3e6350;font-size:13px!important}
+#settings-editor .settings-edit-cancel{display:inline-flex!important;align-self:flex-start;align-items:center;justify-content:center;padding:9px 14px!important;background:#fff;border:1px solid #9fc8ae;border-radius:8px;font-size:12px;font-weight:700;color:#155b3e;text-decoration:none}
+}
