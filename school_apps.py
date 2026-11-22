@@ -147,7 +147,7 @@ def configure_school_apps(app,db):
         qr=qr_release()
         for row in rows:
             if row['key'] in ('qr','face') and qr:
-                row.update(platform='apk',url=qr['url'],version=qr['version_name'],size=str(qr['size'])+' bytes',
+                row.update(official_qr=True,platform='apk',url=qr['url'],version=qr['version_name'],size=str(qr['size'])+' bytes',
                            sha256=qr['sha256'],source_commit=qr['source_commit'],
                            notes='Official SchoolFlow QR Attendance APK. Future versions appear in the app. Register this installation using your school’s attendance device settings.')
         school=private_school()
@@ -369,5 +369,5 @@ def configure_school_apps(app,db):
     def fail(bid):
         claims=authenticate_builder();payload();lock();row=leased(bid,claims)
         row.state='failed';row.error=BUILD_FAILED;row.lease_until=0;db.session.commit();return jsonify(saved=True)
-    app.extensions['school_app_helpers']=dict(view_model=view_model,releases=releases,current=current,snapshot=snapshot)
+    app.extensions['school_app_helpers']=dict(view_model=view_model,releases=releases,current=current,snapshot=snapshot,qr_release=qr_release)
     app.register_blueprint(bp)
