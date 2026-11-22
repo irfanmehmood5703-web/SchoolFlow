@@ -193,7 +193,17 @@ def configure_operations(app, db, Student, Employee):
         except ValueError: raise ValueError('Invalid selection.')
     def queue(subject, ids, audience='parent', event=None, context=None):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
-        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context))))
+        snapshots=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context)
+        school_identity=getattr(g,'school_identity',None) or {}
+        profile_model=app.extensions.get('school_profile_model')
+        profile=db.session.get(profile_model,1) if profile_model else None
+        school_name=str(((profile.data or {}).get('name') if profile else '') or school_identity.get('name') or '').strip()
+        if school_name:
+            for item in snapshots:
+                item['text']=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school_name,str(item.get('text') or ''),flags=re.IGNORECASE)
+                if item.get('unresolved'):
+                    item['unresolved']=[tag for tag in item['unresolved'] if str(tag).strip('{} ').lower()!='school_name']
+        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=snapshots)))
     def render(name, **kw):
         return render_template(name, choices=choices, today=school_today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
