@@ -218,3 +218,31 @@ html,body{max-width:100%}
 }
 @media screen and (max-width:800px){.subject-auto-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media screen and (max-width:430px){.subject-auto-grid{grid-template-columns:1fr}}
+
+
+/* Unified school subject catalog: one list instead of duplicate chip/card sections. */
+@media screen{
+.subject-unified-section{border-color:#bad8c5;background:linear-gradient(180deg,#fafffb 0%,#fff 38%);}
+.subject-unified-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:18px}
+.subject-unified-header>div{flex:1 1 320px}
+.subject-unified-header h2{margin:0 0 7px;font-size:20px;color:#184832}
+.subject-unified-header p{max-width:760px;line-height:1.65}
+.subject-unified-header .button{align-self:flex-start}
+.subject-unified-section .subject-auto-grid{margin-top:4px;gap:14px}
+.subject-unified-section .subject-auto-tile{padding:18px;gap:12px;background:#fff;border:1.5px solid #c6dfcf;box-shadow:0 2px 8px rgba(20,75,47,.04)}
+.subject-unified-section .subject-tile-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;width:100%}
+.subject-unified-section .subject-tile-top strong{font-size:16px}
+.subject-unified-section .subject-state{font-size:11px;font-weight:750;color:#176a47;background:#e7f5eb;border:1px solid #bcdcc6;border-radius:99px;padding:5px 9px}
+.subject-unified-section .subject-auto-tile small{font-size:12px;line-height:1.5}
+.subject-unified-section .subject-auto-tile>a.button{margin-top:auto;min-height:38px}
+.subject-advanced-settings{border-color:#d3e4d9}
+.subject-advanced-settings>summary{cursor:pointer;font-weight:750;font-size:14px;color:#175b3c;padding:3px 0}
+.subject-advanced-settings[open]>summary{margin-bottom:13px}
+}
+@media screen and (max-width:800px){
+.subject-unified-section .subject-auto-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media screen and (max-width:430px){
+.subject-unified-section .subject-auto-grid{grid-template-columns:1fr}
+.subject-unified-header h2{font-size:19px}
+}
