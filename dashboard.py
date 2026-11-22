@@ -11,6 +11,7 @@ WIDGETS = [
     ('classes','Admissions','Student Strength by Class',None,'Current active enrolment grouped by class.','/records/student'),
     ('capacity','Admissions','Admission Capacity',None,'Configured seat limits per campus, class and session, across sections. Only Active students occupy seats.','/workspace/admission-capacity'),
     ('collected','Finance','Total Collected','collected','All non-voided receipts, across all receipt dates.','/workspace/history'),
+    ('expenses','Finance','Total Expenses','expenses','Net posted expense ledger entries for the current month.','/workspace/ledger'),
     ('due','Finance','Unpaid Amount','due','Current challan total less payments and discounts; not a historical balance.','/workspace/history?view=defaulters'),
     ('unpaid','Finance','Unpaid Challans','unpaid','Challans with a positive current remaining balance.','/workspace/fees/payments'),
     ('defaulters','Finance','Fee Defaulters','defaulters','Distinct students with at least one outstanding challan.','/workspace/history?view=defaulters'),
@@ -22,7 +23,7 @@ WIDGETS = [
     ('staff','HRM','Staff Attendance · This Month',None,'Saved staff attendance entries from the start of this month through today.','/workspace/reports/attendance/staff-attendance-report'),
 ]
 KEYS = [w[0] for w in WIDGETS]
-MONEY = {'collected','due'}
+MONEY = {'collected','due','expenses'}
 
 
 def default_layout():
@@ -92,6 +93,10 @@ def configure_dashboard(app, db):
         scope = (getattr(g,'school_identity',None) or {}).get('scope','demo')
         scope += ':'+str(session.get('owner_id','demo'))
         stats=app.extensions['operation_helpers']['dashboard']()
+        if any(item['key']=='expenses' for item in selected):
+            models=app.extensions['ledger_models']
+            J,L=models['journal'],models['line']
+            stats['expenses']=sum(debit-credit for snapshot,debit,credit in db.session.query(L.snapshot,L.debit,L.credit).join(J,J.id==L.journal_id).filter(J.day>=today.replace(day=1),J.day<=today).all() if snapshot.get('account_class')=='Expense')
         if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
         return render_template('dashboard.html',title='Dashboard',stats=stats,
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
