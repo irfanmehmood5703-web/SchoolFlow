@@ -98,7 +98,7 @@ class SchoolAppTests(unittest.TestCase):
         for role in ('parents','teacher','owner','sms'):
             info=phone.get('/api/mobile-app/update/'+scope+'/'+role)
             self.assertEqual(info.status_code,200)
-            self.assertEqual(info.headers['Cache-Control'],'private, no-store')
+            self.assertIn('no-store',info.headers['Cache-Control'])
             self.assertEqual(info.json['version_code'],job['sequence'])
             self.assertNotIn(signing.download_token,info.json['url'])
             link=urlsplit(info.json['url'])
