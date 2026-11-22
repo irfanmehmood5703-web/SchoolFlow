@@ -121,7 +121,7 @@ def configure_student_import(app,db,Student):
         if len(rows)>MAX_ROWS or any(len(v)>5000 for r in rows for v in r) or any(len(v)>160 for v in headers):raise ValueError('Too many rows or an overlong cell/header. Correct the sheet before uploading.')
         return headers,rows,positions
     @bp.get('')
-    def index():return render_template('student_import.html',title='Student Excel / CSV import',batches=StudentImportBatch.query.filter_by(owner=owner()).order_by(StudentImportBatch.created.desc()).limit(30).all())
+    def index():return render_template('student_import.html',title='Student Migration Center',batches=StudentImportBatch.query.filter_by(owner=owner()).order_by(StudentImportBatch.created.desc()).limit(30).all())
     @bp.get('/migration-reconciliation')
     def migration_reconciliation():
         """Read-only migration control totals, never create fee/GL transactions."""
