@@ -122,6 +122,35 @@ def configure_student_import(app,db,Student):
         return headers,rows,positions
     @bp.get('')
     def index():return render_template('student_import.html',title='Student Excel / CSV import',batches=StudentImportBatch.query.filter_by(owner=owner()).order_by(StudentImportBatch.created.desc()).limit(30).all())
+    @bp.get('/migration-reconciliation')
+    def migration_reconciliation():
+        """Read-only migration control totals, never create fee/GL transactions."""
+        from decimal import Decimal,InvalidOperation
+        def decimal(value):
+            try:return Decimal(str(value or '0'))
+            except (InvalidOperation,ValueError):return Decimal('0')
+        imported=StudentImportBatch.query.filter_by(owner=owner(),status='Imported').all()
+        historical=HistoricalPaymentBatch.query.filter_by(owner=owner()).all()
+        student_ids=set()
+        for batch in imported:student_ids.update(batch.data.get('student_ids',[]))
+        plans=P.query.filter(P.student_id.in_(student_ids)).all() if student_ids else []
+        arrears_by_student={}
+        for plan in plans:
+            if plan.student_id not in student_ids:continue
+            # Only the initial imported fee plan's arrears should count as migration evidence.
+            if (plan.data or {}).get('notes')!='Imported student fee plan':continue
+            arrears=sum((decimal(line.get('arrears')) for line in (plan.data or {}).get('lines',[])),Decimal('0'))
+            arrears_by_student[plan.student_id]=arrears_by_student.get(plan.student_id,Decimal('0'))+arrears
+        historical_by_student={}
+        for batch in historical:
+            for entry in batch.data.get('receipts',[]):
+                sid=entry.get('student_id')
+                historical_by_student[sid]=historical_by_student.get(sid,Decimal('0'))+decimal(entry.get('amount'))
+        students=Student.query.filter(Student.id.in_(student_ids)).all() if student_ids else []
+        rows=[dict(admission=s.admission_no,name=s.name,arrears=arrears_by_student.get(s.id,Decimal('0')),historical=historical_by_student.get(s.id,Decimal('0'))) for s in students]
+        rows.sort(key=lambda row:row['admission'])
+        return render_template('migration_reconciliation.html',title='Migration Control Totals',rows=rows,total_arrears=sum((row['arrears'] for row in rows),Decimal('0')),total_historical=sum((row['historical'] for row in rows),Decimal('0')))
+
     @bp.get('/historical-payments')
     def historical_payments_history():
         batches=HistoricalPaymentBatch.query.filter_by(owner=owner()).order_by(HistoricalPaymentBatch.created.desc()).limit(50).all()
