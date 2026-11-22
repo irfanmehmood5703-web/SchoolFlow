@@ -28,6 +28,14 @@ def configure_student_import(app,db,Student):
         created=db.Column(db.DateTime,nullable=False,default=lambda:datetime.now(timezone.utc))
         version=db.Column(db.Integer,nullable=False,default=1)
         __mapper_args__={'version_id_col':version}
+    class HistoricalPaymentBatch(db.Model):
+        __tablename__='migration_historical_payment_batch'
+        id=db.Column(db.String(32),primary_key=True)
+        owner=db.Column(db.String(100),nullable=False,index=True)
+        fingerprint=db.Column(db.String(64),nullable=False)
+        data=db.Column(db.JSON,nullable=False)
+        created=db.Column(db.DateTime,nullable=False,default=lambda:datetime.now(timezone.utc))
+    app.extensions['historical_payment_batch_model']=HistoricalPaymentBatch
     app.extensions['student_import_model']=StudentImportBatch
     def today():return datetime.now(ZoneInfo('Asia/Karachi')).date().isoformat()
     def owner():return 'owner:'+str(session['owner_id']) if session.get('owner_id') else 'demo:'+hashlib.sha256(session.get('record_csrf','').encode()).hexdigest()
@@ -145,15 +153,50 @@ def configure_student_import(app,db,Student):
         ws.freeze_panes='A2'
         instructions=wb.create_sheet('Instructions')
         for message in (
-            'Historical payments register — REFERENCE ONLY; this workbook is not accepted by the student import uploader.',
+            'Historical payments register — upload separately as non-posting historical evidence after importing students.',
             'Enter one row per old receipt allocation. If a receipt paid two fee heads, use two rows and keep the same receipt number.',
             'Record only amounts already received by the old school; never post them again as new SchoolFlow collections.',
             'Opening arrears in the Students import must be the outstanding unpaid balance AFTER these historical payments.',
-            'Preserve original receipts for audit and reconciliation. Historical payment import is not yet implemented.',
+            'Preserve original receipts for audit and reconciliation. Historical payments are stored as non-posting evidence; automatic GL reconciliation is not yet implemented.',
             'Dates must be YYYY-MM-DD; fee month must be YYYY-MM. Keep admission and receipt numbers as text.',
         ):instructions.append([message])
         out=io.BytesIO();wb.save(out);out.seek(0)
         return send_file(out,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='schoolflow-historical-payments-register.xlsx')
+    @bp.post('/historical-payments/upload')
+    def upload_historical_payments():
+        """Store validated legacy receipts as non-posting historical evidence."""
+        file=request.files.get('file')
+        if not file or not file.filename:raise ValueError('Choose the historical payments workbook.')
+        headers,rows,positions=read_upload(file)
+        expected=['Admission No','Student Name','Old Receipt No','Payment Date (YYYY-MM-DD)','Fee Month (YYYY-MM)','Fee Head','Amount Received (PKR)','Payment Method','Old System Reference','Notes']
+        if headers!=expected:raise ValueError('Use the original Historical Payments template with unchanged column headings.')
+        from decimal import Decimal,InvalidOperation
+        receipts=[];seen=set()
+        for pos,row in zip(positions,rows):
+            admission,name,receipt,day,month,head,amount,method,reference,notes=row
+            if not admission or not receipt or not head:raise ValueError(f'Row {pos}: admission number, receipt number and fee head are required.')
+            pupil=Student.query.filter_by(admission_no=admission).first()
+            if not pupil:raise ValueError(f'Row {pos}: admission number not found in this school. Import students first.')
+            try:
+                date.fromisoformat(day)
+                if not re.fullmatch(r'\d{4}-\d{2}',month):raise ValueError()
+                date.fromisoformat(month+'-01')
+                value=Decimal(amount)
+                if not value.is_finite() or value<=0 or value.as_tuple().exponent<-2:raise ValueError()
+            except (ValueError,InvalidOperation):raise ValueError(f'Row {pos}: use valid dates and a positive amount with up to two decimals.')
+            key=(admission,receipt,head,month)
+            if key in seen:raise ValueError(f'Row {pos}: duplicate receipt/fee head/month allocation.')
+            seen.add(key)
+            receipts.append(dict(admission_no=admission,student_id=pupil.id,student_name=name or pupil.name,receipt_no=receipt,payment_date=day,fee_month=month,fee_head=head,amount=str(value),method=method,reference=reference,notes=notes))
+        fingerprint=digest(receipts)
+        if HistoricalPaymentBatch.query.filter_by(owner=owner(),fingerprint=fingerprint).first():
+            raise ValueError('This historical payments file has already been saved. Duplicate import blocked.')
+        batch=HistoricalPaymentBatch(id=secrets.token_hex(16),owner=owner(),fingerprint=fingerprint,data=dict(receipts=receipts,non_posting=True))
+        db.session.add(batch)
+        db.session.add(Audit(action='Save historical payment evidence',data=dict(batch=batch.id,rows=len(receipts),owner_id=session.get('owner_id'))))
+        commit()
+        flash(f'{len(receipts)} historical payment allocations saved as reference only. No new cash receipts or ledger postings were created.','success')
+        return redirect(url_for('student_import.index'))
     @bp.post('/upload')
     def upload():
         file=request.files.get('file')
