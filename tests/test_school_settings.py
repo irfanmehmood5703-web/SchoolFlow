@@ -36,6 +36,44 @@ class SchoolSettingsTests(unittest.TestCase):
                 page=self.c.get(f'/workspace/core/{module}/{key}');self.assertEqual(page.status_code,200,key)
                 ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)),key)
         self.assertEqual(self.m['item'].query.count(),0);self.assertEqual(self.m['setting'].query.count(),0)
+    def test_existing_school_catalog_subjects_work_without_get_writes(self):
+        # Older schools already have class/catalog subjects but no exam overrides.
+        db.session.add_all([
+            self.rm['settings'](category='subject',value='English',class_name=''),
+            self.rm['settings'](category='subject',value='Urdu',class_name='Class A'),
+        ])
+        db.session.commit()
+        page=self.c.get('/workspace/core/exam/subjects')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Automatically available school subjects (2)',page.data)
+        self.assertIn(b'English',page.data)
+        self.assertIn(b'Urdu',page.data)
+        helper=app.extensions['school_settings_helpers']
+        self.assertEqual(helper['subject_config']('English')['grading'],'Marks')
+        self.assertEqual(helper['subject_config']('Urdu')['group'],'School subjects')
+        self.assertEqual(self.m['item'].query.count(),0)  # GET must stay read-only
+        self.assertNotIn('auto',helper['subject_config']('Not in catalog'))
+
+    def test_new_school_subject_auto_syncs_into_exam_settings_once(self):
+        data={'_csrf':self.csrf,'category':'subject','value':'Islamiat','class_name':'Class A'}
+        response=self.c.post('/records/options',data=data)
+        self.assertEqual(response.status_code,200,response.data)
+        group=self.m['item'].query.filter_by(kind='subject-group').one()
+        sub=self.m['item'].query.filter_by(kind='subject',name='Islamiat').one()
+        self.assertEqual(sub.data['group'],group.name)
+        self.assertEqual(sub.data['grading'],'Marks')
+        self.assertEqual(sub.data['source'],'school-catalog')
+        self.assertEqual(response.status_code,self.c.post('/records/options',data=data).status_code)
+        self.assertEqual(self.m['item'].query.filter_by(kind='subject',name='Islamiat').count(),1)
+        page=self.c.get('/workspace/core/exam/subjects')
+        self.assertIn(b'Islamiat',page.data)
+
+    def test_record_settings_subject_add_also_auto_syncs(self):
+        response=self.c.post('/records/settings',data={'_csrf':self.csrf,'category':'subject',
+                                                         'value':'Computer Science','class_name':''})
+        self.assertEqual(response.status_code,302,response.data)
+        self.assertEqual(self.m['item'].query.filter_by(kind='subject',name='Computer Science').count(),1)
+
     def test_csrf_stale_version_unknown_action_and_validation_atomic(self):
         path='/workspace/core/exam/display'
         self.assertEqual(self.c.post(path,data={'decimals':'2'}).status_code,400)
