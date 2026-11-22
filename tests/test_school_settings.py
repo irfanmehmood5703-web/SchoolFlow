@@ -3,7 +3,7 @@ import os,re,unittest
 from datetime import date
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Student,Employee
-from school_settings import EXAM_PAGES,HRM_PAGES
+from school_settings import EXAM_PAGES,HRM_PAGES,grade_band_for_percentage
 
 class SchoolSettingsTests(unittest.TestCase):
     def setUp(self):
@@ -180,6 +180,25 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertEqual(self.ops['workflow'].query.filter_by(kind='awards').count(),0)
         form.update(name='Good List',subject=['Math']);self.assertEqual(self.c.post('/workspace/examination/awards',data=form).status_code,302)
         subject=self.item('subject');self.assertEqual(self.post('exam','subjects',id=subject.id,version='1',action='delete').status_code,422)
+    def test_grade_boundaries_handle_fractional_percentages_without_rounding(self):
+        bands=[
+            {'min':'0','max':'39.99','grade':'F','remarks':'Fail'},
+            {'min':'40','max':'49.99','grade':'E','remarks':'Needs Improvement'},
+            {'min':'50','max':'100','grade':'D','remarks':'Pass'},
+        ]
+        for percentage,expected in [
+            ('0','F'),('39.99','F'),('39.995','F'),
+            ('39.999999999','F'),('40','E'),('49.99999','E'),
+            ('50','D'),('100','D'),('-0.01',None),('100.001',None),
+        ]:
+            band=grade_band_for_percentage(bands,percentage)
+            self.assertEqual(band['grade'] if band else None,expected,percentage)
+        separated=[
+            {'min':'0','max':'30','grade':'F','remarks':'Fail'},
+            {'min':'40','max':'100','grade':'A','remarks':'Pass'},
+        ]
+        self.assertIsNone(grade_band_for_percentage(separated,'35'))
+
     def test_grades_use_unrounded_percentage_in_results(self):
         self.assertEqual(self.post('exam','grading',name='School policy',minimum=['0','80'],maximum=['79.999999','100'],grade=['B','A'],remarks=['Good','Excellent']).status_code,302)
         policy=self.item('grading');self.assertEqual(self.post('exam','class-grading',name='Class policy',campus='Campus A',classes=['Class A'],policy=str(policy.id)).status_code,302)
