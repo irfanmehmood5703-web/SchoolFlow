@@ -16,6 +16,7 @@ ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
 UPDATE_TICKET_MAX_AGE=30*60
+BUILD_FAILED='The app build did not finish. The school owner can retry from App Links.'
 
 def configure_school_apps(app,db):
     bp=Blueprint('school_apps',__name__)
@@ -229,9 +230,19 @@ def configure_school_apps(app,db):
         latest=db.session.query(Build.school_key,db.func.max(Build.sequence)).group_by(Build.school_key).all()
         for school_key,sequence in latest:
             previous=Build.query.filter_by(school_key=school_key,sequence=sequence).one()
-            if previous.state!='ready' or previous.spec.get('source_version',1)>=SOURCE_VERSION:continue
+            upgrade=previous.state=='ready' and previous.spec.get('source_version',1)<SOURCE_VERSION
+            recover=(previous.state=='failed' and previous.attempts==1
+                     and previous.error==BUILD_FAILED and previous.spec.get('source_version')==SOURCE_VERSION)
+            if not upgrade and not recover:continue
             school=School.query.filter_by(storage_key=school_key,active=True).first()
             if not school:continue
+            if recover:
+                # A published school can recover its first failed automatic update.
+                # Preserve the same version and signing identity on retry.
+                older=Build.query.filter_by(school_key=school_key,state='ready').order_by(Build.sequence.desc()).first()
+                if older and older.spec.get('source_version',1)<SOURCE_VERSION:
+                    previous.state='queued';previous.error='';previous.worker=''
+                continue
             # Ready jobs discard their temporary logo bytes. Reload the current
             # tenant's canonical profile in an isolated session, never the
             # registry/default DB or a different school's cached Profile(1).
@@ -297,6 +308,6 @@ def configure_school_apps(app,db):
     @bp.post('/api/app-builder/<bid>/fail')
     def fail(bid):
         claims=authenticate_builder();payload();lock();row=leased(bid,claims)
-        row.state='failed';row.error='The app build did not finish. The school owner can retry from App Links.';row.lease_until=0;db.session.commit();return jsonify(saved=True)
+        row.state='failed';row.error=BUILD_FAILED;row.lease_until=0;db.session.commit();return jsonify(saved=True)
     app.extensions['school_app_helpers']=dict(view_model=view_model,releases=releases,current=current,snapshot=snapshot)
     app.register_blueprint(bp)
