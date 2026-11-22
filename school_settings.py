@@ -193,8 +193,42 @@ def configure_school_settings(app,db,Student,Employee):
         links=items('class-subjects',campus)
         link=next((r for r in links if r.name==cls),None)
         return not link or subject in link.data.get('subjects',[])
+    def default_subject_group():
+        """The active institute's default exam group, never a shared global list."""
+        groups=items('subject-group')
+        return next((r.name for r in groups if r.name.casefold()=='core subjects'),
+                    groups[0].name if groups else 'School subjects')
+
     def subject_config(name):
-        return next((r.data for r in items('subject') if r.name==name),{})
+        configured=next((r.data for r in items('subject') if r.name==name),None)
+        if configured is not None:return configured
+        # Read-through defaults: existing school catalog subjects immediately work
+        # in awards, date sheets and grading, even before custom exam settings.
+        if name in options('subject'):
+            return dict(group=default_subject_group(),grading='Marks',diary=False,auto=True)
+        return {}
+
+    def register_catalog_subject(name):
+        """Called inside the authenticated catalog POST transaction, never on GET.
+
+        No universal/preset subject list. The subject belongs to the active
+        school's database, selected by InstituteSession.
+        """
+        name=str(name or '').strip()
+        if not name or len(name)>160:raise ValueError('Choose a school subject name.')
+        if any(r.name.casefold()==name.casefold() for r in items('subject')):
+            return False
+        groups=items('subject-group')
+        if not groups:
+            db.session.add(SchoolSettingItem(kind='subject-group',scope='',name='School subjects',
+                            data={'order':1}))
+        current=items('subject')
+        highest=max((int(r.data.get('order',0)) for r in current),default=0)
+        db.session.add(SchoolSettingItem(kind='subject',scope='',name=name,
+                data=dict(group=default_subject_group(),grading='Marks',
+                          diary=False,order=highest+1,source='school-catalog')))
+        audit('Auto configure school subject',subject=name)
+        return True
     def direct_choices(campus,cls):
         policy=assigned_policy(campus,cls)
         return {b['grade']:b.get('remarks','') for b in policy.data.get('bands',[]) if b.get('direct')} if policy else {}
@@ -429,6 +463,20 @@ def configure_school_settings(app,db,Student,Employee):
             meta={r.name:r for r in items(CATALOG_PAGES[page])}
             edit=request.args.get('catalog_edit','');catalog_edit=next((r for r in rows if str(r.id)==edit),None)
         else:rows=items(kind);meta={};catalog_edit=None
+        # Unsaved legacy catalog subjects stay active via read-through defaults.
+        # Merely opening this page must never mutate school data.
+        auto_subjects=[]
+        prefill_subject=''
+        if module=='exam' and page=='subjects':
+            customised={r.name.casefold() for r in items('subject')}
+            seen=set()
+            for subject in options('subject'):
+                folded=subject.casefold()
+                if folded not in customised and folded not in seen:
+                    auto_subjects.append(subject)
+                    seen.add(folded)
+            candidate=request.args.get('prefill_subject','')
+            if candidate in options('subject'):prefill_subject=candidate
         list_page=page in CATALOG_PAGES or page in kinds
         search=request.args.get('q','').strip()
         campus_filter=request.args.get('campus_filter','')
@@ -466,7 +514,7 @@ def configure_school_settings(app,db,Student,Employee):
             output=io.BytesIO();book.save(output)
             response=app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response.headers['Content-Disposition']='attachment; filename="schoolflow-'+module+'-'+page+'.xlsx"'
             response.headers['Cache-Control']='private, no-store';return response
-        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter)
+        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject)
 
     @bp.route('/hrm/assign-shifts',methods=['GET','POST'])
     def assign_shifts():
@@ -699,5 +747,5 @@ def configure_school_settings(app,db,Student,Employee):
         values=tag_values['employee'](person,details) if person else {};values.update(salary_month=month,date=month)
         return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',branding_values=values,details=details,employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
 
-    app.extensions['school_settings_helpers']=dict(result_rows=result_rows,config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
+    app.extensions['school_settings_helpers']=dict(result_rows=result_rows,config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,register_catalog_subject=register_catalog_subject,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
     app.register_blueprint(bp)
