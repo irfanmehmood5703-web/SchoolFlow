@@ -127,6 +127,15 @@ def configure_student_import(app,db,Student):
         batches=HistoricalPaymentBatch.query.filter_by(owner=owner()).order_by(HistoricalPaymentBatch.created.desc()).limit(50).all()
         return render_template('migration_payment_history.html',title='Historical Payment Migration History',batches=batches)
 
+    @bp.get('/historical-payments/<batch_id>')
+    def historical_payments_detail(batch_id):
+        batch=db.get_or_404(HistoricalPaymentBatch,batch_id)
+        if batch.owner!=owner():abort(404)
+        from decimal import Decimal
+        entries=batch.data.get('receipts',[])
+        total=sum((Decimal(str(entry['amount'])) for entry in entries),Decimal('0'))
+        return render_template('migration_payment_detail.html',title='Historical Payment Batch',batch=batch,entries=entries,total=total)
+
     @bp.get('/template.xlsx')
     def template():
         wb=Workbook();sheet=wb.active;sheet.title='Students';fields=columns();sheet.append(list(fields.values()));sheet.freeze_panes='A2'
