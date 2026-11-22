@@ -1,5 +1,6 @@
 """School-branded APK orchestration: real tenant login, signed OIDC and isolation."""
 import os,tempfile,time,unittest,base64,io,zipfile,hashlib,secrets
+from urllib.parse import urlsplit
 from types import SimpleNamespace
 from unittest.mock import patch
 os.environ['DATABASE_URL']='sqlite:///:memory:'
@@ -89,6 +90,31 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(anonymous.get(public).headers['Cache-Control'],'private, no-store')
         model=app.extensions['identity_models']['institute'];school=db.session.get(model,self.schools[0][0]);school.active=False;db.session.commit()
         self.assertEqual(anonymous.get(public).status_code,404)
+    def test_installed_apps_check_and_download_updates_without_a_web_session(self):
+        self.prepare();job=self.claim().json['job'];self.complete(job)
+        scope=self.schools[0][1]
+        signing=db.session.get(self.M['signing'],scope)
+        phone=app.test_client()
+        for role in ('parents','teacher','owner','sms'):
+            info=phone.get('/api/mobile-app/update/'+scope+'/'+role)
+            self.assertEqual(info.status_code,200)
+            self.assertEqual(info.headers['Cache-Control'],'private, no-store')
+            self.assertEqual(info.json['version_code'],job['sequence'])
+            self.assertNotIn(signing.download_token,info.json['url'])
+            link=urlsplit(info.json['url'])
+            self.assertEqual(link.netloc,'schoolflow-phase1.onrender.com')
+            self.assertTrue(link.path.startswith('/apps/school/update/'))
+            binary=phone.get(link.path)
+            self.assertEqual(binary.status_code,200)
+            self.assertEqual(hashlib.sha256(binary.data).hexdigest(),info.json['sha256'])
+            wrong_role='sms' if role!='sms' else 'owner'
+            self.assertEqual(phone.get(link.path.rsplit('/',1)[0]+'/'+wrong_role+'.apk').status_code,404)
+            now=time.time()
+            with patch('itsdangerous.timed.time.time',return_value=now+3600):
+                self.assertEqual(phone.get(link.path).status_code,404)
+        self.assertFalse(phone.get('/api/mobile-app/update/'+self.schools[1][1]+'/sms').json['available'])
+        self.assertEqual(phone.get('/workspace/dashboard').status_code,302)
+
     def test_rename_and_rename_back_use_increasing_versions_and_stable_signing(self):
         self.prepare();one=self.claim().json['job'];self.complete(one);stored=db.session.get(self.M['signing'],self.schools[0][1]).fingerprint
         self.assertEqual(self.prepare(name='ISF Academy',version='1').status_code,302)
