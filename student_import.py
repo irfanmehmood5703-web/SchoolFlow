@@ -118,6 +118,17 @@ def configure_student_import(app,db,Student):
     def template():
         wb=Workbook();sheet=wb.active;sheet.title='Students';fields=columns();sheet.append(list(fields.values()));sheet.freeze_panes='A2'
         guide=wb.create_sheet('Instructions');guide.append(['SchoolFlow student import: enter plain configured names, not IDs.']);guide.append(['Dates: YYYY-MM-DD. Gender: M/F/Other. Blank fees use the scoped schedule.']);guide.append(['Use text cells for phones/CNICs to preserve leading zeros; separate subjects with |.']);guide.append(['Required fields match Add Student. No photos, formulas or external messages are imported.']);guide.append(['Blank effective month/admission date use the upload date. Blank increments/discounts/arrears use zero.'])
+        guide.append(['MIGRATION: Enter outstanding balances as Opening arrears for each fee head; do not enter a paid amount as arrears.'])
+        guide.append(['Opening arrears = unpaid amount as of the cutover date, after subtracting any payments already received by the old school.'])
+        guide.append(['Example: tuition billed 3500, paid 1500, unpaid 2000: Opening arrears — Tuition = 2000.'])
+        guide.append(['Do NOT import historical receipts as new cash receipts. Historical payment reconciliation is not supported by this student sheet.'])
+        guide.append(['Keep old-system receipt IDs, paid dates and amounts in a separate historical payments register for later reconciliation.'])
+        guide.append(['Do not include student records from other schools. Preview, resolve errors and approve before committing import.'])
+        sample=wb.create_sheet('Migration Example')
+        sample.append(['Student Name','Campus','Class','Cutover date','Old billed amount','Old paid amount','Unpaid opening balance','Old receipt reference'])
+        sample.append(['Example Student','Example Campus','One','2027-01-01',3500,1500,2000,'OLD-0001'])
+        sample.append(['EXAMPLE ONLY — do not upload this tab. Copy only the unpaid balance into the matching Opening arrears fee-head column in Students.'])
+        sample.freeze_panes='A2'
         for category in ('campus','class_name','section','group_name','academic_session','fee_plan'):
             guide.append([category]+[x[0] for x in app.extensions['record_helpers']['choices']().get(category,[])])
         for ws in wb.worksheets:
