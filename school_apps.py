@@ -9,11 +9,13 @@ from cryptography.hazmat.primitives import hashes
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder
+from itsdangerous import BadData, URLSafeTimedSerializer
 
 SOURCE_VERSION=11
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
+UPDATE_TICKET_MAX_AGE=30*60
 
 def configure_school_apps(app,db):
     bp=Blueprint('school_apps',__name__)
@@ -165,6 +167,28 @@ def configure_school_apps(app,db):
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
         response=send_file(io.BytesIO(file.content),mimetype='application/vnd.android.package-archive',as_attachment=True,download_name='School-'+school.code+'-'+role+'.apk')
         response.headers['Cache-Control']='private, no-store';response.headers['X-APK-SHA256']=file.sha256;return response
+    def update_ticket():
+        return URLSafeTimedSerializer(app.config['SECRET_KEY'],salt='schoolflow-apk-update-v1')
+
+    @bp.get('/apps/school/update/<ticket>/<role>.apk')
+    def mobile_update_download(ticket,role):
+        if role not in ROLES or len(ticket)>512:abort(404)
+        try:
+            scope,expected_role,sequence=update_ticket().loads(ticket,max_age=UPDATE_TICKET_MAX_AGE)
+        except (BadData,TypeError,ValueError):
+            abort(404)
+        if role!=expected_role:abort(404)
+        school=School.query.filter_by(storage_key=scope,active=True).first_or_404()
+        g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
+        _,build,_=current(school)
+        if not build or build.state!='ready' or build.sequence!=sequence:abort(404)
+        file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
+        response=send_file(io.BytesIO(file.content),mimetype='application/vnd.android.package-archive',
+                           as_attachment=True,download_name='School-'+school.code+'-'+role+'.apk')
+        response.headers['Cache-Control']='private, no-store'
+        response.headers['X-APK-SHA256']=file.sha256
+        return response
+
     @bp.get('/api/mobile-app/update/<scope>/<role>')
     def mobile_update(scope,role):
         # An installed school-specific client checks for a newer signed APK.
@@ -172,13 +196,19 @@ def configure_school_apps(app,db):
         school=School.query.filter_by(storage_key=scope,active=True).first_or_404()
         g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
         spec,build,_=current(school)
-        if not build or build.state!='ready':return jsonify(available=False)
+        if not build or build.state!='ready':
+            return jsonify(available=False),200,{'Cache-Control':'private, no-store'}
         file=Artifact.query.filter_by(build_id=build.id,role=role).first()
         key=Signing.query.filter_by(school_key=scope).first()
-        if not file or not key or not key.fingerprint:return jsonify(available=False)
-        return jsonify(available=True,version_code=build.sequence,version_name="0.3-school-test."+str(build.sequence),
-                       whats_new="SchoolFlow app improvements and fixes.",minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),sha256=file.sha256,
-                       url=url_for('school_apps.public_download',token=key.download_token,role=role,_external=True))
+        if not file or not key or not key.fingerprint:
+            return jsonify(available=False),200,{'Cache-Control':'private, no-store'}
+        ticket=update_ticket().dumps([scope,role,build.sequence])
+        link='https://schoolflow-phase1.onrender.com'+url_for('school_apps.mobile_update_download',ticket=ticket,role=role)
+        response=jsonify(available=True,version_code=build.sequence,version_name="0.3-school-test."+str(build.sequence),
+                         whats_new="SchoolFlow app improvements and fixes.",minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),
+                         sha256=file.sha256,url=link)
+        response.headers['Cache-Control']='private, no-store'
+        return response
     def payload():
         if len(request.get_data(cache=True))>12*1024*1024:abort(413)
         data=request.get_json(silent=True)
