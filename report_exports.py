@@ -27,7 +27,7 @@ def report_xlsx(headers,rows,name,filters=None):
         for i,value in enumerate(row):
             if headers[i] in CURRENCY and isinstance(value,str) and re.fullmatch(r'-?\d[\d,]*\.\d{2}',value):value=float(Decimal(value.replace(',','')))
             c=cell(sheet,value)
-            if headers[i] in CURRENCY and isinstance(value,(int,float)):c.number_format='#,##0.00'
+            if headers[i] in CURRENCY and isinstance(value,(int,float)):c.number_format='#,##0.##'
             values.append(c)
         sheet.append(values)
     sheet.auto_filter.ref=f'A1:{get_column_letter(len(headers))}{len(rows)+1}'
