@@ -37,7 +37,7 @@ final class AppUpdates {
     activity.runOnUiThread(()->{
      AlertDialog.Builder dialog=new AlertDialog.Builder(activity)
       .setTitle(required?"Update required":"Update available")
-      .setMessage("Installed: "+installedLabel+" ("+installed+")\\nLatest: "+latestLabel+" ("+info.optInt("version_code")+")\\n\\nWhat's new\\n"+changes)
+      .setMessage("Installed: "+installedLabel+" ("+installed+")\nLatest: "+latestLabel+" ("+info.optInt("version_code")+")\n\nWhat's new\n"+changes)
       .setPositiveButton("UPDATE",(d,w)->activity.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(link))));
      if(required){dialog.setNegativeButton("EXIT",(d,w)->activity.finishAffinity()).setCancelable(false);}
      else dialog.setNegativeButton("LATER",null);
