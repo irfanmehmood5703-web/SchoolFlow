@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}
+{{m.heading(title,'Historical receipts retained for audit only; these are not new cash collections.')}}
+<nav class="tab-strip"><a href="{{url_for('student_import.index')}}">Back to School Migration</a><a href="{{url_for('records.record_list',kind='student')}}">Manage Students</a></nav>
+<section class="form-card"><h2>Saved Historical Payment Batches</h2><p>Original payment dates and amounts are preserved as migration evidence. No fee receipt or general ledger posting is created by this register. Compare old receipts and opening dues before reconciliation.</p>
+<table><thead><tr><th>Imported on</th><th>Batch ID</th><th>Allocations</th><th>Record type</th><th>Posting</th></tr></thead><tbody>
+{% for batch in batches %}<tr><td>{{batch.created}}</td><td><code>{{batch.id[:12]}}</code></td><td>{{batch.data.get('receipts',[])|length}}</td><td>Historical payment allocations</td><td>Reference only</td></tr>{% else %}<tr><td colspan="5">No historical payment batches saved for this school.</td></tr>{% endfor %}
+</tbody></table></section>{% endblock %}
