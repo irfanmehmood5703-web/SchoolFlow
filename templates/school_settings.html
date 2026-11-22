@@ -34,7 +34,7 @@
 {% if page=='subjects' %}
 <section class="form-card subject-unified-section" aria-label="School subject catalog">
   <div class="subject-unified-header">
-    <div><h2>School Subjects</h2><p class="muted">All {{options('subject')|length}} subjects come from this school's own catalog. Subjects with no custom setup work automatically with Marks grading; you only need to customise exceptions.</p></div>
+    <div><h2>School Subjects</h2><p class="muted">{{options('subject')|length}} school subjects · {{items('subject')|length}} configured · {{auto_subjects|length}} automatic. Each school has its own subject list; automatic subjects use Marks grading until you customise them.</p></div>
     <a class="button secondary" href="{{url_for('records.settings',category='subject')}}">Manage school subjects</a>
   </div>
   <div class="subject-auto-grid">
@@ -42,7 +42,10 @@
     {% set configured=items('subject')|selectattr('name','equalto',subject)|list %}
     {% set definition=configured[0] if configured else none %}
     <div class="subject-auto-tile">
-      <div class="subject-tile-top"><strong>{{subject}}</strong> <span class="subject-state" style="display:inline-flex;margin-inline-start:8px;align-items:center;white-space:nowrap">{{'Customised' if definition and definition.data.get('source')!='school-catalog' else 'Automatic'}}</span></div>
+      <div class="subject-tile-top">
+        <strong>{{subject}}</strong>
+        <span class="subject-state {{'is-configured' if definition else 'is-automatic'}}" title="{{'Exam settings saved for this subject' if definition else 'Uses default exam settings; no individual settings saved'}}">{{'Configured' if definition else 'Automatic'}}</span>
+      </div>
       <small>{{definition.data.get('grading','Marks') if definition else 'Marks'}} grading · {{definition.data.get('group',subject_default_group) if definition else subject_default_group}}</small>
       <a class="button secondary" href="{{url_for('school_settings.index',module=module,page=page,edit=definition.id) if definition else url_for('school_settings.index',module=module,page=page,prefill_subject=subject)}}#settings-editor">{{'Edit settings' if definition else 'Customise settings'}}</a>
     </div>
