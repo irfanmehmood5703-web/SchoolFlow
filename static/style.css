@@ -270,3 +270,14 @@ html,body{max-width:100%}
 @media screen and (max-width:430px){
 .subject-unified-section .subject-auto-tile{min-height:0}
 }
+
+/* Mobile-friendly class selection for exam grading policies. */
+.settings-class-choice{grid-column:1/-1;min-width:0;margin:0;border:1px solid #d4dfd9;border-radius:12px;padding:14px 16px 16px;background:#fff}
+.settings-class-choice legend{font-size:13px;font-weight:700;padding:0 8px;color:var(--ink)}
+.settings-class-choice>.muted{margin:0 0 12px}
+.settings-class-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.settings-class-choice-label{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #d4dfd9;border-radius:10px;background:#fff;cursor:pointer;min-height:44px;font-size:13px}
+.settings-class-choice-label:has(input:checked){background:#edf6f0;border-color:var(--green)}
+.settings-class-choice-label input{width:18px;height:18px;min-height:18px;margin:0;flex-shrink:0}
+.settings-class-choice-label span{color:var(--ink);font-weight:500}
+@media(max-width:440px){.settings-class-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-class-choice{padding:12px}}
