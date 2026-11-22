@@ -81,8 +81,21 @@ def build(branding,logo,keyfile,password):
         args=['gradle','--no-daemon','--console=plain','-PschoolBrandingFile='+str(manifest),'-PschoolSigningFile='+str(keyfile)]
         for role in ROLES:
             cap=role.capitalize();args.extend([':app:test'+cap+'DebugUnitTest',':app:lint'+cap+'Debug',':app:assemble'+cap+'Debug'])
-        # Gradle's normal output contains task names, not private build inputs.
-        subprocess.run(args,cwd=CLIENTS,env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password},check=True)
+        # Dependency servers occasionally throttle GitHub runners. Keep the same
+        # claimed build and signing key while Gradle retries the download.
+        for attempt in range(3):
+            rate_limited=False
+            with subprocess.Popen(args,cwd=CLIENTS,env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password},
+                                  stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace') as process:
+                for line in process.stdout:
+                    print(line,end='',flush=True)
+                    rate_limited |= 'Received status code 429' in line
+                status=process.wait()
+            if status==0:return
+            if not rate_limited or attempt==2:raise subprocess.CalledProcessError(status,args)
+            delay=20*(attempt+1)
+            print(f'Dependency server is rate limiting Gradle. Retrying in {delay} seconds.',flush=True)
+            time.sleep(delay)
 
 def run(base,fixture_token=None):
     claimed=api(base,'claim',{'source_version':11},token=fixture_token);job=claimed.get('job')

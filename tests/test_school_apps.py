@@ -182,6 +182,19 @@ class SchoolAppTests(unittest.TestCase):
             self.assertEqual(base64.b64decode(job['logo']),logos[index]);self.assertEqual(job['branding']['logo_sha256'],hashlib.sha256(logos[index]).hexdigest());self.assertEqual(job['sequence'],2);self.complete(job)
         self.assertEqual(seen,{school[1] for school in self.schools})
 
+    def test_failed_central_update_retries_once_with_the_same_build_and_key(self):
+        self.prepare();original=self.claim().json['job'];self.complete(original)
+        old=self.M['build'].query.one();old.spec={**old.spec,'source_version':10};db.session.commit()
+        update=self.claim().json['job']
+        self.assertEqual(update['sequence'],original['sequence']+1)
+        fail='/api/app-builder/'+update['id']+'/fail'
+        self.assertEqual(self.worker.post(fail,json={},headers=self.headers).status_code,200)
+        retry=self.claim().json['job']
+        self.assertEqual(retry['id'],update['id'])
+        self.assertEqual(retry['signing'],update['signing'])
+        self.assertEqual(self.worker.post(fail,json={},headers=self.headers).status_code,200)
+        self.assertIsNone(self.claim().json['job'])
+
     def test_signin_branding_and_logo_are_bound_to_installed_school(self):
         from PIL import Image
         logos=[]
