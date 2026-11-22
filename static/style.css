@@ -256,3 +256,17 @@ html,body{max-width:100%}
 .subject-unified-section .subject-auto-tile{gap:11px}
 .subject-unified-section .subject-auto-tile .button{margin-top:auto}
 }
+
+
+/* Clear persisted-vs-default exam subject status; restrained desktop-first layout. */
+@media screen{
+.subject-unified-section .subject-state{display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;margin-inline-start:0;line-height:1.4}
+.subject-unified-section .subject-state.is-configured{color:#115539;background:#dcefe3;border-color:#98c9a8}
+.subject-unified-section .subject-state.is-automatic{color:#566d5f;background:#f3f7f4;border-color:#d5e3d9}
+.subject-unified-section .subject-tile-top{gap:10px 12px!important}
+.subject-unified-section .subject-auto-tile{min-height:148px}
+.subject-unified-section .subject-auto-tile>a.button{min-height:40px}
+}
+@media screen and (max-width:430px){
+.subject-unified-section .subject-auto-tile{min-height:0}
+}
