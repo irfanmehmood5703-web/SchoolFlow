@@ -203,3 +203,18 @@ html,body{max-width:100%}
 #settings-editor .settings-edit-copy p{display:block!important;margin:0!important;line-height:1.65!important;color:#3e6350;font-size:13px!important}
 #settings-editor .settings-edit-cancel{display:inline-flex!important;align-self:flex-start;align-items:center;justify-content:center;padding:9px 14px!important;background:#fff;border:1px solid #9fc8ae;border-radius:8px;font-size:12px;font-weight:700;color:#155b3e;text-decoration:none}
 }
+
+
+/* One school's automatic exam subject catalog, without duplicating academic records. */
+@media screen{
+.subject-catalog-card{border-color:#b9d5c5;background:#f9fcfa}
+.subject-catalog-chips{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 18px}
+.subject-catalog-chips span{display:inline-flex;padding:8px 12px;background:#eaf6ee;border:1px solid #b1d2bb;border-radius:9px;font-weight:650;color:#205b3e}
+.subject-auto-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:17px}
+.subject-auto-tile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:16px;border:1px solid #c5dccd;border-radius:12px;background:#fcfefd;min-width:0}
+.subject-auto-tile strong{font-size:15px;color:#174b35;overflow-wrap:anywhere}
+.subject-auto-tile small{color:#597366}
+.subject-auto-tile .button{white-space:normal;text-align:center;min-height:36px}
+}
+@media screen and (max-width:800px){.subject-auto-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media screen and (max-width:430px){.subject-auto-grid{grid-template-columns:1fr}}
