@@ -136,7 +136,7 @@ def configure_operations(app, db, Student, Employee):
     app.extensions['ops_models'] = dict(workflow=Workflow,bill=Bill,receipt=Receipt,daily=Daily,score=Score,qualitative=QualitativeScore,salary=Salary,audit=Audit)
     app.extensions['exam_marks_save_model']=ExamMarksSave
     app.extensions['salary_increment_request_model']=SalaryIncrementRequest
-    app.jinja_env.filters['cash'] = lambda x: f'{(x or 0)/100:,.2f}'
+    app.jinja_env.filters['cash'] = lambda x: f'{(x or 0)/100:,.2f}'.rstrip('0').rstrip('.')
     app.jinja_env.globals.update(zip=zip)
 
     def audit(action, **data): db.session.add(Audit(action=action, data=data))
