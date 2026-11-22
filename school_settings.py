@@ -71,7 +71,12 @@ def configure_school_settings(app,db,Student,Employee):
     def options(category):
         values=sorted({r.value for r in rm['settings'].query.filter_by(category=category).all()})
         if category=='subject':
-            order={r.name:i for i,r in enumerate(items('subject'))}
+            # Merge the shared subject catalog with Exam Settings subject definitions.
+            # Older schools may have catalog-only subjects; newly configured subjects
+            # must also be available to class mapping and date-sheet selectors.
+            configured=items('subject')
+            values=sorted(set(values)|{r.name for r in configured})
+            order={r.name:i for i,r in enumerate(configured)}
             values.sort(key=lambda v:(order.get(v,1000000),v))
         return values
     def value(key,required=False,limit=160):
