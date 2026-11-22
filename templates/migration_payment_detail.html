@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}
+{{m.heading(title,'Read-only imported receipts; not new cash collection or ledger postings.')}}
+<nav class="tab-strip"><a href="{{url_for('student_import.historical_payments_history')}}">All historical batches</a><a href="{{url_for('student_import.index')}}">School Migration</a></nav>
+<section class="form-card"><h2>Batch {{batch.id[:12]}}</h2><p>Imported: {{batch.created}} · {{entries|length}} allocations · Historical total: <strong>PKR {{total}}</strong></p><p>Reconcile this historical total against the old school's receipt report. Opening dues must be outstanding after these payments, not the sum of these receipts.</p>
+<div style="overflow-x:auto"><table><thead><tr><th>Admission No</th><th>Student</th><th>Old receipt</th><th>Date</th><th>Fee month</th><th>Fee head</th><th>Received PKR</th><th>Method</th><th>Reference</th></tr></thead><tbody>
+{% for e in entries %}<tr><td>{{e.admission_no}}</td><td>{{e.student_name}}</td><td>{{e.receipt_no}}</td><td>{{e.payment_date}}</td><td>{{e.fee_month}}</td><td>{{e.fee_head}}</td><td>{{e.amount}}</td><td>{{e.method}}</td><td>{{e.reference}}</td></tr>{% else %}<tr><td colspan="9">No allocations.</td></tr>{% endfor %}
+</tbody></table></div></section>{% endblock %}
