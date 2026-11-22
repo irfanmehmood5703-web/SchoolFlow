@@ -173,3 +173,14 @@ html,body{max-width:100%}
 }
 @media screen and (max-width:800px){.settings-page-links{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.settings-page-links>a.button{min-height:54px;padding:12px}}
 @media screen and (max-width:380px){.settings-page-links{grid-template-columns:1fr}}
+
+
+/* Settings edit affordance: jump to the existing prefilled form. */
+@media screen{
+#settings-editor{scroll-margin-top:20px}
+.settings-edit-notice{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 16px;margin-bottom:20px;background:#e9f6ed;border:1.5px solid #8abca0;border-left:5px solid #176b4a;border-radius:10px;color:#16452f}
+.settings-edit-notice strong{font-size:15px}
+.settings-edit-notice span{flex:1 1 220px}
+.settings-edit-notice a{font-weight:700;text-decoration:underline}
+.settings-edit-link{min-height:35px;padding:7px 13px!important;margin:2px 5px}
+}
