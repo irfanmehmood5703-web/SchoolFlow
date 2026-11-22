@@ -62,8 +62,8 @@ def configure_dashboard(app, db):
         order = request.form.getlist('order')
         if len(selected)!=len(set(selected)) or any(k not in KEYS for k in selected):
             raise ValueError('Choose valid dashboard widgets.')
-        if len(order)!=len(KEYS) or set(order)!=set(KEYS):
-            raise ValueError('Widget order is incomplete or invalid. Reload the dashboard.')
+        if len(order)!=len(set(order)) or any(k not in KEYS for k in order) or any(k not in order for k in selected):
+            raise ValueError('Widget order is invalid. Reload the dashboard.')
         if request.form.get('mode') not in ('simple','widgets') or request.form.get('columns') not in ('1','2','3'):
             raise ValueError('Choose a valid dashboard mode and column count.')
         return dict(widgets=[k for k in order if k in selected],mode=request.form['mode'],columns=int(request.form['columns']),
