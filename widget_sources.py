@@ -9,7 +9,7 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
     out={}
     def add(key,value,unit,headers,rows,note,chart=None):
         if key in keys:out[key]=dict(value=value,unit=unit,headers=headers,rows=rows,note=note,chart=chart or [],chart_max=max([abs(float(v)) for _,v in (chart or [])]+[1]))
-    def money(n):return f'{n/100:,.2f}'
+    def money(n):return f'{n/100:,.2f}'.rstrip('0').rstrip('.')
     def parsed(raw):
         try:return date.fromisoformat(str(raw)[:10])
         except (ValueError,TypeError):return None
