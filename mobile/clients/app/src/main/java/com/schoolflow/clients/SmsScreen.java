@@ -5,7 +5,10 @@ import android.content.*;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.content.res.ColorStateList;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.*;
 import android.telephony.*;
 import android.view.*;
@@ -22,27 +25,220 @@ final class SmsScreen {
  private final Activity a;private final Vault vault;private final ExecutorService io=Executors.newSingleThreadExecutor();
  private final Handler handler=new Handler(Looper.getMainLooper());private final SmsRun run=new SmsRun();
  private JSONObject config=new JSONObject(),job;private TextView status,preview,connection,counts,timer;private EditText code,id,key;private Spinner sims,interval;
- private LinearLayout settings;private Button connect,start,pause,review,send,report;private boolean busy,awaiting,destroyed,active=true,storageFailed,stopping;
+ private LinearLayout settings,runMetrics;
+ private TextView connectionBadge,runBadge;
+ private final TextView[] metrics=new TextView[4];
+ private ProgressBar activityIndicator;
+ private Button connect,start,pause,review,send,report,resolveButton,refreshButton,settingsButton;private boolean busy,awaiting,destroyed,active=true,storageFailed,stopping;
  private BroadcastReceiver receiver;private int selectedSim=-1;private final ArrayList<Integer> subscriptionIds=new ArrayList<>();
- private final int green=Color.rgb(20,92,70),muted=Color.rgb(98,117,108);private Runnable timeout;
+ private final int green=Color.rgb(20,92,70),ink=Color.rgb(26,48,40),muted=Color.rgb(74,97,86);
+ private final int mint=Color.rgb(233,245,238),border=Color.rgb(209,226,216);
+ private boolean connectionVerified;
+ private Runnable timeout;
  SmsScreen(Activity activity){a=activity;vault=new Vault(a);}
  private int dp(int n){return Math.round(n*a.getResources().getDisplayMetrics().density);}
- private GradientDrawable box(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
- private TextView text(LinearLayout root,String value,int size,boolean bold){TextView t=new TextView(a);t.setText(value);t.setTextSize(size);t.setTextColor(bold?green:muted);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);t.setPadding(0,dp(5),0,dp(5));root.addView(t);return t;}
- private LinearLayout card(LinearLayout root){LinearLayout c=new LinearLayout(a);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(18),dp(12),dp(18),dp(16));c.setBackground(box(Color.WHITE,18));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,0,0,dp(14));root.addView(c,p);return c;}
- private EditText field(LinearLayout root,String label,boolean secret){text(root,label,13,true);EditText v=new EditText(a);v.setSingleLine(true);v.setTextSize(15);v.setPadding(dp(10),dp(10),dp(10),dp(10));v.setBackground(box(Color.rgb(236,244,239),8));if(secret)v.setInputType(129);root.addView(v,new LinearLayout.LayoutParams(-1,-2));return v;}
- private Button button(LinearLayout root,String label,Runnable action){Button b=new Button(a);b.setText(label);b.setAllCaps(false);b.setTextColor(Color.WHITE);b.setBackgroundTintList(new android.content.res.ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},new int[]{Color.rgb(154,172,161),green}));b.setOnClickListener(v->action.run());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));p.setMargins(0,dp(8),0,0);root.addView(b,p);return b;}
+ private GradientDrawable box(int color,int radius,int stroke){
+  GradientDrawable shape=new GradientDrawable();
+  shape.setColor(color);
+  shape.setCornerRadius(dp(radius));
+  if(stroke!=0)shape.setStroke(dp(1),stroke);
+  return shape;
+ }
+ private TextView text(LinearLayout root,String value,int size,boolean bold){
+  TextView t=new TextView(a);
+  t.setText(value);
+  t.setTextSize(size);
+  t.setTextColor(bold?ink:muted);
+  if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+  t.setPadding(0,dp(3),0,dp(3));
+  root.addView(t);
+  return t;
+ }
+ private LinearLayout card(LinearLayout root){
+  LinearLayout card=new LinearLayout(a);
+  card.setOrientation(LinearLayout.VERTICAL);
+  card.setPadding(dp(16),dp(13),dp(16),dp(15));
+  card.setBackground(box(Color.WHITE,18,border));
+  LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);
+  params.bottomMargin=dp(12);
+  root.addView(card,params);
+  return card;
+ }
+ private TextView badge(LinearLayout root,String label){
+  TextView badge=text(root,label,12,true);
+  badge.setTextColor(green);
+  badge.setPadding(dp(10),dp(4),dp(10),dp(4));
+  badge.setBackground(box(mint,20,0));
+  badge.setLayoutParams(new LinearLayout.LayoutParams(-2,-2));
+  return badge;
+ }
+ private void fieldStyle(View field){
+  field.setBackground(box(Color.rgb(249,252,250),10,border));
+  field.setPadding(dp(12),dp(8),dp(12),dp(8));
+  field.setMinimumHeight(dp(48));
+ }
+ private EditText field(LinearLayout root,String label,boolean secret){
+  TextView caption=text(root,label,13,true);
+  EditText value=new EditText(a);
+  value.setId(View.generateViewId());
+  value.setSaveEnabled(false);
+  caption.setLabelFor(value.getId());
+  value.setSingleLine(true);
+  value.setTextSize(15);
+  fieldStyle(value);
+  if(secret){
+   value.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+   value.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+  }
+  root.addView(value,new LinearLayout.LayoutParams(-1,-2));
+  return value;
+ }
+ private void addSpinner(LinearLayout root,Spinner spinner,String label){
+  TextView caption=text(root,label,13,true);
+  spinner.setId(View.generateViewId());
+  caption.setLabelFor(spinner.getId());
+  LinearLayout fieldBox=new LinearLayout(a);
+  fieldBox.setBackground(box(Color.rgb(249,252,250),10,border));
+  fieldBox.setPadding(dp(4),0,dp(4),0);
+  spinner.setMinimumHeight(dp(48));
+  fieldBox.addView(spinner,new LinearLayout.LayoutParams(-1,-2));
+  root.addView(fieldBox,new LinearLayout.LayoutParams(-1,-2));
+ }
+ private Button button(LinearLayout root,String label,Runnable action,boolean primary){
+  Button b=new Button(a);
+  b.setText(label);
+  b.setTextSize(14);
+  b.setAllCaps(false);
+  b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+  b.setMinHeight(dp(48));
+  b.setPadding(dp(14),dp(9),dp(14),dp(9));
+  b.setStateListAnimator(null);
+  int[] disabled={-android.R.attr.state_enabled};
+  int[] normal={};
+  StateListDrawable fill=new StateListDrawable();
+  fill.addState(disabled,box(Color.rgb(239,245,241),11,0));
+  fill.addState(normal,box(primary?green:mint,11,primary?0:border));
+  b.setBackground(new RippleDrawable(ColorStateList.valueOf(primary?0x35ffffff:0x24205c46),fill,null));
+  b.setTextColor(new ColorStateList(new int[][]{disabled,normal},new int[]{muted,primary?Color.WHITE:green}));
+  b.setOnClickListener(v->action.run());
+  LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
+  p.topMargin=dp(7);
+  root.addView(b,p);
+  return b;
+ }
+ private void reveal(View view){
+  view.setVisibility(View.VISIBLE);
+  view.setAlpha(0f);
+  view.animate().alpha(1f).setDuration(180).start();
+ }
+ private void toggleSettings(){
+  if(settings.getVisibility()==View.VISIBLE)settings.setVisibility(View.GONE);
+  else reveal(settings);
+  settingsButton.setText(settings.getVisibility()==View.VISIBLE?"Hide connection settings":"School connection settings");
+ }
  void show(){
-  ScrollView scroll=new ScrollView(a);scroll.setFillViewport(true);scroll.setBackgroundColor(Color.rgb(241,246,242));LinearLayout root=new LinearLayout(a);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(18),dp(16),dp(18),dp(22));scroll.addView(root);a.setContentView(scroll);
-  LinearLayout header=card(root);ImageView logo=new ImageView(a);int icon=a.getResources().getIdentifier("school_launcher","mipmap",a.getPackageName());logo.setImageResource(icon==0?R.drawable.schoolflow_icon:icon);logo.setContentDescription("School logo");logo.setScaleType(ImageView.ScaleType.FIT_CENTER);header.addView(logo,new LinearLayout.LayoutParams(dp(60),dp(60)));text(header,a.getString(R.string.app_name),23,true);text(header,"School SIM messaging",14,false);connection=text(header,"Connect your registered school phone once.",14,true);
-  LinearLayout progress=card(root);counts=text(progress,"Queue not checked",17,true);timer=text(progress,"Default interval · 20 seconds",14,false);status=text(progress,"Preview and queue SMS in SchoolFlow. Select the school SIM here, then tap Send Messages.",14,false);
-  LinearLayout controls=card(root);text(controls,"Sending SIM",13,true);sims=new Spinner(a);controls.addView(sims,new LinearLayout.LayoutParams(-1,dp(48)));
-  button(controls,"Enable permission / Refresh SIMs",this::permission);text(controls,"Time between messages",13,true);interval=new Spinner(a);interval.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_spinner_dropdown_item,new String[]{"15 seconds","20 seconds (recommended)","25 seconds"}));interval.setSelection(1);controls.addView(interval,new LinearLayout.LayoutParams(-1,dp(48)));
-  button(controls,"Refresh queued SMS",()->{if(!run.running()&&!awaiting&&job==null&&config.has("scope"))refresh();});
-  start=button(controls,"Send Messages",this::prepareRun);pause=button(controls,"Pause sending",()->stopRun("Paused. An SMS already submitted cannot be recalled.",true));
-  text(controls,"A message may use several SMS parts. Your selected SIM package/network charges apply. Keep this app open; leaving it pauses the queue.",12,false);
-  LinearLayout next=card(root);text(next,"Current message",14,true);preview=text(next,"No message selected.",16,false);review=button(next,"Review next SMS manually",this::claimManual);send=button(next,"Send reviewed SMS",this::confirmManual);report=button(next,"Upload saved result (does not resend)",this::reportResult);button(next,"Resolve uncertain local message",this::resolve);
-  LinearLayout setup=card(root);button(setup,"School connection settings",()->settings.setVisibility(settings.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));settings=new LinearLayout(a);settings.setOrientation(LinearLayout.VERTICAL);setup.addView(settings);code=field(settings,"Institute Code",false);id=field(settings,"Phone ID",false);id.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);key=field(settings,"Connection Key",true);connect=button(settings,"Connect school phone",this::connect);
+  ScrollView scroll=new ScrollView(a);
+  scroll.setFillViewport(true);
+  scroll.setBackgroundColor(Color.rgb(241,247,243));
+  LinearLayout root=new LinearLayout(a);
+  root.setOrientation(LinearLayout.VERTICAL);
+  root.setPadding(dp(14),dp(12),dp(14),dp(20));
+  scroll.addView(root);
+  a.setContentView(scroll);
+
+  LinearLayout header=card(root);
+  LinearLayout schoolRow=new LinearLayout(a);
+  schoolRow.setGravity(Gravity.CENTER_VERTICAL);
+  header.addView(schoolRow);
+  ImageView logo=new ImageView(a);
+  int icon=a.getResources().getIdentifier("school_launcher","mipmap",a.getPackageName());
+  logo.setImageResource(icon==0?R.drawable.schoolflow_icon:icon);
+  logo.setContentDescription("School logo");
+  logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+  logo.setBackground(box(mint,12,0));
+  logo.setPadding(dp(5),dp(5),dp(5),dp(5));
+  schoolRow.addView(logo,new LinearLayout.LayoutParams(dp(52),dp(52)));
+  LinearLayout heading=new LinearLayout(a);
+  heading.setOrientation(LinearLayout.VERTICAL);
+  LinearLayout.LayoutParams headingParams=new LinearLayout.LayoutParams(0,-2,1f);
+  headingParams.setMarginStart(dp(12));
+  schoolRow.addView(heading,headingParams);
+  text(heading,a.getString(R.string.app_name),19,true);
+  text(heading,"School SIM messaging",13,false);
+  connectionBadge=badge(header,"Not connected");
+  connection=text(header,"Connect your registered school phone.",13,false);
+
+  LinearLayout overview=card(root);
+  text(overview,"SMS queue",18,true);
+  counts=text(overview,"Queue not checked",22,true);
+  runBadge=badge(overview,"Idle");
+  runMetrics=new LinearLayout(a);
+  runMetrics.setOrientation(LinearLayout.VERTICAL);
+  String[] metricLabels={"Submitted","Pending","Failed","Uncertain"};
+  for(int row=0;row<2;row++){
+   LinearLayout line=new LinearLayout(a);
+   runMetrics.addView(line);
+   for(int col=0;col<2;col++){
+    int position=row*2+col;
+    LinearLayout metric=new LinearLayout(a);
+    metric.setOrientation(LinearLayout.VERTICAL);
+    metric.setPadding(dp(10),dp(4),dp(10),dp(5));
+    metric.setBackground(box(mint,9,0));
+    LinearLayout.LayoutParams metricParams=new LinearLayout.LayoutParams(0,-2,1f);
+    metricParams.setMargins(0,dp(6),col==0?dp(6):0,0);
+    line.addView(metric,metricParams);
+    metrics[position]=text(metric,"0",19,true);
+    text(metric,metricLabels[position],12,false);
+   }
+  }
+  runMetrics.setVisibility(View.GONE);
+  overview.addView(runMetrics);
+  activityIndicator=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);
+  activityIndicator.setIndeterminate(true);
+  activityIndicator.setIndeterminateTintList(ColorStateList.valueOf(green));
+  activityIndicator.setVisibility(View.GONE);
+  overview.addView(activityIndicator,new LinearLayout.LayoutParams(-1,dp(8)));
+  timer=text(overview,"Ready when your SIM and queue are confirmed.",12,false);
+  status=text(overview,"Preview and queue SMS in SchoolFlow.",14,false);
+  status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+  refreshButton=button(overview,"Refresh queue",this::refresh,false);
+
+  LinearLayout sending=card(root);
+  text(sending,"Sending setup",18,true);
+  sims=new Spinner(a);
+  addSpinner(sending,sims,"Sending SIM");
+  button(sending,"Check SIM permissions",this::permission,false);
+  interval=new Spinner(a);
+  interval.setAdapter(new ArrayAdapter<>(a,android.R.layout.simple_spinner_dropdown_item,
+      new String[]{"15 seconds","20 seconds (recommended)","25 seconds"}));
+  interval.setSelection(1);
+  addSpinner(sending,interval,"Time between messages");
+  start=button(sending,"Send Messages",this::prepareRun,true);
+  pause=button(sending,"Pause sending",()->stopRun("Paused. An SMS already submitted cannot be recalled.",true),false);
+  text(sending,"SIM package charges apply. Keep this app open while sending.",12,false);
+
+  LinearLayout next=card(root);
+  text(next,"Message review",18,true);
+  preview=text(next,"No message selected.",15,false);
+  preview.setBackground(box(mint,10,0));
+  preview.setPadding(dp(12),dp(9),dp(12),dp(9));
+  review=button(next,"Review next SMS",this::claimManual,false);
+  send=button(next,"Send reviewed SMS",this::confirmManual,true);
+  report=button(next,"Upload saved result",this::reportResult,false);
+  resolveButton=button(next,"Resolve uncertain message",this::resolve,false);
+
+  LinearLayout setup=card(root);
+  settingsButton=button(setup,"School connection settings",this::toggleSettings,false);
+  settings=new LinearLayout(a);
+  settings.setOrientation(LinearLayout.VERTICAL);
+  setup.addView(settings,new LinearLayout.LayoutParams(-1,-2));
+  code=field(settings,"Institute Code",false);
+  id=field(settings,"Phone ID",false);
+  id.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+  key=field(settings,"Connection Key",true);
+  connect=button(settings,"Connect school phone",this::connect,true);
+  root.setAlpha(0f);
+  root.animate().alpha(1f).setDuration(200).start();
   try{config=new JSONObject(vault.read());job=config.optJSONObject("job");code.setText(BuildConfig.INSTITUTE_CODE.isEmpty()?config.optString("code"):BuildConfig.INSTITUTE_CODE);code.setEnabled(BuildConfig.INSTITUTE_CODE.isEmpty());id.setText(config.optString("device"));key.setText(config.optString("key"));int seconds=config.optInt("interval",20);interval.setSelection(seconds==15?0:seconds==25?2:1);settings.setVisibility(config.has("scope")?View.GONE:View.VISIBLE);showJob();if(job!=null)status.setText("Saved message recovered. Started or uncertain messages are never sent again automatically.");}
   catch(Exception e){storageFailed=true;status.setText("Private storage unavailable. Contact the school before reconnecting; pending messages must be reviewed.");}
   loadSims();controls();if(config.has("scope")&&!storageFailed)refresh();
@@ -50,17 +246,33 @@ final class SmsScreen {
  private void controls(){if(start==null||destroyed)return;boolean free=!busy&&!storageFailed;
   connect.setEnabled(free&&!run.running()&&job==null);code.setEnabled(free&&!run.running()&&job==null&&BuildConfig.INSTITUTE_CODE.isEmpty());id.setEnabled(free&&!run.running()&&job==null);key.setEnabled(free&&!run.running()&&job==null);
   start.setEnabled(free&&active&&!awaiting&&!run.running()&&job==null&&config.has("scope"));pause.setEnabled(config.has("batch")&&!storageFailed);sims.setEnabled(free&&!run.running()&&!awaiting);interval.setEnabled(free&&!run.running()&&!awaiting);
-  review.setEnabled(free&&!run.running()&&job==null&&config.has("scope"));send.setEnabled(free&&active&&!run.running()&&job!=null&&"claimed".equals(config.optString("stage")));report.setEnabled(free&&!awaiting&&job!=null&&config.has("outcome"));
+  boolean sending=run.running();
+  boolean hasResult=job!=null&&config.has("outcome");
+  boolean canReview=job!=null&&"claimed".equals(config.optString("stage"));
+  review.setEnabled(free&&!sending&&job==null&&config.has("scope"));
+  review.setVisibility(job==null&&!sending?View.VISIBLE:View.GONE);
+  send.setVisibility(canReview&&!sending?View.VISIBLE:View.GONE);
+  send.setEnabled(free&&active&&canReview&&!sending);
+  report.setVisibility(hasResult&&!sending?View.VISIBLE:View.GONE);
+  report.setEnabled(free&&!awaiting&&hasResult&&!sending);
+  resolveButton.setVisibility(job!=null&&!sending?View.VISIBLE:View.GONE);
+  resolveButton.setEnabled(free&&!awaiting&&!sending);
+  pause.setVisibility(config.has("batch")?View.VISIBLE:View.GONE);
+  refreshButton.setEnabled(free&&!awaiting&&!sending&&job==null&&config.has("scope"));
+  activityIndicator.setVisibility(busy||awaiting?View.VISIBLE:View.GONE);
+  runBadge.setText(sending?"Sending":hasResult?"Result pending":config.has("batch")?"Paused":"Idle");
+  connectionBadge.setText(connectionVerified?"Connected":config.has("scope")?"Checking connection":"Not connected");
+  settingsButton.setText(settings.getVisibility()==View.VISIBLE?"Hide connection settings":"School connection settings");
  }
  private interface Work {JSONObject perform() throws Exception;}private interface Done {void accept(JSONObject result) throws Exception;}
- private void task(Work work,Done done){if(busy||destroyed||storageFailed)return;busy=true;controls();io.execute(()->{JSONObject result=null;Exception error=null;try{result=work.perform();}catch(Exception e){error=e;}final JSONObject value=result;final Exception failure=error;a.runOnUiThread(()->{if(destroyed)return;busy=false;try{if(failure!=null)throw failure;done.accept(value);}catch(Exception e){run.stop();a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText("Connection failed or action refused. Sending paused. Saved/uncertain messages are not resent; review the school outbox.");}controls();if(stopping&&!busy)stopRemote();});});}
+ private void task(Work work,Done done){if(busy||destroyed||storageFailed)return;busy=true;controls();io.execute(()->{JSONObject result=null;Exception error=null;try{result=work.perform();}catch(Exception e){error=e;}final JSONObject value=result;final Exception failure=error;a.runOnUiThread(()->{if(destroyed)return;busy=false;try{if(failure!=null)throw failure;done.accept(value);}catch(Exception e){connectionVerified=false;run.stop();a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText("Connection failed or action refused. Sending paused. Saved/uncertain messages are not resent; review the school outbox.");}controls();if(stopping&&!busy)stopRemote();});});}
  private static final class ApiException extends IOException { final int statusCode; ApiException(int code){super("Action refused");statusCode=code;} }
  private JSONObject call(String action,JSONObject body)throws Exception{
   if(!SchoolBinding.matches(BuildConfig.INSTITUTE_CODE,BuildConfig.SCHOOL_SCOPE,config.optString("code"),config.optString("school_scope",BuildConfig.SCHOOL_SCOPE)))throw new IOException("Wrong school");String did=config.getString("device");if(!did.matches("[1-9][0-9]{0,8}"))throw new IOException();HttpURLConnection c=(HttpURLConnection)new URL(EndpointPolicy.BASE+"/api/sms/devices/"+did+"/"+action).openConnection();
   try{c.setInstanceFollowRedirects(false);c.setConnectTimeout(20000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("X-Institute-Code",config.getString("code"));c.setRequestProperty("Authorization","Bearer "+config.getString("key"));if(config.has("scope"))c.setRequestProperty("X-Device-Scope",config.getString("scope"));try(OutputStream out=c.getOutputStream()){out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}int statusCode=c.getResponseCode();if(statusCode!=200)throw new ApiException(statusCode);try(InputStream in=c.getInputStream()){ByteArrayOutputStream b=new ByteArrayOutputStream();byte[] buffer=new byte[2048];int n;while((n=in.read(buffer))!=-1){if(b.size()+n>16384)throw new IOException();b.write(buffer,0,n);}return new JSONObject(b.toString("UTF-8"));}}finally{c.disconnect();}
  }
  private void save()throws Exception{vault.save(config.toString());}
- private void acceptHeartbeat(JSONObject h)throws Exception{if(!SchoolBinding.matches(BuildConfig.INSTITUTE_CODE,BuildConfig.SCHOOL_SCOPE,config.getString("code"),h.optString("school_scope")))throw new IOException("Wrong school");if(config.has("scope")&&!h.getString("scope").equals(config.getString("scope")))throw new IOException("Connection rotated");config.put("scope",h.getString("scope")).put("school_scope",h.getString("school_scope"));if(h.optJSONObject("active_batch")!=null)config.put("batch",h.getJSONObject("active_batch").getString("id"));save();connection.setText("Connected · "+h.optString("school_name")+"\n"+h.getString("name")+" · "+h.getString("campus"));counts.setText(h.optInt("queued")+" queued for this phone");}
+ private void acceptHeartbeat(JSONObject h)throws Exception{if(!SchoolBinding.matches(BuildConfig.INSTITUTE_CODE,BuildConfig.SCHOOL_SCOPE,config.getString("code"),h.optString("school_scope")))throw new IOException("Wrong school");if(config.has("scope")&&!h.getString("scope").equals(config.getString("scope")))throw new IOException("Connection rotated");config.put("scope",h.getString("scope")).put("school_scope",h.getString("school_scope"));if(h.optJSONObject("active_batch")!=null)config.put("batch",h.getJSONObject("active_batch").getString("id"));save();connectionVerified=true;connection.setText(h.getString("name")+" · "+h.getString("campus"));if(h.optJSONObject("active_batch")==null)runMetrics.setVisibility(View.GONE);counts.setText(h.optInt("queued")+" queued for this phone");}
  private void connect(){if(busy||job!=null)return;String school=code.getText().toString().trim().toUpperCase(Locale.ROOT),device=id.getText().toString().trim(),secret=key.getText().toString().trim();if(!school.matches("[A-Z0-9][A-Z0-9-]{2,39}")||!device.matches("[1-9][0-9]{0,8}")||!secret.matches("[A-Za-z0-9_-]{43}")){status.setText("Check the institute code, numeric phone ID and connection key.");return;}
   final JSONObject previous=config;try{config=new JSONObject().put("code",school).put("device",device).put("key",secret);}catch(JSONException e){return;}task(()->{try{return call("heartbeat",new JSONObject());}catch(Exception e){config=previous;throw e;}},h->{acceptHeartbeat(h);settings.setVisibility(View.GONE);status.setText("Connection saved. Choose the school SIM and tap Send Messages.");});
  }
@@ -77,7 +289,12 @@ final class SmsScreen {
   // Retire a recovered run explicitly, then obtain a finite queue snapshot.
   final String old=config.optString("batch");final String fresh=newToken();task(()->{try{call("batch-stop",new JSONObject().put("batch",old));}catch(ApiException e){if(e.statusCode!=404)throw e;}return call("heartbeat",new JSONObject());},h->{acceptHeartbeat(h);if(h.optJSONObject("active_batch")!=null){stopRun("Another run was active. Pausing it; tap Send Messages again.",true);return;}config.put("batch",fresh);save();task(()->call("batch",new JSONObject().put("id",fresh).put("interval",seconds)),response->{JSONObject batch=response.optJSONObject("batch");if(batch==null){config.remove("batch");save();status.setText("No queued SMS. Release approved parent messages from the school software first.");return;}showCounts(batch);if(!active){stopRun("App paused. Tap Send Messages when ready.",true);return;}new AlertDialog.Builder(a).setTitle("Start sending messages?").setMessage(batch.getInt("total")+" queued message(s), one every "+seconds+" seconds, using the selected school SIM. Multipart messages can use several SMS credits. SIM/network charges apply. Keep this app open.").setNegativeButton("Cancel",(d,w)->stopRun("Sending cancelled. Nothing dispatched.",true)).setOnCancelListener(d->stopRun("Sending cancelled. Nothing dispatched.",true)).setPositiveButton("Send Messages",(d,w)->{if(!active)return;run.start(seconds);a.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText("Sending run started. You can pause at any time.");controls();tick();}).show();});});
  }
- private void showCounts(JSONObject b){counts.setText("This run · "+b.optInt("sent")+" submitted · "+b.optInt("pending")+" pending\n"+b.optInt("failed")+" failed · "+b.optInt("unknown")+" uncertain");}
+ private void showCounts(JSONObject batch){
+  counts.setText("Current send run");
+  String[] keys={"sent","pending","failed","unknown"};
+  for(int i=0;i<keys.length;i++)metrics[i].setText(Integer.toString(batch.optInt(keys[i])));
+  if(runMetrics.getVisibility()!=View.VISIBLE)reveal(runMetrics);
+ }
  private void showJob(){if(preview!=null)preview.setText(job==null?"No message selected.":job.optString("phone")+"\n\n"+job.optString("text"));}
  private final Runnable nextTick=this::tick;
  private void tick(){handler.removeCallbacks(nextTick);if(!active||!run.running()||destroyed)return;if(busy||awaiting){handler.postDelayed(nextTick,1000);return;}long wait=run.delay(SystemClock.elapsedRealtime());if(wait>0){timer.setText("Next message in "+((wait+999)/1000)+" seconds");handler.postDelayed(nextTick,1000);return;}timer.setText("Checking approved queue…");claim(true);}
