@@ -514,7 +514,9 @@ def configure_school_settings(app,db,Student,Employee):
             output=io.BytesIO();book.save(output)
             response=app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response.headers['Content-Disposition']='attachment; filename="schoolflow-'+module+'-'+page+'.xlsx"'
             response.headers['Cache-Control']='private, no-store';return response
-        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject)
+        subject_auto_defaults=subject_config(prefill_subject) if prefill_subject else {}
+        subject_default_group=default_subject_group() if module=='exam' and page=='subjects' else ''
+        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject,subject_auto_defaults=subject_auto_defaults,subject_default_group=subject_default_group)
 
     @bp.route('/hrm/assign-shifts',methods=['GET','POST'])
     def assign_shifts():
