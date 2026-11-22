@@ -11,7 +11,7 @@ from widget_catalog import WIDGETS,KEYS,APPS
 from widget_sources import build_widgets
 
 ROLES=('Super Admin','Admin','User','Teacher')
-LEGACY={'queries':'admission-queries','active':'active-students','classes':'strength-chart','capacity':'admission-capacity','collected':'fee-collection','due':'unpaid-amount','unpaid':'unpaid-challans','defaulters':'fee-defaulters','months':'month-chart','average':'class-results','attendance':'attendance-donut','employees':'employee-status','pending':'employee-approvals','staff':'staff-attendance'}
+LEGACY={'queries':'admission-queries','active':'active-students','classes':'strength-chart','capacity':'admission-capacity','collected':'fee-collection','expenses':'income-expenses','due':'unpaid-amount','unpaid':'unpaid-challans','defaulters':'fee-defaulters','months':'month-chart','average':'class-results','attendance':'attendance-donut','employees':'employee-status','pending':'employee-approvals','staff':'staff-attendance'}
 
 def configure_general_tools(app,db,Student,Employee):
     bp=Blueprint('general_tools',__name__,url_prefix='/workspace/general')
