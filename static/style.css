@@ -161,3 +161,15 @@ html,body{max-width:100%}
 @media screen and (max-width:350px){
 .tab-strip{grid-template-columns:1fr}
 }
+
+
+/* Separate, clearly outlined navigation tiles for Exam and HRM settings. */
+@media screen{
+.settings-page-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0 24px;align-items:stretch}
+.settings-page-links>a.button{display:flex;width:100%;min-width:0;min-height:52px;padding:13px 16px;border:1.5px solid #9dbfac;border-radius:11px;box-shadow:0 2px 5px rgba(15,64,40,.07);text-align:left;justify-content:flex-start;font-size:13px;font-weight:700;line-height:1.35;white-space:normal;overflow-wrap:anywhere}
+.settings-page-links>a.button.secondary{background:#f3faf5;color:#164d36}
+.settings-page-links>a.button:not(.secondary){background:#176b4a;color:#fff;border-color:#176b4a}
+.settings-page-links>a.button:hover{border-color:#176b4a;transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,64,40,.12)}
+}
+@media screen and (max-width:800px){.settings-page-links{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.settings-page-links>a.button{min-height:54px;padding:12px}}
+@media screen and (max-width:380px){.settings-page-links{grid-template-columns:1fr}}
