@@ -11,7 +11,7 @@ WIDGETS = [
     ('classes','Admissions','Student Strength by Class',None,'Current active enrolment grouped by class.','/records/student'),
     ('capacity','Admissions','Admission Capacity',None,'Configured seat limits per campus, class and session, across sections. Only Active students occupy seats.','/workspace/admission-capacity'),
     ('collected','Finance','Total Collected','collected','All non-voided receipts, across all receipt dates.','/workspace/history'),
-    ('expenses','Finance','Total Expenses','expenses','Net posted expense ledger entries for the current month.','/workspace/ledger'),
+    ('expenses','Finance','Total Expenses · This Month','expenses','Net posted expense ledger entries for the current month.','/workspace/ledger'),
     ('due','Finance','Unpaid Amount','due','Current challan total less payments and discounts; not a historical balance.','/workspace/history?view=defaulters'),
     ('unpaid','Finance','Unpaid Challans','unpaid','Challans with a positive current remaining balance.','/workspace/fees/payments'),
     ('defaulters','Finance','Fee Defaulters','defaulters','Distinct students with at least one outstanding challan.','/workspace/history?view=defaulters'),
@@ -79,6 +79,7 @@ def configure_dashboard(app, db):
 
     def render_dashboard():
         layout,version = current()
+        # Existing saved layouts can choose the new expense tile via Add Widgets.
         catalog = {w[0]:dict(key=w[0],group=w[1],label=w[2],stat=w[3],note=w[4],link=w[5],money=w[0] in MONEY) for w in WIDGETS}
         today=date.today()
         catalog['attendance']['link']+=f'?from={today}&to={today}'
