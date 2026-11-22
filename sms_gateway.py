@@ -219,6 +219,16 @@ def configure_sms_gateway(app,db,Student):
 
     app.extensions['auto_admission_query_sms']=auto_admission_query
 
+    def resolve_school_template(body):
+        """Resolve school branding before preview or SIM queueing."""
+        school=(getattr(g,'sms_school',None) or {}).get('name') or (getattr(g,'school_identity',None) or {}).get('name')
+        school=str(school or '').strip()
+        if not school:raise ValueError('School name is missing from Institute Setup. Configure it before sending SMS.')
+        body=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school,str(body),flags=re.IGNORECASE)
+        remaining=re.findall(r'\\{[a-zA-Z_][a-zA-Z_0-9]*\\}',body)
+        if remaining:raise ValueError('Unresolved SMS template variables: '+', '.join(sorted(set(remaining)))+'. Update the request before sending.')
+        return body
+
     def candidates(row,device):
         data=row.data;preferences=data.get('preferences',{})
         if data.get('audience')!='parent' or not preferences.get('app_sms'):raise ValueError('Only student-parent App SMS requests can be released to the SIM outbox.')
@@ -226,11 +236,11 @@ def configure_sms_gateway(app,db,Student):
         snapshots=data.get('messages',[])
         if not snapshots:raise ValueError('This request has no saved message snapshots.')
         for message in snapshots:
-            if message.get('unresolved'):raise ValueError('Resolve missing template values before releasing this request.')
+            if message.get('unresolved') and any(str(tag).strip('{} ').lower()!='school_name' for tag in message['unresolved']):raise ValueError('Resolve missing template values before releasing this request.')
             person=db.session.get(Student,message.get('person_id'));details=rm['student'].query.filter_by(student_id=person.id).first() if person else None
             if not person or not details or details.data.get('campus')!=device.campus:raise ValueError('All recipients must belong to the selected device campus.')
             family=db.session.get(rm['family'],details.family_id) if details.family_id else None
-            family_data=family.data if family else {};body=message.get('text','').strip()
+            family_data=family.data if family else {};body=resolve_school_template(message.get('text','').strip())
             if not 1<=len(body)<=1000:raise ValueError('SMS text must contain 1–1,000 characters.')
             contacts=[]
             if preferences.get('father_contact'):contacts.append(family_data.get('phone') or person.phone)
