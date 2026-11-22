@@ -122,6 +122,11 @@ def configure_student_import(app,db,Student):
         return headers,rows,positions
     @bp.get('')
     def index():return render_template('student_import.html',title='Student Excel / CSV import',batches=StudentImportBatch.query.filter_by(owner=owner()).order_by(StudentImportBatch.created.desc()).limit(30).all())
+    @bp.get('/historical-payments')
+    def historical_payments_history():
+        batches=HistoricalPaymentBatch.query.filter_by(owner=owner()).order_by(HistoricalPaymentBatch.created.desc()).limit(50).all()
+        return render_template('migration_payment_history.html',title='Historical Payment Migration History',batches=batches)
+
     @bp.get('/template.xlsx')
     def template():
         wb=Workbook();sheet=wb.active;sheet.title='Students';fields=columns();sheet.append(list(fields.values()));sheet.freeze_panes='A2'
@@ -188,6 +193,13 @@ def configure_student_import(app,db,Student):
             if key in seen:raise ValueError(f'Row {pos}: duplicate receipt/fee head/month allocation.')
             seen.add(key)
             receipts.append(dict(admission_no=admission,student_id=pupil.id,student_name=name or pupil.name,receipt_no=receipt,payment_date=day,fee_month=month,fee_head=head,amount=str(value),method=method,reference=reference,notes=notes))
+        # Detect overlapping receipt allocations even when uploaded in different batches.
+        existing=set()
+        for old in HistoricalPaymentBatch.query.filter_by(owner=owner()).all():
+            for allocation in old.data.get('receipts',[]):
+                existing.add((allocation.get('admission_no'),allocation.get('receipt_no'),allocation.get('fee_head'),allocation.get('fee_month')))
+        overlap=seen & existing
+        if overlap:raise ValueError('One or more receipt allocations already exist in an earlier migration batch. Remove duplicates and upload again.')
         fingerprint=digest(receipts)
         if HistoricalPaymentBatch.query.filter_by(owner=owner(),fingerprint=fingerprint).first():
             raise ValueError('This historical payments file has already been saved. Duplicate import blocked.')
