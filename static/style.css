@@ -129,3 +129,35 @@ table{max-width:100%}
 .form-card,.panel{padding:clamp(14px,3vw,20px)}
 .tab-strip a{font-size:12px}
 }
+
+
+/* Consistent responsive workspace: one visual language on phones, tablets and desktop. */
+@media screen{
+html,body{max-width:100%}
+.page-content,.form-card,.panel{min-width:0}
+.page-content img,.form-card img,.panel img{max-width:100%;height:auto}
+.form-card table,.panel table{border-collapse:collapse}
+.form-card :is(input,select,textarea),.panel :is(input,select,textarea){max-width:100%}
+.form-card :is(.button,button),.panel :is(.button,button){overflow-wrap:anywhere}
+.tab-strip a{flex-shrink:0}
+}
+@media screen and (min-width:1280px){
+.page-content{max-width:1500px;margin-inline:auto}
+.page-heading h1{font-size:clamp(26px,2.1vw,34px)}
+.form-card,.panel{border-radius:14px}
+}
+@media screen and (min-width:761px) and (max-width:1279px){
+.page-content{padding-inline:clamp(20px,2.5vw,36px)}
+.tab-strip{display:flex;flex-wrap:wrap}
+}
+@media screen and (max-width:760px){
+.page-heading{flex-direction:column;align-items:stretch}
+.page-heading .heading-actions{max-width:none;flex-wrap:wrap}
+.page-heading>.button{align-self:flex-start}
+.form-card,.panel{max-width:100%}
+.tab-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.tab-strip a{white-space:normal;overflow-wrap:anywhere}
+}
+@media screen and (max-width:350px){
+.tab-strip{grid-template-columns:1fr}
+}
