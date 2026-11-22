@@ -260,7 +260,8 @@ def configure_operations(app, db, Student, Employee):
         if key=='roll-slips': return url_for('ops.rolls')
         if key=='shifts':return url_for('school_settings.assign_shifts')
         if key in SCHEMAS: return url_for('ops.register',kind=key)
-        if key in ('sms-blaster','fee-intimation'): return url_for('ops.messages')
+        if key=='sms-blaster': return url_for('ops.messages')
+        if key=='fee-intimation': return url_for('ops.fee_intimation')
         if key in ('sms-report','family-sms','notifications','staff-sms'): return url_for('ops.message_log',view=key)
         if key=='admission-approvals':
             return url_for('admission_limits.approvals')
@@ -1166,17 +1167,48 @@ def configure_operations(app, db, Student, Employee):
             existing.add((row.person_id,str(row.day)));count+=1
         audit('Import lectures',month=m,count=count);commit();flash(f'{count} lecture entries imported awaiting approval.','success');return redirect(url_for('ops.register',kind='lecture-register'))
 
-    @bp.route('/messages',methods=['GET','POST'])
-    def messages():
+    def communication_screen(fee_mode=False):
+        campus=request.values.get('campus','').strip()
+        students=people(active=True)
+        balances={}
+        if fee_mode:
+            student_ids=[s.id for s in students]
+            for bill in Bill.query.filter(Bill.student_id.in_(student_ids)).all() if student_ids else []:
+                if bill.remaining>0:
+                    balances[bill.student_id]=balances.get(bill.student_id,0)+bill.remaining
+            students=[s for s in students if balances.get(s.id,0)>0]
+        default_templates={
+            'General announcement':'Dear Parent, please note the latest school announcement. Thank you. {school_name}',
+            'PTM invitation':'Dear Parent, you are invited to the Parent Teacher Meeting at {school_name}.',
+            'Exam notice':'Dear Parent, please contact {school_name} for the upcoming examination schedule.',
+        }
+        if fee_mode:
+            default_templates={
+                'Outstanding fee reminder':'Dear Parent, {student_name} has an outstanding fee of Rs. {remaining_fee} for {fee_month}. Kindly clear the dues. {school_name}',
+                'Fee due date':'Dear Parent, please clear the outstanding fee of Rs. {remaining_fee} for {student_name} ({fee_month}). Thank you. {school_name}',
+            }
+        configured=app.extensions['school_settings_helpers']['config']('exam:sms:'+campus) if campus else {}
+        if isinstance(configured,dict):
+            default_templates.update({str(k):str(v) for k,v in configured.items() if isinstance(v,str) and v.strip()})
         if request.method=='POST':
             body=request.form.get('message','').strip()
-            if not body: raise ValueError('Message is required.')
+            if not body or len(body)>5000:raise ValueError('Enter a message up to 5000 characters.')
             ids=selected('student_ids')
-            if not ids: raise ValueError('Select recipients.')
-            if any(not db.session.get(Student,id) for id in ids): raise ValueError('Invalid recipient.')
-            queue(body[:5000],ids);commit();flash('Request recorded: provider not configured. No message was sent.','info');return redirect(url_for('ops.message_log'))
-        campus=request.args.get('campus','');templates=app.extensions['school_settings_helpers']['config']('exam:sms:'+campus)
-        return render('messages.html',sms_templates=templates,title='SMS Blaster / Fee Intimation',students=people(active=False))
+            valid={s.id for s in students}
+            if not ids or any(i not in valid for i in ids):raise ValueError('Select valid recipients from this filtered list.')
+            queue(body,ids,context={'type':'fee-intimation' if fee_mode else 'sms-blaster'})
+            commit()
+            flash('Communication request saved. No SMS was sent: a verified provider is required.','info')
+            return redirect(url_for('ops.message_log'))
+        return render('messages.html',sms_templates=default_templates,title='Fee Intimation' if fee_mode else 'SMS Blaster',students=students,fee_mode=fee_mode,balances=balances)
+
+    @bp.route('/messages',methods=['GET','POST'])
+    def messages():
+        return communication_screen(False)
+
+    @bp.route('/fee-intimation',methods=['GET','POST'])
+    def fee_intimation():
+        return communication_screen(True)
 
     @bp.route('/message-log')
     def message_log():
