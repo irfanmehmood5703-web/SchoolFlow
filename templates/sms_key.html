@@ -1,1 +1,42 @@
-{% extends 'base.html' %}{% block content %}<section class="form-card"><h1>Connect SMS App</h1><p>This connection key is shown once. Keep it private; rotating it disconnects the old phone.</p><dl><dt>Institute code</dt><dd>{{school_identity.code}}</dd><dt>Phone ID</dt><dd>{{device.id}}</dd><dt>Connection key</dt><dd style="overflow-wrap:anywhere"><code>{{key}}</code></dd></dl><a class="button" href="{{url_for('sms_gateway.index')}}">Done</a></section>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<section class="form-card">
+  <h1>Connect SMS App</h1>
+  <p>This connection key is shown once. Keep it private; rotating it disconnects the old phone.</p>
+  <dl>
+    <dt>Institute code</dt><dd>{{school_identity.code}}</dd>
+    <dt>Phone ID</dt><dd>{{device.id}}</dd>
+    <dt>Connection key</dt>
+    <dd style="overflow-wrap:anywhere">
+      <code id="sms-connection-key">{{key}}</code>
+      <button type="button" id="copy-sms-key" class="button" style="margin:8px 0 0 8px" aria-label="Copy connection key">Copy key</button>
+      <span id="sms-copy-status" role="status" aria-live="polite" style="margin-left:8px"></span>
+    </dd>
+  </dl>
+  <a class="button" href="{{url_for('sms_gateway.index')}}">Done</a>
+</section>
+<script>
+(function () {
+  const button = document.getElementById('copy-sms-key');
+  const status = document.getElementById('sms-copy-status');
+  const key = document.getElementById('sms-connection-key');
+  button.addEventListener('click', async function () {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        throw new Error('Clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(key.textContent.trim());
+      button.textContent = 'Copied!';
+      status.textContent = 'Paste this key into the SchoolFlow SMS App.';
+    } catch (error) {
+      status.textContent = 'Copy unavailable. Select and copy the key manually.';
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(key);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  });
+}());
+</script>
+{% endblock %}
