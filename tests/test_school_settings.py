@@ -199,6 +199,26 @@ class SchoolSettingsTests(unittest.TestCase):
         ]
         self.assertIsNone(grade_band_for_percentage(separated,'35'))
 
+    def test_class_grading_uses_checkbox_grid_for_multiple_classes(self):
+        db.session.add(self.rm['settings'](category='class_name',value='Class B',class_name=''))
+        db.session.commit()
+        page=self.c.get('/workspace/core/exam/class-grading')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'class="settings-class-choice-grid"',page.data)
+        self.assertNotIn(b'<select multiple size="5" name="classes"',page.data)
+        for cls in [b'Class A',b'Class B']:
+            self.assertIn(b'type="checkbox" name="classes" value="'+cls+b'"',page.data)
+        self.assertEqual(self.post('exam','grading',name='2027 policy',minimum=['0','40'],maximum=['39.99','100'],grade=['F','E'],remarks=['Fail','Pass']).status_code,302)
+        policy=self.item('grading')
+        response=self.post('exam','class-grading',name='Main campus grading',campus='Campus A',classes=['Class A','Class B'],policy=str(policy.id))
+        self.assertEqual(response.status_code,302)
+        assignment=self.item('class-grading')
+        self.assertEqual(set(assignment.data['classes']),{'Class A','Class B'})
+        edit=self.c.get('/workspace/core/exam/class-grading?edit='+str(assignment.id))
+        self.assertEqual(edit.status_code,200)
+        for cls in [b'Class A',b'Class B']:
+            self.assertIn(b'name="classes" value="'+cls+b'" checked',edit.data)
+
     def test_grades_use_unrounded_percentage_in_results(self):
         self.assertEqual(self.post('exam','grading',name='School policy',minimum=['0','80'],maximum=['79.999999','100'],grade=['B','A'],remarks=['Good','Excellent']).status_code,302)
         policy=self.item('grading');self.assertEqual(self.post('exam','class-grading',name='Class policy',campus='Campus A',classes=['Class A'],policy=str(policy.id)).status_code,302)
