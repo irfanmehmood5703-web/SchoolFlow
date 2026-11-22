@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}
+{{m.heading(title,'Review imported opening arrears and legacy receipt totals without creating new financial transactions.')}}
+<nav class="tab-strip"><a href="{{url_for('student_import.index')}}">School Migration</a><a href="{{url_for('student_import.historical_payments_history')}}">Historical Receipts</a></nav>
+<section class="form-card"><h2>Migration Control Totals</h2><p><strong>Opening arrears: PKR {{total_arrears}}</strong> · Historical payments: PKR {{total_historical}}</p><p><strong>Important:</strong> These totals represent different things and should not be subtracted from each other. Opening arrears should already be net of old receipts. This is a read-only control report, not a General Ledger reconciliation or verified challan balance. Compare amounts against old-system reports before launch.</p>
+<div style="overflow-x:auto"><table><thead><tr><th>Admission No</th><th>Student</th><th>Imported Opening Arrears (PKR)</th><th>Historical Receipts (PKR)</th></tr></thead><tbody>
+{% for row in rows %}<tr><td>{{row.admission}}</td><td>{{row.name}}</td><td>{{row.arrears}}</td><td>{{row.historical}}</td></tr>{% else %}<tr><td colspan="4">No imported students for this school.</td></tr>{% endfor %}
+</tbody></table></div></section>{% endblock %}
