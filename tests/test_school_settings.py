@@ -60,7 +60,7 @@ class SchoolSettingsTests(unittest.TestCase):
         page=self.c.get('/workspace/core/exam/subjects')
         self.assertEqual(page.status_code,200)
         self.assertEqual(page.data.count(b'class="form-card subject-unified-section"'),1)
-        self.assertNotIn(b'Subjects from this school \\xc2\\xb7 Automatic',page.data)
+        self.assertNotIn(b'Subjects from this school',page.data)
         self.assertNotIn(b'Automatically available school subjects',page.data)
         self.assertIn(b'Customise settings',page.data)
         self.assertIn(b'Advanced: saved subject settings (0)',page.data)
