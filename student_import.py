@@ -213,6 +213,9 @@ def configure_student_import(app,db,Student):
                     key=line['particular']
                     if data.get('amount::'+key):line['actual']=money(data['amount::'+key])
                     line['discount']=money(data.get('discount::'+key));line['arrears']=money(data.get('arrears::'+key))
+                    if line['arrears']<0:raise ValueError('Opening arrears cannot be negative for '+key+'. Enter only unpaid dues.')
+                    if line['discount']<0:raise ValueError('Discount cannot be negative for '+key+'.')
+                    if line['actual']<0:raise ValueError('Fee amount cannot be negative for '+key+'.')
                 pct=fee_percentage(data.get('percentage') or '0');lines=increment_lines(lines,pct,False)
                 if len(data.get('concession_reason',''))>200:raise ValueError('Fee concession reason exceeds 200 characters.')
                 plan=dict(effective=effective,data=dict(schedule=schedule.name,lines=lines,percentage=str(pct),year=effective[:4],reason=data.get('concession_reason','')[:200],notes='Imported student fee plan',**app.extensions['fee_setup_helpers']['snapshot'](schedule)))
