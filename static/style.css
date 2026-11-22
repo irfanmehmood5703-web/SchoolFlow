@@ -86,3 +86,17 @@ main{margin-left:0}.app-header{background:var(--dark);color:#fff;position:relati
   .page-content> :last-child{margin-bottom:0!important}
   .print-copies.vertical{break-inside:auto}
 }
+
+
+/* High-visibility navigation: consistent across all SchoolFlow workspace pages. */
+:root{--sf-nav-ink:#174d38;--sf-nav-border:#a7cbb6;--sf-nav-bg:#edf7f0}
+.tab-strip{display:flex;flex-wrap:wrap;overflow:visible;gap:9px;align-items:stretch;padding:4px 0 12px;margin-bottom:20px}
+.tab-strip a{display:inline-flex;align-items:center;justify-content:center;min-height:39px;box-sizing:border-box;max-width:100%;padding:10px 15px;white-space:normal;overflow-wrap:anywhere;text-align:center;font-size:12px;font-weight:700;line-height:1.35;color:var(--sf-nav-ink);background:var(--sf-nav-bg);border:1.5px solid var(--sf-nav-border);border-radius:9px;box-shadow:0 2px 5px rgba(15,75,47,.06);text-decoration:none;transition:background .15s,border-color .15s,box-shadow .15s}
+.tab-strip a:hover{color:#fff;background:#176b4b;border-color:#176b4b;box-shadow:0 3px 10px rgba(15,75,47,.15);text-decoration:none}
+.tab-strip a:focus-visible,.button:focus-visible{outline:3px solid #f0b94b;outline-offset:2px}
+.tab-strip a[aria-current="page"],.tab-strip a.active{color:#fff;background:#145f42;border-color:#145f42}
+.button.secondary{background:#e9f4ed;border:1.5px solid #a8cbb7;color:#174d38;font-weight:700}
+.button.secondary:hover{background:#d5eadc;border-color:#5d9b78;color:#10472f}
+@media(max-width:600px){.tab-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tab-strip a{width:100%;font-size:12px;padding:10px 9px;min-width:0}}
+@media(max-width:360px){.tab-strip{grid-template-columns:1fr}}
+@media print{.tab-strip{display:none!important}}
