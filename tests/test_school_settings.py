@@ -72,6 +72,26 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertIn(b'value="English"',chosen.data)
         self.assertEqual(self.m['item'].query.count(),0)
 
+    def test_subject_cards_show_saved_configured_vs_unsaved_automatic(self):
+        # Old and newly-created school subjects can coexist without being
+        # classified as manually customised based on their source field.
+        db.session.add_all([
+            self.rm['settings'](category='subject',value='English',class_name=''),
+            self.rm['settings'](category='subject',value='Urdu',class_name=''),
+            self.m['item'](kind='subject',name='Urdu',scope='',
+                           data={'group':'Core subjects','grading':'Marks','diary':False,
+                                 'source':'school-catalog'})
+        ])
+        db.session.commit()
+        html=self.c.get('/workspace/core/exam/subjects').data
+        self.assertIn(b'2 school subjects',html)
+        self.assertIn(b'1 configured',html)
+        self.assertIn(b'1 automatic',html)
+        self.assertEqual(html.count(b'>Configured</span>'),1)
+        self.assertEqual(html.count(b'>Automatic</span>'),1)
+        self.assertEqual(html.count(b'class="subject-auto-tile"'),2)
+        self.assertEqual(self.m['item'].query.filter_by(kind='subject').count(),1)
+
     def test_new_school_subject_auto_syncs_into_exam_settings_once(self):
         data={'_csrf':self.csrf,'category':'subject','value':'Islamiat','class_name':'Class A'}
         response=self.c.post('/records/options',data=data)
