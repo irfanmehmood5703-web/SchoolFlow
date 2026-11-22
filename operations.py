@@ -280,6 +280,9 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/register/<kind>',methods=['GET','POST'])
     def register(kind):
         if kind not in SCHEMAS: abort(404)
+        if kind=='auto-reminders' and request.method=='POST' and request.form.get('action')=='preview_reminders':
+            # Preview-only request; do not create a workflow or submit SMS.
+            pass
         if kind=='fee-plans':
             if request.method=='POST':raise ValueError('Configure fee schedules in Core Settings → Fee Settings.')
             return redirect(url_for('fee_setup.schedules'))
@@ -526,8 +529,43 @@ def configure_operations(app, db, Student, Employee):
             if followup in ('due','upcoming','today'):
                 now=school_today().isoformat()
                 rows=[r for r in rows if r.status not in ('Closed','Converted') and r.data.get('follow_up') and (r.data['follow_up']<=now if followup=='due' else r.data['follow_up']>now if followup=='upcoming' else r.data['follow_up']==now)]
+        reminder_students=[]
+        reminder_message='Dear Parent, your child {student_name} has an outstanding fee of Rs. {remaining_fee} for {fee_month}. Kindly clear the dues. Thank you. {school_name}'
+        reminder_previews=[]
+        if kind=='auto-reminders':
+            # Always compute the audience from the current tenant's live bills; no cached or cross-school recipient list.
+            balances=defaultdict(int)
+            bill_months={}
+            for bill in Bill.query.all():
+                if bill.remaining>0:
+                    balances[bill.student_id]+=bill.remaining
+                    if bill.student_id not in bill_months or bill.month<bill_months[bill.student_id]:
+                        bill_months[bill.student_id]=bill.month
+            details_model=rm['student']
+            details_by_id={d.student_id:(d.data or {}) for d in details_model.query.filter(details_model.student_id.in_(list(balances))).all()} if balances else {}
+            for student in Student.query.filter(Student.id.in_(list(balances))).order_by(Student.name).all() if balances else []:
+                if student.status!='Active':continue
+                details=details_by_id.get(student.id,{})
+                phone=next((str(details.get(k) or '').strip() for k in ('father_phone','guardian_phone','parent_phone','phone','mobile','contact','father_mobile') if details.get(k)), '')
+                reminder_students.append(dict(id=student.id,name=student.name,student_class=student.class_name or '',father=str(details.get('father_name') or details.get('father') or ''),phone=phone,remaining=balances[student.id],fee_month=bill_months.get(student.id,'')))
+            if request.method=='POST' and request.form.get('action')=='preview_reminders':
+                selected_ids=set()
+                for raw in request.form.getlist('reminder_student_ids'):
+                    if not raw.isdigit():raise ValueError('Invalid student selection.')
+                    selected_ids.add(int(raw))
+                if not selected_ids:raise ValueError('Select at least one student with outstanding fees.')
+                reminder_message=request.form.get('reminder_message','').strip()
+                if not reminder_message or len(reminder_message)>1000:raise ValueError('Enter a reminder message up to 1000 characters.')
+                school_name=str(getattr(g,'school_name','') or getattr(getattr(g,'school',None),'name','') or 'Your school')
+                for student in reminder_students:
+                    if student['id'] not in selected_ids:continue
+                    msg=reminder_message
+                    for key,value in {'student_name':student['name'],'father_name':student['father'],'remaining_fee':f"{student['remaining']/100:,.2f}".rstrip('0').rstrip('.'),'fee_month':student['fee_month'],'school_name':school_name}.items():
+                        msg=msg.replace('{'+key+'}',str(value))
+                    reminder_previews.append(dict(student=student,message=msg))
+                if not reminder_previews:raise ValueError('Selected students no longer have outstanding fees.')
         archived_rows=Workflow.query.filter_by(kind='queries',status='Voided').order_by(Workflow.id.desc()).all() if kind=='queries' else []
-        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,archived_rows=archived_rows,increment_token=secrets.token_urlsafe(24),sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
+        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,archived_rows=archived_rows,increment_token=secrets.token_urlsafe(24),reminder_students=reminder_students,reminder_message=reminder_message,reminder_previews=reminder_previews,sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
 
     @bp.route('/approve-students',methods=['POST'])
     def approve_students():
