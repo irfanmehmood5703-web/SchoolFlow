@@ -553,7 +553,10 @@ def configure_operations(app, db, Student, Employee):
                 if not selected_ids:raise ValueError('Select at least one student with outstanding fees.')
                 reminder_message=request.form.get('reminder_message','').strip()
                 if not reminder_message or len(reminder_message)>1000:raise ValueError('Enter a reminder message up to 1000 characters.')
-                school_name=str(getattr(g,'school_name','') or getattr(getattr(g,'school',None),'name','') or 'Your school')
+                profile_model=app.extensions.get('institute_setup_models',{}).get('profile')
+                school_profile=(db.session.get(profile_model,1).data or {}) if profile_model and db.session.get(profile_model,1) else {}
+                school_identity=getattr(g,'school_identity',None) or {}
+                school_name=str(school_profile.get('name') or school_identity.get('name') or 'School').strip()
                 for student in reminder_students:
                     if student['id'] not in selected_ids:continue
                     msg=reminder_message
