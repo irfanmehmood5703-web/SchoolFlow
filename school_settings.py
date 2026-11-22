@@ -19,6 +19,27 @@ def clean_html(value):
     return clean_base_html(value,report_assets=True)
 
 
+def grade_band_for_percentage(bands, percentage):
+    """Use exact percentages, covering sub-cent gaps between adjacent grade bands.
+
+    A policy with 39.99 as the last failing percentage and 40 as the first
+    passing percentage must also grade 39.995 as failing. Deliberate wider
+    gaps remain ungraded, and a value at the next band's minimum belongs
+    to that next band. No rounding is applied to the student's percentage.
+    """
+    n = Decimal(str(percentage))
+    for index, band in enumerate(bands):
+        low = Decimal(str(band['min']))
+        high = Decimal(str(band['max']))
+        if low <= n <= high:
+            return band
+        if high < n and index + 1 < len(bands):
+            next_min = Decimal(str(bands[index+1]['min']))
+            if Decimal('0') < next_min - high <= Decimal('0.01') and n < next_min:
+                return band
+    return None
+
+
 DAYS=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
 EXAM_PAGES=[('display','Mark Display Names'),('subject-groups','Subject Groups'),('subjects','Subjects'),('class-subjects','Subjects in Classes'),('test-types','Test Types'),('weightage','Test Type Weightage'),('grading','Grading Policies'),('class-grading','Class Grading Policy'),('student-shifts','Student Shifts'),('sms','Student SMS Templates'),('branding','Exam Brandings')]
 HRM_PAGES=[('employee-fields','Employee Form Settings'),('print-templates','Print Templates'),('allowances','Allowance / Deduction'),('departments','Departments'),('designation-groups','Designation Groups'),('designations','Manage Designations'),('employment-types','Employment Types'),('shift-templates','Shift Templates'),('sms','HRM SMS Templates'),('attendance-lock','Lock Attendance'),('branding','HRM Brandings')]
@@ -186,8 +207,7 @@ def configure_school_settings(app,db,Student,Employee):
     def grade_for(campus,cls,percentage):
         policy=assigned_policy(campus,cls)
         if not policy:return ('','')
-        n=Decimal(str(percentage))
-        band=next((b for b in policy.data['bands'] if Decimal(b['min'])<=n<=Decimal(b['max'])),None)
+        band=grade_band_for_percentage(policy.data['bands'],percentage)
         return (band['grade'],band['remarks']) if band else ('','')
     def subject_allowed(campus,cls,subject):
         links=items('class-subjects',campus)
