@@ -75,6 +75,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   panel.addView(button("Retry connection / pending mark",()->{try{if(vault!=null&&vault.pending()!=null)deliver();else heartbeat();}catch(Exception e){show("Cannot read protected storage.");}}));
   panel.addView(button("Cancel pending submission",()->protect(this::cancelPending)));
   body.addView(scroll(panel),new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+  if(BuildConfig.CHECK_FOR_UPDATES)AppUpdates.check(this);
   try{vault=new Vault(this);known=vault.people();status.setText(vault.lastResult());}catch(Exception e){status.setText("Protected storage cannot be opened. Attendance is disabled; do not replace it with plaintext.");start.setEnabled(false);return;}
   initializer.execute(()->{
    try{if(!OpenCVLoader.initLocal())throw new IllegalStateException();engine=new FaceEngine(this);show("Models ready. Connect a private institute gate; set a device screen lock before enrollment.");}

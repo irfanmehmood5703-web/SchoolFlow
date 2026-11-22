@@ -1,14 +1,16 @@
 """Tenant-specific APK queue and private delivery. Central builder keeps signing control."""
 import base64,hashlib,hmac,io,json,os,re,secrets,time,zipfile
-from datetime import datetime,timezone
+from datetime import datetime,timedelta,timezone
 from flask import Blueprint,abort,flash,g,jsonify,redirect,render_template,request,send_file,session,url_for
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey,generate_private_key
+from cryptography.hazmat.primitives import hashes,serialization
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
-from app_builder_auth import authenticate_builder
+from app_builder_auth import authenticate_builder,QR_WORKFLOW,REPOSITORY
 from itsdangerous import BadData, URLSafeTimedSerializer
 
 SOURCE_VERSION=11
@@ -33,6 +35,13 @@ def configure_school_apps(app,db):
         encrypted=db.deferred(db.Column(db.LargeBinary,nullable=False))
         fingerprint=db.Column(db.String(64),nullable=False,default='')
         download_token=db.Column(db.String(43),nullable=False,unique=True,default=lambda:secrets.token_urlsafe(32))
+    class QRRelease(db.Model):
+        __bind_key__=app.extensions.get('identity_bind_key')
+        __tablename__='qr_attendance_release';__table_args__=control
+        id=db.Column(db.Integer,primary_key=True)
+        encrypted=db.deferred(db.Column(db.LargeBinary,nullable=False))
+        fingerprint=db.Column(db.String(64),nullable=False)
+        published=db.Column(db.JSON,nullable=False,default=dict)
     class Build(db.Model):
         __bind_key__=app.extensions.get('identity_bind_key')
         __tablename__='school_app_build';__table_args__=(db.UniqueConstraint('school_key','sequence'),control)
@@ -64,6 +73,51 @@ def configure_school_apps(app,db):
         engine=db.session.get_bind(mapper=Gate.__mapper__);insert=postgres_insert if engine.dialect.name=='postgresql' else sqlite_insert
         db.session.execute(insert(Gate).values(id=1,revision=1).on_conflict_do_update(index_elements=['id'],set_={'revision':Gate.revision+1}))
     def cipher():return Fernet(base64.urlsafe_b64encode(hashlib.sha256(str(app.config.get('SCHOOL_APP_SIGNING_KEY') or app.config['SECRET_KEY']).encode()+b'school-app-signing-v1').digest()))
+    def qr_release():
+        row=db.session.get(QRRelease,1)
+        return row.published if row else {}
+    @bp.get('/api/mobile-app/update/qr-attendance')
+    def qr_update():
+        release=qr_release()
+        return jsonify(available=bool(release),**release),200,{'Cache-Control':'no-store'}
+    @bp.post('/api/app-builder/qr-attendance/signing')
+    def qr_signing():
+        authenticate_builder(QR_WORKFLOW);lock()
+        row=db.session.get(QRRelease,1)
+        if not row:
+            password=secrets.token_urlsafe(32)
+            key=generate_private_key(public_exponent=65537,key_size=3072)
+            name=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'SchoolFlow QR Attendance')])
+            now=datetime.now(timezone.utc)
+            certificate=(x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+                         .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(days=1))
+                         .not_valid_after(now+timedelta(days=10000)).sign(key,hashes.SHA256()))
+            keystore=pkcs12.serialize_key_and_certificates(b'schoolflow',key,certificate,None,serialization.BestAvailableEncryption(password.encode()))
+            private=dict(keystore=base64.b64encode(keystore).decode(),password=password)
+            row=QRRelease(id=1,encrypted=cipher().encrypt(json.dumps(private).encode()),fingerprint=certificate.fingerprint(hashes.SHA256()).hex(),published={})
+            db.session.add(row)
+        signing=json.loads(cipher().decrypt(row.encrypted))
+        fingerprint=row.fingerprint
+        db.session.commit()
+        return jsonify(**signing,fingerprint=fingerprint),200,{'Cache-Control':'no-store'}
+    @bp.post('/api/app-builder/qr-attendance/publish')
+    def qr_publish():
+        claims=authenticate_builder(QR_WORKFLOW);data=payload();lock()
+        row=db.get_or_404(QRRelease,1)
+        version=data.get('version_code');label=data.get('version_name');digest=data.get('sha256');size=data.get('size')
+        if (type(version) is not int or not 1<=version<=2100000000 or not re.fullmatch(r'[0-9]+(?:\.[0-9]+){1,3}',str(label))
+            or not re.fullmatch(r'[a-f0-9]{64}',str(digest)) or type(size) is not int or not 100000<=size<=250000000
+            or data.get('fingerprint')!=row.fingerprint or data.get('package')!='com.schoolflow.gate'
+            or data.get('source_commit')!=claims['sha']):
+            raise ValueError('Provide verified metadata for the signed QR Attendance APK.')
+        tag='qr-attendance-'+str(version)+'-'+str(claims['run_id'])+'-'+str(claims['run_attempt'])
+        url='https://github.com/'+REPOSITORY+'/releases/download/'+tag+'/SchoolFlow-QR-Attendance.apk'
+        release=dict(version_code=version,version_name=label,url=url,sha256=digest,size=size,source_commit=claims['sha'])
+        if row.published==release:return jsonify(published=True)
+        if version<=row.published.get('version_code',0):abort(409,'QR Attendance release versions must increase.')
+        row.published=release
+        db.session.commit()
+        return jsonify(published=True)
     def private_school():
         identity=getattr(g,'school_identity',None) or {}
         if identity.get('demo') or not identity.get('scope'):return None
@@ -90,6 +144,12 @@ def configure_school_apps(app,db):
         spec,build,row=current(school)
         return dict(name=spec['name'],has_logo=bool(spec['logo_sha256']!=hashlib.sha256(b'').hexdigest()),state=build.state if build else 'not-requested',error=build.error if build else '',version=row.version if row else 0,can_prepare=bool(session.get('owner_id')) and not session.get('staff_id'),ready=bool(build and build.state=='ready'),sequence=build.sequence if build else 0)
     def releases(rows):
+        qr=qr_release()
+        for row in rows:
+            if row['key'] in ('qr','face') and qr:
+                row.update(platform='apk',url=qr['url'],version=qr['version_name'],size=str(qr['size'])+' bytes',
+                           sha256=qr['sha256'],source_commit=qr['source_commit'],
+                           notes='Official SchoolFlow QR Attendance APK. Future versions appear in the app. Register this installation using your school’s attendance device settings.')
         school=private_school()
         if not school:return rows
         spec,build,_=current(school)
