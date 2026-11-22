@@ -313,8 +313,11 @@ def configure_school_settings(app,db,Student,Employee):
                 save_config(key,payload)
             elif page=='weightage':
                 campus=choice('campus','campus');key='exam:weightage:'+campus;payload={}
-                for r in items('test-type',campus):payload[str(r.id)]=number(request.form.get('weight_'+str(r.id),'0'))
-                if sum(Decimal(x) for x in payload.values())>100:raise ValueError('Total weightage cannot exceed 100%.')
+                for r in items('test-type',campus):
+                    enabled=request.form.get('include_'+str(r.id))=='on'
+                    payload[str(r.id)]=str(number(request.form.get('weight_'+str(r.id),'0'))) if enabled else '0'
+                total=sum(Decimal(x) for x in payload.values())
+                if total not in (0,100):raise ValueError('Included test weights must total exactly 100%, or disable all types to keep annual weighting off.')
                 save_config(key,payload)
             elif action=='reorder':
                 current=items(kind);ordered=request.form.getlist('order_ids');lookup={str(r.id):r for r in current}
