@@ -137,6 +137,23 @@ def configure_student_import(app,db,Student):
                     if isinstance(cell.value,str):cell.data_type='s'
         output=io.BytesIO();wb.save(output);output.seek(0)
         return send_file(output,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='schoolflow-student-import.xlsx')
+    @bp.get('/historical-payments-template.xlsx')
+    def historical_payments_template():
+        """Reference-only register: historical receipts must never be posted as new cash."""
+        wb=Workbook();ws=wb.active;ws.title='Historical Payments'
+        ws.append(['Admission No','Student Name','Old Receipt No','Payment Date (YYYY-MM-DD)','Fee Month (YYYY-MM)','Fee Head','Amount Received (PKR)','Payment Method','Old System Reference','Notes'])
+        ws.freeze_panes='A2'
+        instructions=wb.create_sheet('Instructions')
+        for message in (
+            'Historical payments register — REFERENCE ONLY; this workbook is not accepted by the student import uploader.',
+            'Enter one row per old receipt allocation. If a receipt paid two fee heads, use two rows and keep the same receipt number.',
+            'Record only amounts already received by the old school; never post them again as new SchoolFlow collections.',
+            'Opening arrears in the Students import must be the outstanding unpaid balance AFTER these historical payments.',
+            'Preserve original receipts for audit and reconciliation. Historical payment import is not yet implemented.',
+            'Dates must be YYYY-MM-DD; fee month must be YYYY-MM. Keep admission and receipt numbers as text.',
+        ):instructions.append([message])
+        out=io.BytesIO();wb.save(out);out.seek(0)
+        return send_file(out,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='schoolflow-historical-payments-register.xlsx')
     @bp.post('/upload')
     def upload():
         file=request.files.get('file')
