@@ -565,7 +565,7 @@ def configure_operations(app, db, Student, Employee):
                     reminder_previews.append(dict(student=student,message=msg))
                 if not reminder_previews:raise ValueError('Selected students no longer have outstanding fees.')
         archived_rows=Workflow.query.filter_by(kind='queries',status='Voided').order_by(Workflow.id.desc()).all() if kind=='queries' else []
-        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,archived_rows=archived_rows,increment_token=secrets.token_urlsafe(24),reminder_students=reminder_students,reminder_message=reminder_message,reminder_previews=reminder_previews,sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind=='queries' and app.extensions.get('sms_models') else []))
+        return render('register.html',title=TITLES[kind],kind=kind,schema=schema,rows=rows,archived_rows=archived_rows,increment_token=secrets.token_urlsafe(24),reminder_students=reminder_students,reminder_message=reminder_message,reminder_previews=reminder_previews,sms_devices=(app.extensions['sms_models']['device'].query.filter_by(active=True).all() if kind in ('queries','auto-reminders') and app.extensions.get('sms_models') else []))
 
     @bp.route('/approve-students',methods=['POST'])
     def approve_students():
