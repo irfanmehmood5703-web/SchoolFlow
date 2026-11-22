@@ -54,6 +54,18 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertEqual(self.m['item'].query.count(),0)  # GET must stay read-only
         self.assertNotIn('auto',helper['subject_config']('Not in catalog'))
 
+    def test_subject_screen_uses_one_catalog_and_keeps_advanced_editor(self):
+        db.session.add(self.rm['settings'](category='subject',value='English',class_name=''))
+        db.session.commit()
+        page=self.c.get('/workspace/core/exam/subjects')
+        self.assertEqual(page.status_code,200)
+        self.assertEqual(page.data.count(b'class="form-card subject-unified-section"'),1)
+        self.assertNotIn(b'Subjects from this school \\xc2\\xb7 Automatic',page.data)
+        self.assertNotIn(b'Automatically available school subjects',page.data)
+        self.assertIn(b'Customise settings',page.data)
+        self.assertIn(b'Advanced: saved subject settings (0)',page.data)
+        self.assertEqual(self.m['item'].query.count(),0)
+
     def test_new_school_subject_auto_syncs_into_exam_settings_once(self):
         data={'_csrf':self.csrf,'category':'subject','value':'Islamiat','class_name':'Class A'}
         response=self.c.post('/records/options',data=data)
