@@ -215,8 +215,23 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
     def app_challan(code,sid,bid):
         f,rows=family_rows()
         if not f:abort(403)
-        s,d=selected(rows,sid);bill=ops['bill'].query.filter_by(id=bid,student_id=sid).first_or_404()
-        return render('challan',s,d,bill=bill)
+        s,d=selected(rows,sid)
+        blocked=check(s,d,'fees')
+        if blocked:return blocked
+        bill=ops['bill'].query.filter_by(id=bid,student_id=sid).first_or_404()
+        branding=app.extensions['challan_branding_helpers']
+        context=branding['print_context']([bill],'parent',{})
+        sheet=context['sheets'][0]
+        if sheet['school']['institute_name']=='SchoolFlow':
+            sheet['school']['institute_name']=g.parent_school.name
+        sheet['config'].update(layout='portrait',copy_1='Parent copy',copy_2='',copy_3='')
+        item=sheet['entries'][0]
+        if item['photo']:item['photo']=url_for('parent_portal.app_photo',code=code,sid=sid)
+        if item['payment_qr']:
+            payment_url=app.extensions['challan_consumer_helpers']['payment_url'](bill,item['consumer'],sheet['config'])
+            item['payment_qr']=branding['inline_qr'](payment_url) if payment_url else ''
+        return render_template('challan_print.html',title=f'Fee challan #{bid}',parent_back=link('fees',sid),
+                               school_logo=url_for('parent_portal.app_logo',code=code),**context)
     @bp.get('/app/logo')
     def app_logo(code):
         if not principal():abort(403)

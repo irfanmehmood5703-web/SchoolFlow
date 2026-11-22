@@ -9,7 +9,7 @@ def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').re
 android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
-    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 6; versionName '0.6-acceptance' }
+    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 7; versionName '0.7-acceptance' }
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'

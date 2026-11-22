@@ -55,7 +55,11 @@ class ParentAppTests(unittest.TestCase):
         self.seed_app();p=self.parent();r=self.page(p,'fees')
         for value in [b'Rs 2,000.00',b'Rs 500.00',b'Rs 100.00',b'Rs 1,400.00',b'Partly paid']:self.assertIn(value,r.data)
         self.assertNotIn(b'9,900.00',r.data)
-        self.assertEqual(p.get(self.base+'/app/students/1/challans/1').status_code,200)
+        printout=p.get(self.base+'/app/students/1/challans/1')
+        self.assertEqual(printout.status_code,200)
+        for label in (b'Parent copy',b'Challan reference QR',b'Receipt discount',b'<th>Remaining</th><td>1,400</td>',b'Back to fees'):
+            self.assertIn(label,printout.data)
+        self.assertNotIn(b'Branding settings',printout.data)
         self.assertEqual(p.get(self.base+'/app/students/2/challans/1').status_code,404)
         self.assertEqual(p.get(self.base+'/app/students/3/challans/1').status_code,404)
     def test_parent_requests_are_idempotent_scoped_and_csrf_protected(self):

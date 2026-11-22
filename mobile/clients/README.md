@@ -118,7 +118,7 @@ buttons use the native print service after loading;
 the toolbar scrolls on small screens and shows the installed school app name.
 
 
-## Dedicated Teacher workspace (source protocol 9)
+## Dedicated Teacher workspace
 
 The Teacher client opens `/teacher-app`. An active Teacher staff account and
 linked employee are required. HRM assigns campus/class/section/subject; Users &

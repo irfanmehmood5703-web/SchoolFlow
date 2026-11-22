@@ -84,7 +84,10 @@ def configure_challan_branding(app,db,Student):
     def reference_qr(bill,consumer):
         # Identifiers only; this QR grants no login or payment authority.
         payload=json.dumps(dict(type='SchoolFlow fee challan',challan=str(bill.id),reference=consumer or ''),sort_keys=True,separators=(',',':'))
-        stream=io.BytesIO();qrcode.make(payload).save(stream,format='PNG')
+        return inline_qr(payload)
+
+    def inline_qr(value):
+        stream=io.BytesIO();qrcode.make(value).save(stream,format='PNG')
         return 'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode('ascii')
 
     @bp.get('/student-photo/<int:bill_id>')
@@ -120,5 +123,5 @@ def configure_challan_branding(app,db,Student):
             groups[key]['entries'].append(dict(bill=bill,student=s,details=d,photo=url_for('challan_branding.student_photo',bill_id=bill.id) if photo else '',reference_qr=reference_qr(bill,consumers.get(bill.id,'')) if groups[key]['config']['show_challan_qr'] else '',consumer=consumers.get(bill.id,''),payment_qr=url_for('challan_payment_qr',bill_id=bill.id) if app.extensions['challan_consumer_helpers']['payment_url'](bill,consumers.get(bill.id,''),groups[key]['config']) else ''))
             groups[key]['total']+=bill.remaining
         return dict(sheets=list(groups.values()))
-    app.extensions['challan_branding_helpers']=dict(settings=settings,print_context=print_context,reference_qr=reference_qr)
+    app.extensions['challan_branding_helpers']=dict(settings=settings,print_context=print_context,reference_qr=reference_qr,inline_qr=inline_qr)
     app.register_blueprint(bp)
