@@ -288,7 +288,7 @@ class SchoolSettingsTests(unittest.TestCase):
         for name,text in DEFAULT_STUDENT_SMS.items():
             self.assertTrue(text.strip(),name)
             self.assertLessEqual(len(text),5000,name)
-            self.assertTrue(set(re.findall(r'\\[([A-Za-z0-9_]+)\\]',text))<=supported,name)
+            self.assertTrue(set(re.findall(r'\[([A-Za-z0-9_]+)\]',text))<=supported,name)
         self.assertEqual(self.m['setting'].query.count(),0)
         for campus in ('Campus A','Campus B'):
             response=self.c.get('/workspace/core/exam/sms?campus='+campus.replace(' ','%20'))
@@ -311,7 +311,6 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertIn(custom.encode(),campus_a.data)
         self.assertIn(b'Happy Birthday, [studentName]!',campus_a.data)
         self.assertIn(b'Dear Parent, [studentName] obtained',campus_a.data)
-        self.assertIn(b'dear Parent,' .strip(), b'dear Parent,') # No changes to existing school text.
         self.assertEqual(self.config('exam:sms:Campus A').data['Present'],'')
         payload={'campus':'Campus A','version':'1'}
         payload.update({'sms_'+str(i): DEFAULT_STUDENT_SMS[name] for i,name in enumerate(STUDENT_SMS)})
