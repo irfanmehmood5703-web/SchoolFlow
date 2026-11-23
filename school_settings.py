@@ -45,6 +45,66 @@ EXAM_PAGES=[('display','Mark Display Names'),('subject-groups','Subject Groups')
 HRM_PAGES=[('employee-fields','Employee Form Settings'),('print-templates','Print Templates'),('allowances','Allowance / Deduction'),('departments','Departments'),('designation-groups','Designation Groups'),('designations','Manage Designations'),('employment-types','Employment Types'),('shift-templates','Shift Templates'),('sms','HRM SMS Templates'),('attendance-lock','Lock Attendance'),('branding','HRM Brandings')]
 HRM_LAYOUTS=['Individual Attendance Report','Combine Attendance Report','Salary Slip Report','Salary Signature Report','Salary Payment Report','Monthly Attendance','Salary Increment Sheet','Bank Salary Sheet']
 EXAM_LAYOUTS=['Attendance Sheet','Roll No. Slip','Result Card','Award List','Individual Attendance Report','Combine Attendance Report','Class/section attendance','Combined Subject Result Card','Combined Subject Report','Term Wise Report','Subject Group Wise Report','Combined And Subject Wise Report','Month Wise Report','Absentees Print Report','Date Sheet','Attendance Summary','Department Wise Report','Admission Query','Admission Form','Admission Query Blank','Admission Form Blank','Print Fee Reminder','General Branding']
+
+# Built-in Exam/Admission report designs for every new school. These templates
+# belong to SchoolFlow source code, not any one tenant's database. Explicit
+# school/campus edits continue to override them via the normal saved settings.
+_EXAM_BRANDING_COPY = {
+    'Attendance Sheet': ('Student Attendance Sheet', '<p>Daily attendance register</p>'),
+    'Roll No. Slip': ('Examination Roll Number Slip', '<p>Please verify your exam details before appearing for the examination.</p>'),
+    'Result Card': ('Student Result Card', '<p><strong>Student:</strong> [studentName] &nbsp; <strong>Class:</strong> [className] &nbsp; <strong>Session:</strong> [SessionName]</p><p><strong>Examination:</strong> [examName] &nbsp; <strong>Roll No:</strong> [rollNo]</p>'),
+    'Award List': ('Examination Award List', '<p><strong>Examination:</strong> [examName]</p>'),
+    'Individual Attendance Report': ('Individual Attendance Report', '<p>Student attendance details</p>'),
+    'Combine Attendance Report': ('Combined Attendance Report', '<p>Consolidated attendance information</p>'),
+    'Class/section attendance': ('Class / Section Attendance', '<p>Class and section attendance summary</p>'),
+    'Combined Subject Result Card': ('Combined Subject Result Card', '<p>Subject-wise examination performance</p>'),
+    'Combined Subject Report': ('Combined Subject Report', '<p>Consolidated subject performance</p>'),
+    'Term Wise Report': ('Term-Wise Examination Report', '<p>Term-wise performance overview</p>'),
+    'Subject Group Wise Report': ('Subject Group-Wise Report', '<p>Grouped subject performance</p>'),
+    'Combined And Subject Wise Report': ('Combined and Subject-Wise Report', '<p>Overall and subject-wise performance</p>'),
+    'Month Wise Report': ('Month-Wise Examination Report', '<p>Monthly academic performance</p>'),
+    'Absentees Print Report': ('Absentees Report', '<p>Absence records for the selected period</p>'),
+    'Date Sheet': ('Examination Date Sheet', '<p><strong>Examination:</strong> [examName]</p>'),
+    'Attendance Summary': ('Attendance Summary', '<p>Attendance summary for the selected period</p>'),
+    'Department Wise Report': ('Department-Wise Report', '<p>Department-wise academic information</p>'),
+    'Admission Query': ('Admission Enquiry', '<p>Admission enquiry record</p>'),
+    'Admission Form': ('Student Admission Form', '<p>Student registration and admission details</p>'),
+    'Admission Query Blank': ('Admission Enquiry Form', '<p>Admission enquiry and contact information</p>'),
+    'Admission Form Blank': ('Blank Admission Form', '<p>Complete the student's admission information in the fields below.</p>'),
+    'Print Fee Reminder': ('School Fee Reminder', '<p>Fee payment information and outstanding dues</p>'),
+    'General Branding': ('Official School Report', '<p>Official school record</p>'),
+}
+assert set(_EXAM_BRANDING_COPY)==set(EXAM_LAYOUTS)
+
+def default_exam_branding(layout):
+    """Render-ready starter brandings, always dynamically bound to the current school.
+
+    Core report tables are supplied by their existing report views; defaults
+    style only the surrounding header/body/footer so official values are never
+    duplicated into a fabricated table or stored in another school's records.
+    """
+    if layout not in _EXAM_BRANDING_COPY:return {}
+    heading, body = _EXAM_BRANDING_COPY[layout]
+    return {
+        'header': (
+            '<div style="text-align:center; margin:0 0 12px; padding:10px 8px;'
+            ' border-bottom:2px solid #176b4a">'
+            '<p style="margin:0">[institute_logo]</p>'
+            '<h2 style="color:#176b4a; margin:2px 0">[institute_name]</h2>'
+            '<p style="margin:2px 0">[campus_name]</p>'
+            '<h3 style="margin:6px 0 2px">'+heading+'</h3>'
+            '</div>'
+        ),
+        'body': body,
+        'footer': (
+            '<div style="margin-top:12px; padding-top:8px; border-top:1px solid #a9c4b5">'
+            '<p style="text-align:right; margin:4px 0">Date: [todayDate]</p>'
+            '<p style="margin:8px 0">Class Teacher: ____________________'
+            ' &nbsp;&nbsp; Principal: ____________________</p>'
+            '</div>'
+        ),
+    }
+
 CAMPUS_TAGS='institute_name campus_address campus_name campus_city campus_open_date campus_contact campus_email institute_logo slogan salary_date salary_month cheque_no total_salary_amount color_primary color_secondary color_3 color_4'.split()
 EMP_TAGS='emp_id emp_name emp_father_name emp_fname emp_cnic emp_email emp_dob emp_contact emp_photo emp_city home_phone emergency_contact_name emergency_contact_no emp_address contact_relation gender marital_status emp_marital_status emp_reference emp_notes department_name designation_group designation_name employment_type joining_date bank_info emp_status lecture_assigned leaving_date emp_qr emp_degrees emp_documents agreement_no probation_from probation_to son_daughter_of mr_ms he_she he_she_capital his_her his_her_capital him_her plan_basic_salary plan_security_payment plan_net_salary annual_increment annual_increment_month plan_earning_basic_salary plan_earning_security_payment_return plan_deduction_advance_salary plan_deduction_security_payment date time qr_status earnings deductions attendance_deduction this_month_deduction this_month_compensation net_salary salary_status'.split()
 STUDENT_TAGS='sid studentName stdPic rollNo regNo dob gender religion currentStatus queryDate admissionDate studentCnic studentContactNo studentEmail birthCity bloodGroup caste identificationMark bioId feePlanList fatherName fatherMobile fatherCnic whatsappNo fatherEmail fatherProfession guardianName guardianRelation guardianCnic motherName motherMobile motherEmail motherCnic currentAddress permanentAddress className sectionName SessionName studentGroup parentsAppOTP familyNo examRollNo examHall rollnosliptitle Examstartingdate examtimeduration parentsAppLink consumerNumber awardList_present_stds awardList_absent_stds awardList_leave_stds qr_att_status qr_in_status todayDate currentMonth examDate Subject examName TotalMarks ObtMarks percentage grade remarks attendance subjInfo subjInfoEnd challanNo dueDate expiryDate challanMonth challanStatus challanTotal particularSecStart particularSecEnd particularName particularPayable challanConsumerNumber arrears thisMonth totalPayable totalRemPayable totalPaidAmount totalDiscountGiven currentTotal currentPaid curRemaining curDiscount'.split()
@@ -321,12 +381,12 @@ def configure_school_settings(app,db,Student,Employee):
         rows=items(module+'-branding',campus)
         row=next((r for r in rows if r.name==layout),None)
         if not row and campus:row=next((r for r in items(module+'-branding','') if r.name==layout),None)
-        if not row:return Markup('')
+        if not row and not (module=='exam' and layout in EXAM_LAYOUTS):return Markup('')
         school=campus_values(campus);data={**school,**(values or {})}
         if campus:
             for key in ('institute_name','campus_name','campus_address','campus_contact','campus_email','campus_city','campus_open_date','slogan'):data[key]=school[key]
         assets=tag_values['assets']('student' if module=='exam' else 'employee',person)
-        text=row.data.get(part,'')
+        text=(row.data if row else default_exam_branding(layout)).get(part,'')
         unresolved=getattr(request,'unresolved_branding_tags',set());unresolved.update(missing_tags(text,data,assets));request.unresolved_branding_tags=unresolved
         return Markup(clean_html(expand(text,data,True,assets)))
 
@@ -550,6 +610,8 @@ def configure_school_settings(app,db,Student,Employee):
         # Merely opening this page must never mutate school data.
         auto_subjects=[]
         prefill_subject=''
+        prefill_layout=request.args.get('prefill_layout','') if module=='exam' and page=='branding' else ''
+        if prefill_layout and prefill_layout not in EXAM_LAYOUTS:raise ValueError('Choose a supported report layout.')
         if module=='exam' and page=='subjects':
             customised={r.name.casefold() for r in items('subject')}
             seen=set()
@@ -599,7 +661,7 @@ def configure_school_settings(app,db,Student,Employee):
             response.headers['Cache-Control']='private, no-store';return response
         subject_auto_defaults=subject_config(prefill_subject) if prefill_subject else {}
         subject_default_group=default_subject_group() if module=='exam' and page=='subjects' else ''
-        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject,subject_auto_defaults=subject_auto_defaults,subject_default_group=subject_default_group)
+        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject,prefill_layout=prefill_layout,default_exam_branding=default_exam_branding,subject_auto_defaults=subject_auto_defaults,subject_default_group=subject_default_group)
 
     @bp.route('/hrm/assign-shifts',methods=['GET','POST'])
     def assign_shifts():
@@ -832,5 +894,5 @@ def configure_school_settings(app,db,Student,Employee):
         values=tag_values['employee'](person,details) if person else {};values.update(salary_month=month,date=month)
         return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',branding_values=values,details=details,employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
 
-    app.extensions['school_settings_helpers']=dict(result_rows=result_rows,config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,register_catalog_subject=register_catalog_subject,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
+    app.extensions['school_settings_helpers']=dict(result_rows=result_rows,config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,register_catalog_subject=register_catalog_subject,default_exam_branding=default_exam_branding,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
     app.register_blueprint(bp)
