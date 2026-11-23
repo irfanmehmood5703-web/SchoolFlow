@@ -33,16 +33,60 @@
 {% set d=row.data if row else (default_exam_branding(prefill_layout) if module=='exam' and page=='branding' and prefill_layout else (subject_auto_defaults if page=='subjects' and prefill_subject else {})) %}{% if page=='allowances' %}<p><a class="button secondary" href="{{url_for('ops.plans')}}">Use pay heads / preview salary rules</a></p>{% elif module=='exam' and page in ['subjects','class-subjects','test-types'] %}<p><a class="button secondary" href="{{url_for('ops.examination',kind='awards')}}">Create an award list using these settings</a></p>{% endif %}
 {% if module=='exam' and page=='branding' %}
 {% if ready_preview %}
+<style media="print">
+body *{visibility:hidden!important}
+.exam-branding-preview-paper,.exam-branding-preview-paper *{visibility:visible!important}
+.exam-branding-preview-paper{position:absolute!important;top:0!important;left:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:8mm!important;border:0!important;box-shadow:none!important;background:#fff!important}
+.exam-branding-preview-paper table{width:100%!important}
+@page{size:A4;margin:9mm}
+</style>
+{% endif %}
+{% if ready_preview %}
 <section class="form-card exam-branding-preview" id="exam-branding-preview" aria-label="Exam branding sample preview">
   <div class="exam-branding-preview-heading"><div><h2>Sample Preview · {{ready_preview_name}}</h2>
   <p class="muted">Preview for {{ready_preview_campus or 'the school default'}}. This shows the selected branding with fictional details; it does not create or change any report or saved setting.</p></div>
   <a class="button secondary" href="{{url_for('school_settings.index',module=module,page=page)}}">Close preview</a></div>
+  <div class="exam-branding-preview-toolbar">
+   <form method="get" action="{{url_for('school_settings.index',module=module,page=page)}}#exam-branding-preview" class="exam-branding-campus-form">
+    <input type="hidden" name="preview_layout" value="{{ready_preview_name}}">
+    <label for="brand-sample-campus">Preview campus</label>
+    <select id="brand-sample-campus" name="preview_campus">{% for available_campus in preview_campus_options %}<option value="{{available_campus}}" {{'selected' if available_campus==ready_preview_campus else ''}}>{{available_campus}}</option>{% endfor %}</select>
+    <button class="button secondary" type="submit">Apply campus</button>
+   </form>
+   <button type="button" class="button" onclick="window.print()">Print sample</button>
+  </div>
   <div class="exam-branding-preview-paper" aria-label="Sample of the printed branding">
     <div class="branding-section">{{ready_preview.header}}</div>
     <div class="branding-section">{{ready_preview.body}}</div>
-    <div class="exam-branding-sample-table">
-      <strong>Report data table</strong>
-      <p>The real table, marks and attendance data will be added here automatically when this report is printed.</p>
+    <div class="exam-branding-sample-data">
+      <p class="sample-data-label">ILLUSTRATIVE SAMPLE — fictional records, not saved</p>
+      {% if ready_preview_name in ['Result Card','Combined Subject Result Card','Combined Subject Report','Subject Group Wise Report','Combined And Subject Wise Report','Term Wise Report','Month Wise Report','Department Wise Report'] %}
+      <table class="exam-preview-table">
+       <thead><tr><th>Subject</th><th>Maximum</th><th>Obtained</th><th>Result</th></tr></thead>
+       <tbody><tr><td>English</td><td>100</td><td>82</td><td>Pass</td></tr>
+       <tr><td>Mathematics</td><td>100</td><td>91</td><td>Pass</td></tr>
+       <tr><td>Urdu</td><td>100</td><td>78</td><td>Pass</td></tr>
+       <tr><td>Science</td><td>100</td><td>86</td><td>Pass</td></tr>
+       <tr><td>Islamiat</td><td>100</td><td>84</td><td>Pass</td></tr></tbody>
+       <tfoot><tr><th>Total</th><th>500</th><th>421</th><th>84.20%</th></tr></tfoot>
+      </table>
+      <div class="exam-preview-summary"><span><small>Total marks</small><strong>421 / 500</strong></span><span><small>Percentage</small><strong>84.20%</strong></span><span><small>Sample grade</small><strong>A</strong></span></div>
+      <p class="sample-data-note">Sample marks and grade are for design illustration only. Actual reports use the school's configured examination data and grading policy.</p>
+      {% elif ready_preview_name in ['Attendance Sheet','Individual Attendance Report','Combine Attendance Report','Class/section attendance','Absentees Print Report','Attendance Summary'] %}
+      <table class="exam-preview-table"><thead><tr><th>Student</th><th>Class</th><th>Present</th><th>Absent</th><th>Attendance</th></tr></thead>
+      <tbody><tr><td>Fictional Student</td><td>One</td><td>21</td><td>1</td><td>95.45%</td></tr><tr><td>Sample Student B</td><td>One</td><td>20</td><td>2</td><td>90.91%</td></tr><tr><td>Sample Student C</td><td>One</td><td>22</td><td>0</td><td>100%</td></tr></tbody></table>
+      {% elif ready_preview_name=='Date Sheet' %}
+      <table class="exam-preview-table"><thead><tr><th>Date</th><th>Subject</th><th>Time</th><th>Room</th></tr></thead>
+      <tbody><tr><td>01 Mar</td><td>English</td><td>9:00 – 11:00 AM</td><td>A1</td></tr><tr><td>03 Mar</td><td>Mathematics</td><td>9:00 – 11:00 AM</td><td>A1</td></tr><tr><td>05 Mar</td><td>Science</td><td>9:00 – 11:00 AM</td><td>A1</td></tr></tbody></table>
+      {% elif ready_preview_name=='Award List' %}
+      <table class="exam-preview-table"><thead><tr><th>Roll no.</th><th>Student</th><th>Subject</th><th>Marks / 100</th></tr></thead>
+      <tbody><tr><td>001</td><td>Fictional Student</td><td>Mathematics</td><td>91</td></tr><tr><td>002</td><td>Sample Student B</td><td>Mathematics</td><td>86</td></tr><tr><td>003</td><td>Sample Student C</td><td>Mathematics</td><td>79</td></tr></tbody></table>
+      {% elif ready_preview_name=='Roll No. Slip' %}
+      <div class="exam-preview-info-grid"><div><small>Student name</small><strong>Fictional Student</strong></div><div><small>Exam roll number</small><strong>001</strong></div><div><small>Class / Section</small><strong>One / A</strong></div><div><small>Exam hall</small><strong>Hall A</strong></div><div><small>Reporting time</small><strong>8:30 AM</strong></div><div><small>Exam date</small><strong>01 March</strong></div></div>
+      {% else %}
+      <div class="exam-preview-info-grid"><div><small>Name</small><strong>Fictional Student</strong></div><div><small>Class</small><strong>One</strong></div><div><small>Reference</small><strong>Sample 001</strong></div><div><small>School / campus</small><strong>{{ready_preview_campus or 'Default campus'}}</strong></div></div>
+      <p class="sample-data-note">Details and additional form fields will appear according to the selected report's actual data.</p>
+      {% endif %}
     </div>
     <div class="branding-section">{{ready_preview.footer}}</div>
   </div>
@@ -56,7 +100,7 @@
  </div>
  <div class="subject-auto-grid">
  {% for layout in layouts %}{% set overrides=items('exam-branding')|selectattr('name','equalto',layout)|list %}{% set global_override=overrides|selectattr('scope','equalto','')|list %}{% set definition=global_override[0] if global_override else (overrides[0] if overrides else none) %}
- {% set design_campus=definition.scope if definition and definition.scope else (campuses[0] if campuses else '') %}
+ {% set design_campus=definition.scope if definition and definition.scope else preview_preferred_campus %}
  {% set design_preview=url_for('school_settings.index',module=module,page=page,preview_layout=layout,preview_campus=design_campus) %}
  <div class="subject-auto-tile">
   <div class="subject-tile-top"><strong>{{layout}}</strong><a class="subject-state {{'is-configured' if definition else 'is-automatic'}}" href="{{design_preview}}#exam-branding-preview" title="Open sample preview of {{layout}}">{{'Customised' if definition else 'Ready to use'}}</a></div>
