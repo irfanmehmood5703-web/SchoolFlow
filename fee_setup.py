@@ -254,7 +254,8 @@ def configure_fee_setup(app,db,Student):
                 if key in source:raise ValueError('This saved schedule contains duplicate heads. Correct the source before loading it.')
                 source[key]=dict(key=key,amount=money(x.data['amount']),minimum=None,maximum=None,first_only=False,month_override=False,months=[])
 
-        editor=[dict(h,**{'line':source.get(h['key'],dict(amount=0,minimum=None,maximum=None,first_only=False,include_first=False,month_override=False,months=[])), 'selected': h['key'] in REQUIRED_FEE_HEADS or h['key'] in source}) for h in heads()]
+        ordered_heads=sorted(heads(),key=lambda h: (0, REQUIRED_FEE_HEADS.index(h['key'])) if h['key'] in REQUIRED_FEE_HEADS else (1,h['label'].casefold()))
+        editor=[dict(h,**{'line':source.get(h['key'],dict(amount=0,minimum=None,maximum=None,first_only=False,include_first=False,month_override=False,months=[])), 'selected': h['key'] in REQUIRED_FEE_HEADS or h['key'] in source}) for h in ordered_heads]
         return render_template('fee_schedules.html',title='Fee schedules',rows=FeeSchedule.query.order_by(FeeSchedule.name,FeeSchedule.campus,FeeSchedule.class_name).all(),row=row,defaults=defaults,previous=list(previous.values()),editor=editor,options=options,months=calendar.month_name,annual=annual,label=label,required_heads=REQUIRED_FEE_HEADS)
 
     @bp.get('/preview/<int:schedule_id>')
