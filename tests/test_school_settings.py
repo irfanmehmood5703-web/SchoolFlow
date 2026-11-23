@@ -3,7 +3,7 @@ import os,re,unittest
 from datetime import date
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Student,Employee
-from school_settings import EXAM_PAGES,HRM_PAGES,grade_band_for_percentage,STUDENT_SMS,DEFAULT_STUDENT_SMS,STUDENT_TAGS,CAMPUS_TAGS,STUDENT_SMS_DEFAULTS_VERSION
+from school_settings import EXAM_PAGES,HRM_PAGES,EXAM_LAYOUTS,default_exam_branding,grade_band_for_percentage,STUDENT_SMS,DEFAULT_STUDENT_SMS,STUDENT_TAGS,CAMPUS_TAGS,STUDENT_SMS_DEFAULTS_VERSION
 
 class SchoolSettingsTests(unittest.TestCase):
     def setUp(self):
@@ -367,6 +367,62 @@ class SchoolSettingsTests(unittest.TestCase):
         message=self.ops['workflow'].query.filter_by(kind='message').one();self.assertEqual(message.status,'Provider not configured')
         self.assertIn('Dear Fictional Teacher, 2026-09-07: present.',message.data['messages'][0]['text'])
         self.assertEqual(self.post('hrm','sms',campus='Campus A',version='1',sms_0='[inventedTag]').status_code,422)
+    def test_exam_branding_defaults_cover_every_layout_without_tenant_writes(self):
+        self.assertEqual(len(EXAM_LAYOUTS),23)
+        self.assertEqual(self.m['item'].query.count(),0)
+        page=self.c.get('/workspace/core/exam/branding')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Ready-to-use Exam Brandings (23)',page.data)
+        self.assertIn(b'All 23 built-in Exam Brandings are already active.',page.data)
+        for layout in EXAM_LAYOUTS:
+            template=default_exam_branding(layout)
+            self.assertEqual(set(template),{'header','body','footer'},layout)
+            self.assertIn('[institute_name]',template['header'])
+            self.assertIn('[institute_logo]',template['header'])
+            self.assertIn('[todayDate]',template['footer'])
+            self.assertTrue(all(template.values()),layout)
+            self.assertIn(layout.encode(),page.data)
+        self.assertEqual(self.m['item'].query.count(),0)
+        self.assertEqual(self.m['setting'].query.count(),0)
+        self.assertEqual(self.c.get('/workspace/core/exam/branding?prefill_layout=Invalid%20Layout').status_code,422)
+        customized=self.c.get('/workspace/core/exam/branding?prefill_layout=Result%20Card')
+        self.assertEqual(customized.status_code,200)
+        self.assertIn(b'Create',customized.data)
+        self.assertIn(b'Result Card',customized.data)
+        self.assertIn(b'[institute_name]',customized.data)
+        self.assertEqual(self.m['item'].query.count(),0)
+
+    def test_builtin_exam_branding_renders_with_school_name_and_school_overrides(self):
+        SchoolProfile=app.extensions['institute_setup_models']['profile']
+        db.session.add(SchoolProfile(id=1,data={'name':'Synthetic Test School'}))
+        db.session.commit()
+        render=app.extensions['school_settings_helpers']['branding']
+        with app.test_request_context('/workspace/core/exam/branding'):
+            h=str(render('exam','Result Card','header','Campus A',{'studentName':'Fictional Student'},person=self.s))
+            b=str(render('exam','Result Card','body','Campus A',{'studentName':'Fictional Student'},person=self.s))
+            f=str(render('exam','Result Card','footer','Campus A',person=self.s))
+            self.assertIn('Synthetic Test School',h)
+            self.assertIn('Student Result Card',h)
+            self.assertIn('Fictional Student',b)
+            self.assertIn('Date:',f)
+            self.assertEqual(str(render('hrm','Combine Attendance Report','header','Campus A')),'')
+        self.assertEqual(self.m['item'].query.count(),0)
+        global_header='<h2>Global report for [institute_name]</h2>'
+        self.assertEqual(self.post('exam','branding',name='Result Card',campus='',header=global_header,
+                                   body='<p>Global result body</p>',footer='<p>Global footer</p>').status_code,302)
+        self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),1)
+        with app.test_request_context('/workspace/core/exam/branding'):
+            self.assertIn('Global report for Synthetic Test School',str(render('exam','Result Card','header','Campus B')))
+        campus_header='<h2>Campus A override</h2>'
+        self.assertEqual(self.post('exam','branding',name='Result Card',campus='Campus A',header=campus_header,
+                                   body='<p>Local result</p>',footer='<p>Principal</p>').status_code,302)
+        with app.test_request_context('/workspace/core/exam/branding'):
+            self.assertIn('Campus A override',str(render('exam','Result Card','header','Campus A')))
+            self.assertNotIn('Global report',str(render('exam','Result Card','header','Campus A')))
+            self.assertIn('Global report',str(render('exam','Result Card','header','Campus B')))
+            self.assertIn('Examination Date Sheet',str(render('exam','Date Sheet','header','Campus A')))
+        self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),2)
+
     def test_branding_sanitized_preview_no_writes_and_result_applies_campus(self):
         html='<h2>[institute_name]</h2><img src="https://evil.invalid/x" onerror="alert(1)"><script>alert(1)</script>'
         self.assertEqual(self.post('hrm','branding',name='Combine Attendance Report',campus='Campus A',header=html,body='[campus_name]',footer='Approved',action='preview').status_code,200)
