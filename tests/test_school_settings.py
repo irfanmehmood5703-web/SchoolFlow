@@ -190,6 +190,26 @@ class SchoolSettingsTests(unittest.TestCase):
             **{'in_'+str(day):'08:30' for day in range(7)},
             **{'out_'+str(day):'13:30' for day in range(7)}).status_code,422)
 
+    def test_student_shift_names_classes_not_enabled_at_selected_campus(self):
+        db.session.add(self.rm['settings'](category='class_name',value='Class B',class_name=''))
+        mapping=app.extensions['institute_setup_models']['mapping']
+        db.session.add(mapping(campus='Campus A',class_name='Class A',data={
+            'academic_session':'2027','sections':['A'],'groups':[],'fee_plans':[]},active=True))
+        db.session.commit()
+        data=dict(name='All classes',campus='Campus A',classes=['Class A','Class B'],
+                  section='',schedule_type='combined')
+        data.update({'in_'+str(day):'08:30' for day in range(7)})
+        data.update({'out_'+str(day):'13:30' for day in range(7)})
+        missing=self.post('exam','student-shifts',**data)
+        self.assertEqual(missing.status_code,422)
+        self.assertIn(b'Not enabled at Campus A campus: Class B',missing.data)
+        self.assertIn(b'Institute Setup',missing.data)
+        self.assertEqual(self.m['item'].query.filter_by(kind='student-shift').count(),0)
+        db.session.add(mapping(campus='Campus A',class_name='Class B',data={
+            'academic_session':'2027','sections':['A'],'groups':[],'fee_plans':[]},active=True))
+        db.session.commit()
+        self.assertEqual(self.post('exam','student-shifts',**data).status_code,302)
+
     def test_student_section_shift_overrides_default(self):
         def create(name,section,in_time):
             values=dict(name=name,campus='Campus A',classes=['Class A'],section=section,schedule_type='combined')
