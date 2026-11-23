@@ -50,6 +50,53 @@ EMP_TAGS='emp_id emp_name emp_father_name emp_fname emp_cnic emp_email emp_dob e
 STUDENT_TAGS='sid studentName stdPic rollNo regNo dob gender religion currentStatus queryDate admissionDate studentCnic studentContactNo studentEmail birthCity bloodGroup caste identificationMark bioId feePlanList fatherName fatherMobile fatherCnic whatsappNo fatherEmail fatherProfession guardianName guardianRelation guardianCnic motherName motherMobile motherEmail motherCnic currentAddress permanentAddress className sectionName SessionName studentGroup parentsAppOTP familyNo examRollNo examHall rollnosliptitle Examstartingdate examtimeduration parentsAppLink consumerNumber awardList_present_stds awardList_absent_stds awardList_leave_stds qr_att_status qr_in_status todayDate currentMonth examDate Subject examName TotalMarks ObtMarks percentage grade remarks attendance subjInfo subjInfoEnd challanNo dueDate expiryDate challanMonth challanStatus challanTotal particularSecStart particularSecEnd particularName particularPayable challanConsumerNumber arrears thisMonth totalPayable totalRemPayable totalPaidAmount totalDiscountGiven currentTotal currentPaid curRemaining curDiscount'.split()
 STUDENT_SMS=['Individual Marks','Subject Combined Marks','Combine Marks','QR Attendance','QR Absent','Absent','Present','Late','Leave','Short Leave','Off Day','Death Leave','Paper Leave','Admission Query','New Admission','Left/Expelled Student','Challan Generated','Challan Paid','Fee Defaulters','Student Birthday','Date Sheet','Roll No. Slip','Parents App OTP','General SMS 1','General SMS 2','General SMS 3']
 HRM_SMS=['Present','Absent','Late','Full Day Leave','Short Leave','Off Day','QR In/Out','QR Absent','Death Leave','Paper Leave','Generate Salary','Pay Salary','Birthday','New Joining','General SMS 1','General SMS 2','General SMS 3']
+
+# Centrally maintained starter SMS copy. These are read-through defaults, not
+# tenant records: every private school starts with the same editable templates.
+# The institute name is resolved from the currently selected school, never hard-coded.
+DEFAULT_STUDENT_SMS = {
+    'Individual Marks': 'Dear Parent, [studentName] obtained [ObtMarks] out of [TotalMarks] marks in [Subject]. Grade: [grade]. - [institute_name]',
+    'Subject Combined Marks': 'Dear Parent, the subject-wise result for [studentName] of [className] is ready. Please contact [institute_name] for details.',
+    'Combine Marks': 'Dear Parent, the combined examination result for [studentName] is available. Please review it with [institute_name].',
+    'QR Attendance': 'Dear Parent, QR attendance for [studentName] was recorded on [todayDate]. - [institute_name]',
+    'QR Absent': 'Dear Parent, the QR attendance record shows [studentName] absent on [todayDate]. Please contact [institute_name] if this is incorrect.',
+    'Absent': 'Dear Parent, [studentName] of [className] was absent on [todayDate]. Kindly ensure regular attendance. - [institute_name]',
+    'Present': 'Dear Parent, [studentName] was marked present on [todayDate]. - [institute_name]',
+    'Late': 'Dear Parent, [studentName] arrived late on [todayDate]. Please ensure timely arrival. - [institute_name]',
+    'Leave': 'Dear Parent, leave for [studentName] was recorded on [todayDate]. - [institute_name]',
+    'Short Leave': 'Dear Parent, short leave for [studentName] was recorded on [todayDate]. - [institute_name]',
+    'Off Day': 'Dear Parent, [todayDate] has been recorded as an off day for [studentName]. - [institute_name]',
+    'Death Leave': 'Dear Parent, compassionate leave for [studentName] has been recorded on [todayDate]. - [institute_name]',
+    'Paper Leave': 'Dear Parent, examination-related leave for [studentName] has been recorded on [todayDate]. - [institute_name]',
+    'Admission Query': 'Dear Parent, thank you for your admission enquiry at [institute_name]. Our office will contact you with further details.',
+    'New Admission': 'Welcome! [studentName] has joined [className] at [institute_name]. We wish our new student a successful year.',
+    'Left/Expelled Student': 'Dear Parent, the enrollment record for [studentName] has been updated. Please contact [institute_name] for details.',
+    'Challan Generated': 'Dear Parent, the fee challan for [studentName] has been generated. Amount: Rs. [challanTotal]. Due date: [dueDate]. - [institute_name]',
+    'Challan Paid': 'Dear Parent, the fee payment for [studentName] has been recorded. Thank you. - [institute_name]',
+    'Fee Defaulters': 'Dear Parent, school fees for [studentName] are pending. Kindly contact [institute_name] to arrange payment.',
+    'Student Birthday': 'Happy Birthday, [studentName]! Wishing you joy, learning and success. Best wishes from [institute_name].',
+    'Date Sheet': 'Dear Parent, the examination date sheet for [className] is available. Please check the school notice. - [institute_name]',
+    'Roll No. Slip': 'Dear Parent, the exam roll number slip for [studentName] is ready. Please contact [institute_name] for details.',
+    'Parents App OTP': 'Your [institute_name] Parents App verification code is [parentsAppOTP]. Never share this code with anyone.',
+    'General SMS 1': 'Dear Parent, please check the latest important announcement from [institute_name]. Thank you.',
+    'General SMS 2': 'Dear Parent, please contact [institute_name] if you need an update regarding [studentName].',
+    'General SMS 3': 'Dear Parent, thank you for your cooperation and support. - [institute_name]',
+}
+assert set(DEFAULT_STUDENT_SMS) == set(STUDENT_SMS)
+
+# Older campuses may have stored a few custom texts and empty boxes. Supply
+# defaults for their old empty entries without changing the previously written
+# messages. Once a school saves the new form, explicit empty values are retained.
+STUDENT_SMS_DEFAULTS_VERSION = 1
+
+def student_sms_with_defaults(saved):
+    saved = dict(saved or {})
+    current = saved.get('_schoolflow_student_sms_defaults_version') == STUDENT_SMS_DEFAULTS_VERSION
+    return {
+        name: (saved.get(name, default) if current else (saved.get(name) or default))
+        for name, default in DEFAULT_STUDENT_SMS.items()
+    }
+
 CATALOG_PAGES={'departments':'department','designation-groups':'designation_group','designations':'designation','employment-types':'employment_type'}
 LOCKED_FIELDS={f['key'] for _,fields in EMPLOYEE_SECTIONS for f in fields if f['required']}
 
@@ -78,6 +125,8 @@ def configure_school_settings(app,db,Student,Employee):
         cache=getattr(request,'school_settings_cache',{}) if has_request_context() else {}
         if has_request_context() and request.method=='GET' and key in cache:return cache[key]
         row=setting(key);data=dict(row.data) if row else {}
+        if key.startswith('exam:sms:') and key != 'exam:sms:':
+            data=student_sms_with_defaults(data)
         if has_request_context() and request.method=='GET':cache[key]=data;request.school_settings_cache=cache
         return data
     def items(kind,scope=None):
@@ -367,6 +416,7 @@ def configure_school_settings(app,db,Student,Employee):
                 campus=choice('campus','campus');key=module+':sms:'+campus
                 names=HRM_SMS if module=='hrm' else STUDENT_SMS
                 payload={name:value('sms_'+str(i),limit=5000) for i,name in enumerate(names)}
+                if module=='exam':payload['_schoolflow_student_sms_defaults_version']=STUDENT_SMS_DEFAULTS_VERSION
                 allowed=set(tags(module))
                 if any(tag not in allowed for text in payload.values() for tag in re.findall(r'\[([A-Za-z0-9_]+)\]',text)):raise ValueError('Use only the listed template tags.')
                 save_config(key,payload)
