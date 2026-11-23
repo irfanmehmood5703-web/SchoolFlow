@@ -41,6 +41,64 @@ class FeeSetupTests(unittest.TestCase):
     def generate(self,month='2026-09',**changes):
         data=dict(_csrf=self.csrf,month=month,timing_mode='auto',student_ids='1');data.update(changes)
         return self.c.post('/workspace/student-fee-plans/generate',data=data)
+    def test_required_fee_heads_and_optional_heads_in_scoped_schedule(self):
+        self.head('Registration Fee','first')
+        self.head('Admission Fee','first')
+        self.head('Tuition Fee','monthly')
+        self.head('Annual Charges','months',months=['3'])
+        page=self.c.get('/workspace/core/fees/schedules')
+        self.assertEqual(page.status_code,200)
+        for key in ('Registration Fee','Admission Fee','Tuition Fee'):
+            self.assertIn(('data-head-key="'+key+'"').encode(),page.data)
+        self.assertIn(b'data-optional-head-select',page.data)
+        self.assertIn(b'data-add-existing-head',page.data)
+        self.assertIn(b'data-add-custom-head',page.data)
+        self.assertRegex(page.data,rb'data-head-key="Annual Charges"[^>]+hidden')
+        self.assertRegex(page.data,rb'data-head-fields[^>]+disabled')
+        keys=['Registration Fee','Admission Fee','Tuition Fee']
+        def save(selected,indexes,amounts,**changes):
+            values=dict(action='save',version='0',name='2027 Main Fee',campuses=['Campus A'],
+                        classes=['One'],due_day='10',head_selection_mode='explicit',
+                        head_key=selected,head_index=[str(i) for i in indexes])
+            for key,i,amount in zip(selected,indexes,amounts):
+                row=db.session.get(self.m['head'],key)
+                values.update({f'head_version_{i}':str(row.version if row else 0),
+                               f'amount_{i}':amount,f'minimum_{i}':'',f'maximum_{i}':''})
+            values.update(changes)
+            return self.post('schedules',**values)
+        self.assertEqual(save(keys[:2],[0,1],['0','0']).status_code,422)
+        self.assertEqual(self.m['schedule'].query.count(),0)
+        self.assertEqual(save(keys,[0,1,2],['0','0','3500']).status_code,302)
+        schedule=self.m['schedule'].query.one()
+        self.assertEqual([x['key'] for x in schedule.lines],keys)
+        self.assertTrue(all(x['selected_mode'] for x in schedule.lines))
+        helper=app.extensions['fee_setup_helpers']
+        self.assertEqual([x['particular'] for x in helper['assigned_rows'](schedule)],keys)
+        edit=self.c.get('/workspace/core/fees/schedules?id='+str(schedule.id))
+        self.assertEqual(edit.status_code,200)
+        self.assertIn(b'data-head-key="Annual Charges"',edit.data)
+        self.assertRegex(edit.data,rb'data-head-key="Annual Charges"[^>]+hidden')
+        self.assertEqual(save(keys+['Annual Charges'],[0,1,2,9],
+                ['0','0','3500','3000'],id=str(schedule.id),
+                version=str(schedule.version)).status_code,302)
+        db.session.refresh(schedule)
+        self.assertEqual([x['key'] for x in schedule.lines],keys+['Annual Charges'])
+        self.assertEqual(helper['assigned_rows'](schedule)[-1]['actual'],300000)
+        self.assertEqual(save(keys,[0,1,2],['0','0','3500'],
+                              id=str(schedule.id),version=str(schedule.version)).status_code,302)
+        db.session.refresh(schedule)
+        self.assertEqual([x['key'] for x in schedule.lines],keys)
+        custom=self.post('heads/quick-add',label='Custom Exam Fee')
+        self.assertEqual(custom.status_code,200)
+        self.assertEqual(custom.get_json()['label'],'Custom Exam Fee')
+        head=db.session.get(self.m['head'],'Custom Exam Fee')
+        self.assertEqual(head.timing,'manual')
+        self.assertEqual(save(keys+['Custom Exam Fee'],[0,1,2,17],
+                ['0','0','3500','500'],id=str(schedule.id),
+                version=str(schedule.version)).status_code,302)
+        db.session.refresh(schedule)
+        self.assertIn('Custom Exam Fee',[x['key'] for x in schedule.lines])
+
     def test_gets_do_not_seed_rules_and_all_settings_ids_are_unique(self):
         for path in ['/workspace/core/fees/heads','/workspace/core/fees/schedules','/workspace/core/institute','/workspace/student-fee-plans/generate']:
             page=self.c.get(path);self.assertEqual(page.status_code,200,path)
