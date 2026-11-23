@@ -89,13 +89,22 @@ assert set(DEFAULT_STUDENT_SMS) == set(STUDENT_SMS)
 # messages. Once a school saves the new form, explicit empty values are retained.
 STUDENT_SMS_DEFAULTS_VERSION = 1
 
-def student_sms_with_defaults(saved):
+def student_sms_with_defaults(saved, institute_name=''):
+    """Read-through defaults; keep authored copy while making literal school signatures portable.
+
+    Some schools wrote their own name in a saved SMS before the central templates
+    used [institute_name]. Convert only that school's exact literal name to the
+    dynamic tag; never replace other text, edit the DB on GET or borrow a name
+    from a different tenant.
+    """
     saved = dict(saved or {})
     current = saved.get('_schoolflow_student_sms_defaults_version') == STUDENT_SMS_DEFAULTS_VERSION
-    return {
-        name: (saved.get(name, default) if current else (saved.get(name) or default))
-        for name, default in DEFAULT_STUDENT_SMS.items()
-    }
+    school_name = str(institute_name or '').strip()
+    replacement = re.compile(r'(?<!\\w)'+re.escape(school_name)+r'(?!\\w)', re.I) if len(school_name)>=5 and school_name.casefold()!='schoolflow' else None
+    def text_for(name,default):
+        text = saved.get(name, default) if current else (saved.get(name) or default)
+        return replacement.sub('[institute_name]',text) if replacement and name in saved and text else text
+    return {name:text_for(name,default) for name,default in DEFAULT_STUDENT_SMS.items()}
 
 CATALOG_PAGES={'departments':'department','designation-groups':'designation_group','designations':'designation','employment-types':'employment_type'}
 LOCKED_FIELDS={f['key'] for _,fields in EMPLOYEE_SECTIONS for f in fields if f['required']}
@@ -126,7 +135,8 @@ def configure_school_settings(app,db,Student,Employee):
         if has_request_context() and request.method=='GET' and key in cache:return cache[key]
         row=setting(key);data=dict(row.data) if row else {}
         if key.startswith('exam:sms:') and key != 'exam:sms:':
-            data=student_sms_with_defaults(data)
+            profile=db.session.get(app.extensions['institute_setup_models']['profile'],1)
+            data=student_sms_with_defaults(data,(profile.data or {}).get('name','') if profile else '')
         if has_request_context() and request.method=='GET':cache[key]=data;request.school_settings_cache=cache
         return data
     def items(kind,scope=None):
