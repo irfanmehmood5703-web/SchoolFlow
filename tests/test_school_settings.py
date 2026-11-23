@@ -332,6 +332,35 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertEqual(self.post('exam','sms',campus='Campus B',sms_0='[unsupported]').status_code,422)
         self.assertIsNone(self.config('exam:sms:Campus B'))
 
+    def test_old_saved_school_signatures_are_dynamic_without_changing_custom_text(self):
+        SchoolProfile=app.extensions['institute_setup_models']['profile']
+        db.session.add(SchoolProfile(id=1,data={'name':'ISF SCHOOL SYSTEM'}))
+        saved={'Absent':'Dear Parent, [studentName] was absent.\nISF SCHOOL SYSTEM',
+               'Student Birthday':'Happy Birthday, [studentName]! Best Wishes, ISF SCHOOL SYSTEM',
+               'Individual Marks':'[studentName] earned [ObtMarks]. ISF SCHOOL SYSTEM',
+               'Challan Generated':'Your fee challan is ready. - ISF SCHOOL SYSTEM'}
+        db.session.add(self.m['setting'](key='exam:sms:Campus A',data=saved))
+        db.session.commit()
+        page=self.c.get('/workspace/core/exam/sms?campus=Campus%20A')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Dear Parent, [studentName] was absent.',page.data)
+        self.assertIn(b'Best Wishes, [institute_name]',page.data)
+        self.assertIn(b'earned [ObtMarks]. [institute_name]',page.data)
+        self.assertIn(b'Your fee challan is ready. - [institute_name]',page.data)
+        self.assertIn(b'[institute_name]',page.data)
+        # Older saved messages are upgraded on read; the database is not changed on GET.
+        self.assertEqual(self.config('exam:sms:Campus A').data,saved)
+        other=self.c.get('/workspace/core/exam/sms?campus=Campus%20B')
+        self.assertEqual(other.status_code,200)
+        self.assertIn(DEFAULT_STUDENT_SMS['Absent'].encode(),other.data)
+        self.assertNotIn(b'Best Wishes, ISF SCHOOL SYSTEM',other.data)
+        # Schools with an unrelated institute name do not have arbitrary text replaced.
+        profile=db.session.get(SchoolProfile,1)
+        profile.data={'name':'Different Institute'}
+        db.session.commit()
+        fresh=self.c.get('/workspace/core/exam/sms?campus=Campus%20A')
+        self.assertIn(b'Best Wishes, ISF SCHOOL SYSTEM',fresh.data)
+
     def test_sms_saved_template_used_as_per_recipient_snapshot_no_delivery(self):
         self.assertEqual(self.post('hrm','sms',campus='Campus A',sms_0='Dear [emp_name], [date]: present.').status_code,302)
         self.assertEqual(self.c.post('/workspace/attendance/staff',data={'_csrf':self.csrf,'day':'2026-09-07','status_1':'Present','send':'1'}).status_code,302)
