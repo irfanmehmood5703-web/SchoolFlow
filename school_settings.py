@@ -100,7 +100,7 @@ def student_sms_with_defaults(saved, institute_name=''):
     saved = dict(saved or {})
     current = saved.get('_schoolflow_student_sms_defaults_version') == STUDENT_SMS_DEFAULTS_VERSION
     school_name = str(institute_name or '').strip()
-    replacement = re.compile(r'(?<!\\w)'+re.escape(school_name)+r'(?!\\w)', re.I) if len(school_name)>=5 and school_name.casefold()!='schoolflow' else None
+    replacement = re.compile(r'(?<!\w)'+re.escape(school_name)+r'(?!\w)', re.I) if len(school_name)>=5 and school_name.casefold()!='schoolflow' else None
     def text_for(name,default):
         text = saved.get(name, default) if current else (saved.get(name) or default)
         return replacement.sub('[institute_name]',text) if replacement and name in saved and text else text
