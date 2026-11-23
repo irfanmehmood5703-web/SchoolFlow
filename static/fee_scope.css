@@ -12,3 +12,19 @@
 .fee-scope.has-error{border-color:#b13c3c}.fee-scope-error{color:#a42b2b;font-size:13px;margin:12px 0 0;font-weight:600}.fee-scope-error[hidden]{display:none}
 @media(max-width:640px){.fee-schedule-scopes{grid-template-columns:minmax(0,1fr)}.fee-scope{padding:14px}}
 @media print{.fee-scope-toolbar button{display:none}}
+
+/* Fee schedules: only essential heads display until an optional one is added. */
+[data-fee-schedule-line][hidden]{display:none!important}
+.fee-head-picker{border:1px solid #d3e4d9;background:#f7fbf8}
+.fee-head-picker h2{margin-bottom:8px}
+.fee-add-head-summary{display:inline-block;cursor:pointer;margin:14px 0}
+.fee-head-picker-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:12px 0}
+.fee-head-picker-controls label{flex:0 0 100%;font-size:13px}
+.fee-head-picker-controls select,.fee-head-picker-controls input{flex:1 1 200px;max-width:450px}
+.fee-head-picker-controls button{flex:0 0 auto;white-space:normal}
+.fee-head-fields{border:0;margin:0;padding:0;min-width:0}
+.fee-head-title{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.fee-head-title h3{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.fee-head-title small{font-weight:600;color:#17694c}
+[data-fee-head-feedback].is-error{color:#a83232}
+@media(max-width:550px){.fee-head-picker-controls select,.fee-head-picker-controls input,.fee-head-picker-controls button{flex-basis:100%;width:100%;max-width:none}}
