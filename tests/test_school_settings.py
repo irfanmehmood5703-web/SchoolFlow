@@ -436,7 +436,7 @@ class SchoolSettingsTests(unittest.TestCase):
         preview=self.c.get('/workspace/core/exam/branding?preview_layout=Result+Card&preview_campus=Campus+A')
         self.assertEqual(preview.status_code,200)
         for sample in (b'Sample Preview',b'Sample School Institute',b'Student Result Card',
-                       b'Fictional Student',b'Sample Examination',b'Report data table',
+                       b'Fictional Student',b'Sample Examination',b'ILLUSTRATIVE SAMPLE',b'Mathematics',b'421',b'84.20%',b'Print sample',
                        b'it does not create or change any report'):
             self.assertIn(sample,preview.data)
         self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),0)
@@ -452,6 +452,37 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertNotIn(b'Custom Campus A Result',other.data)
         self.assertIn(b'Student Result Card',other.data)
         self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),1)
+
+    def test_exam_preview_prioritises_real_campus_and_renders_layout_specific_samples(self):
+        Institute=app.extensions['institute_setup_models']
+        db.session.add(Institute['campus'](name='Demo Campus',active=True))
+        db.session.add(Institute['campus'](name='Campus A',active=True))
+        db.session.add(Institute['campus'](name='Campus B',active=True))
+        db.session.add(Institute['mapping'](campus='Campus B',class_name='Class A',
+                                             data={'sections':['A']},active=True))
+        db.session.commit()
+        overview=self.c.get('/workspace/core/exam/branding')
+        self.assertEqual(overview.status_code,200)
+        self.assertIn(b'preview_layout=Result+Card&amp;preview_campus=Campus+B',overview.data)
+        self.assertNotIn(b'preview_layout=Result+Card&amp;preview_campus=Demo+Campus',overview.data)
+        result=self.c.get('/workspace/core/exam/branding?preview_layout=Result+Card')
+        self.assertEqual(result.status_code,200)
+        self.assertIn(b'Preview for Campus B.',result.data)
+        self.assertIn(b'Mathematics',result.data)
+        self.assertIn(b'421',result.data)
+        self.assertIn(b'Sample grade',result.data)
+        self.assertIn(b'Apply campus',result.data)
+        self.assertIn(b'window.print()',result.data)
+        attendance=self.c.get('/workspace/core/exam/branding?preview_layout=Attendance+Sheet')
+        self.assertIn(b'Sample Student B',attendance.data)
+        self.assertIn(b'Attendance',attendance.data)
+        dates=self.c.get('/workspace/core/exam/branding?preview_layout=Date+Sheet')
+        self.assertIn(b'01 Mar',dates.data)
+        self.assertIn(b'Mathematics',dates.data)
+        slip=self.c.get('/workspace/core/exam/branding?preview_layout=Roll+No.+Slip')
+        self.assertIn(b'Exam hall',slip.data)
+        self.assertIn(b'Hall A',slip.data)
+        self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),0)
 
     def test_branding_sanitized_preview_no_writes_and_result_applies_campus(self):
         html='<h2>[institute_name]</h2><img src="https://evil.invalid/x" onerror="alert(1)"><script>alert(1)</script>'
