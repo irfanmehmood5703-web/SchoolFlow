@@ -439,7 +439,10 @@ def configure_school_settings(app,db,Student,Employee):
                             cls=request.form.getlist('classes');section=choice('section','section',False)
                             if not cls or any(c not in options('class_name') for c in cls):raise ValueError('Choose campus classes.')
                             maps=app.extensions['institute_setup_helpers']['payload']().get('maps',{})
-                            if scope in maps and any(c not in {m['class_name'] for m in maps[scope]} for c in cls):raise ValueError('Choose classes enabled at this campus.')
+                            if scope in maps:
+                                enabled_classes={m['class_name'] for m in maps[scope]}
+                                unavailable=[c for c in cls if c not in enabled_classes]
+                                if unavailable:raise ValueError('Not enabled at '+scope+' campus: '+', '.join(dict.fromkeys(unavailable))+'. Enable these classes in Institute Setup → Classes, sections, groups & fee plans (Class map), then save the shift.')
                             if any(set(cls)&set(r.data.get('classes',[])) and section==r.data.get('section','') for r in items(kind,scope) if not row or r.id!=row.id):raise ValueError('A selected class/section already has a schedule. Edit it instead.')
                             payload=dict(classes=cls,section=section)
                             if value('schedule_type')!='combined':raise ValueError('Use the combined In and Out schedule.')
