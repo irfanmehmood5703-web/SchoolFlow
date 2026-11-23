@@ -664,11 +664,23 @@ def configure_school_settings(app,db,Student,Employee):
         ready_preview=None
         ready_preview_name=''
         ready_preview_campus=''
+        preview_campus_options=list(campuses)
+        preview_preferred_campus=''
+        if module=='exam' and page=='branding' and campuses:
+            # Prefer the campus actively used in the school's enabled class mappings.
+            # In particular, do not let a leftover Demo Campus outrank a real
+            # operational campus simply because it sorts alphabetically first.
+            mapping_models=app.extensions['institute_setup_models']
+            mapped={m.campus for m in mapping_models['mapping'].query.filter_by(active=True).all()}
+            active={c.name for c in mapping_models['campus'].query.filter_by(active=True).all()}
+            preview_campus_options.sort(key=lambda c: (
+                c not in mapped, 'demo' in c.casefold(), c not in active, c.casefold()))
+            preview_preferred_campus=preview_campus_options[0]
         if request.method=='GET' and module=='exam' and page=='branding':
             ready_preview_name=request.args.get('preview_layout','')
             if ready_preview_name:
                 if ready_preview_name not in EXAM_LAYOUTS:raise ValueError('Choose a supported report layout to preview.')
-                ready_preview_campus=request.args.get('preview_campus','') or (campuses[0] if campuses else '')
+                ready_preview_campus=request.args.get('preview_campus','') or preview_preferred_campus
                 if ready_preview_campus and ready_preview_campus not in campuses:raise ValueError('Choose a configured campus to preview.')
                 sample={'studentName':'Fictional Student','className':'Class One','SessionName':'2027',
                         'examName':'Sample Examination','rollNo':'001'}
@@ -676,7 +688,7 @@ def configure_school_settings(app,db,Student,Employee):
                                for part in ('header','body','footer')}
         subject_auto_defaults=subject_config(prefill_subject) if prefill_subject else {}
         subject_default_group=default_subject_group() if module=='exam' and page=='subjects' else ''
-        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject,prefill_layout=prefill_layout,ready_preview=ready_preview,ready_preview_name=ready_preview_name,ready_preview_campus=ready_preview_campus,default_exam_branding=default_exam_branding,subject_auto_defaults=subject_auto_defaults,subject_default_group=subject_default_group)
+        return render_template('school_settings.html',title=dict(pages)[page],module=module,page=page,pages=pages,rows=rows,row=row,cfg=cfg,data=data,options=options,items=items,campus=campus,campuses=campuses,days=DAYS,fields=EMPLOYEE_SECTIONS,locked_fields=LOCKED_FIELDS,sms_names=HRM_SMS if module=='hrm' else STUDENT_SMS,tags=tags(module),layouts=HRM_LAYOUTS if module=='hrm' else EXAM_LAYOUTS,preview=preview,meta=meta,catalog_edit=catalog_edit,list_page=list_page,search=search,campus_filter=campus_filter,auto_subjects=auto_subjects,prefill_subject=prefill_subject,prefill_layout=prefill_layout,ready_preview=ready_preview,ready_preview_name=ready_preview_name,ready_preview_campus=ready_preview_campus,preview_campus_options=preview_campus_options,preview_preferred_campus=preview_preferred_campus,default_exam_branding=default_exam_branding,subject_auto_defaults=subject_auto_defaults,subject_default_group=subject_default_group)
 
     @bp.route('/hrm/assign-shifts',methods=['GET','POST'])
     def assign_shifts():
