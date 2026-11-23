@@ -179,7 +179,7 @@ class FeeSetupTests(unittest.TestCase):
     def test_preview_is_read_only_and_short_month_due_day_is_clamped(self):
         row=self.configured();before=self.ops['audit'].query.count()
         page=self.c.get(f'/workspace/core/fees/preview/{row.id}?month=2027-02&first=1')
-        self.assertEqual(page.status_code,200);self.assertIn(b'2027-02-28',page.data);self.assertIn(b'5,500.00',page.data)
+        self.assertEqual(page.status_code,200);self.assertIn(b'2027-02-28',page.data);self.assertIn(b'5,500',page.data) # The cash filter omits trailing .00.
         self.assertEqual(self.B.query.count(),0);self.assertEqual(self.P.query.count(),0);self.assertEqual(self.ops['audit'].query.count(),before)
         self.assertEqual(self.c.get(f'/workspace/core/fees/preview/{row.id}?month=2026-13').status_code,422)
     def test_label_rename_preserves_canonical_keys_claims_and_printed_bill_snapshot(self):
