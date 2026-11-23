@@ -8,6 +8,7 @@ from operations import money
 from student_fee_plans import PARTICULARS
 
 TIMINGS={'monthly':'Every month','months':'Chosen months','first':'First challan only','manual':'Ask when making challans','fine':'By fine policy'}
+REQUIRED_FEE_HEADS=('Registration Fee','Admission Fee','Tuition Fee')
 
 
 def configure_fee_setup(app,db,Student):
@@ -164,7 +165,11 @@ def configure_fee_setup(app,db,Student):
     def for_student(student,data):return FeeSchedule.query.filter_by(campus=data.get('campus',''),class_name=student.class_name).order_by(FeeSchedule.name).all()
     def rules(line):return dict(first_only=line.get('first_only',False),include_first=line.get('include_first',False),month_override=line.get('month_override',False),months=list(line.get('months',[])),minimum=line.get('minimum'),maximum=line.get('maximum'))
     def assigned_rows(schedule):
-        bykey={x['key']:x for x in schedule.lines};keys=list(PARTICULARS)+[k for k in bykey if k not in PARTICULARS]
+        bykey={x['key']:x for x in schedule.lines}
+        # Newly configured schedules use only heads explicitly added by the school.
+        # Older saved schedules keep their historical blank-head behavior until edited.
+        selective=bool(schedule.lines) and all(x.get('selected_mode') for x in schedule.lines)
+        keys=[x['key'] for x in schedule.lines] if selective else list(PARTICULARS)+[k for k in bykey if k not in PARTICULARS]
         return [dict(particular=k,actual=bykey[k]['amount'] if k in bykey else 0,discount=0,arrears=0,fee_rules=rules(bykey[k]) if k in bykey else {}) for k in keys]
     def snapshot(schedule):return dict(schedule_id=schedule.id,schedule_version=schedule.version,due_day=schedule.due_day)
     def effective_rule(key,line=None):
@@ -205,12 +210,22 @@ def configure_fee_setup(app,db,Student):
                 if row and action=='save' and (campuses!=[row.campus] or classes!=[row.class_name] or name!=row.name):raise ValueError('Keep an existing schedule name and scope stable. Use Duplicate for another scope/name.')
                 keys=request.form.getlist('head_key');catalog={h['key'] for h in heads()}
                 if not keys or len(keys)!=len(set(keys)) or not set(keys)<=catalog:raise ValueError('Choose unique configured fee heads.')
+                selected_mode=request.form.get('head_selection_mode')=='explicit'
+                if selected_mode and not set(REQUIRED_FEE_HEADS)<=set(keys):
+                    raise ValueError('Registration Fee, Admission Fee and Tuition Fee are required in every fee schedule.')
+                indexes=request.form.getlist('head_index')
+                if indexes:
+                    if len(indexes)!=len(keys) or any(not x.isdigit() or int(x)>4096 for x in indexes) or len(indexes)!=len(set(indexes)):
+                        raise ValueError('Invalid fee head rows. Reload the form.')
+                else:
+                    indexes=[str(i) for i in range(len(keys))] # Backwards-compatible saved forms.
                 lines=[]
-                for i,key in enumerate(keys):
+                for key,index in zip(keys,indexes):
+                    i=int(index)
                     if request.form.get('head_version_'+str(i))!=str(head_map()[key].version if key in head_map() else 0):raise ValueError('A fee head changed. Reload this schedule form.')
                     amount=money(text('amount_'+str(i),True));low=text('minimum_'+str(i));high=text('maximum_'+str(i));lo=money(low) if low else None;hi=money(high) if high else None
                     if (lo is not None and amount<lo) or (hi is not None and amount>hi) or (lo is not None and hi is not None and lo>hi):raise ValueError('The configured actual amount must lie within its minimum/maximum: '+label(key))
-                    lines.append(dict(key=key,amount=amount,minimum=lo,maximum=hi,first_only=request.form.get('first_'+str(i))=='1',include_first=request.form.get('include_first_'+str(i))=='1',month_override=request.form.get('override_'+str(i))=='1',months=months('months_'+str(i))))
+                    lines.append(dict(key=key,amount=amount,minimum=lo,maximum=hi,first_only=request.form.get('first_'+str(i))=='1',include_first=request.form.get('include_first_'+str(i))=='1',month_override=request.form.get('override_'+str(i))=='1',months=months('months_'+str(i)),selected_mode=selected_mode))
                 for campus in dict.fromkeys(campuses):
                     for cls in dict.fromkeys(classes):
                         target=row if row and action=='save' else None
@@ -239,8 +254,8 @@ def configure_fee_setup(app,db,Student):
                 if key in source:raise ValueError('This saved schedule contains duplicate heads. Correct the source before loading it.')
                 source[key]=dict(key=key,amount=money(x.data['amount']),minimum=None,maximum=None,first_only=False,month_override=False,months=[])
 
-        editor=[dict(h,**{'line':source.get(h['key'],dict(amount=0,minimum=None,maximum=None,first_only=False,month_override=False,months=[]))}) for h in heads()]
-        return render_template('fee_schedules.html',title='Fee schedules',rows=FeeSchedule.query.order_by(FeeSchedule.name,FeeSchedule.campus,FeeSchedule.class_name).all(),row=row,defaults=defaults,previous=list(previous.values()),editor=editor,options=options,months=calendar.month_name,annual=annual,label=label)
+        editor=[dict(h,**{'line':source.get(h['key'],dict(amount=0,minimum=None,maximum=None,first_only=False,include_first=False,month_override=False,months=[])), 'selected': h['key'] in REQUIRED_FEE_HEADS or h['key'] in source}) for h in heads()]
+        return render_template('fee_schedules.html',title='Fee schedules',rows=FeeSchedule.query.order_by(FeeSchedule.name,FeeSchedule.campus,FeeSchedule.class_name).all(),row=row,defaults=defaults,previous=list(previous.values()),editor=editor,options=options,months=calendar.month_name,annual=annual,label=label,required_heads=REQUIRED_FEE_HEADS)
 
     @bp.get('/preview/<int:schedule_id>')
     def preview(schedule_id):
