@@ -70,7 +70,7 @@ _EXAM_BRANDING_COPY = {
     'Admission Query': ('Admission Enquiry', '<p>Admission enquiry record</p>'),
     'Admission Form': ('Student Admission Form', '<p>Student registration and admission details</p>'),
     'Admission Query Blank': ('Admission Enquiry Form', '<p>Admission enquiry and contact information</p>'),
-    'Admission Form Blank': ('Blank Admission Form', '<p>Complete the student's admission information in the fields below.</p>'),
+    'Admission Form Blank': ('Blank Admission Form', '<p>Complete the student admission information in the fields below.</p>'),
     'Print Fee Reminder': ('School Fee Reminder', '<p>Fee payment information and outstanding dues</p>'),
     'General Branding': ('Official School Report', '<p>Official school record</p>'),
 }
