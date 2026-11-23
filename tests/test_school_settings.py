@@ -3,7 +3,7 @@ import os,re,unittest
 from datetime import date
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Student,Employee
-from school_settings import EXAM_PAGES,HRM_PAGES,grade_band_for_percentage
+from school_settings import EXAM_PAGES,HRM_PAGES,grade_band_for_percentage,STUDENT_SMS,DEFAULT_STUDENT_SMS,STUDENT_TAGS,CAMPUS_TAGS,STUDENT_SMS_DEFAULTS_VERSION
 
 class SchoolSettingsTests(unittest.TestCase):
     def setUp(self):
@@ -281,6 +281,58 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertEqual(self.config('exam:weightage:Campus A').data[str(r.id)],'30')
         self.assertIn(b'value="" required',self.c.get('/workspace/examination/awards').data)
         self.assertEqual(self.post('exam','test-types',id=r.id,version='1',action='delete').status_code,422)
+    def test_26_default_sms_templates_available_without_per_school_setup_or_get_writes(self):
+        self.assertEqual(len(STUDENT_SMS),26)
+        self.assertEqual(set(STUDENT_SMS),set(DEFAULT_STUDENT_SMS))
+        supported=set(CAMPUS_TAGS+STUDENT_TAGS)
+        for name,text in DEFAULT_STUDENT_SMS.items():
+            self.assertTrue(text.strip(),name)
+            self.assertLessEqual(len(text),5000,name)
+            self.assertTrue(set(re.findall(r'\\[([A-Za-z0-9_]+)\\]',text))<=supported,name)
+        self.assertEqual(self.m['setting'].query.count(),0)
+        for campus in ('Campus A','Campus B'):
+            response=self.c.get('/workspace/core/exam/sms?campus='+campus.replace(' ','%20'))
+            self.assertEqual(response.status_code,200)
+            self.assertIn(b'26 ready-to-edit SMS templates',response.data)
+            self.assertIn(b'Happy Birthday, [studentName]!',response.data)
+            self.assertIn(b'fee challan for [studentName]',response.data)
+            self.assertEqual(self.m['setting'].query.count(),0)
+        template=app.extensions['school_settings_helpers']['config']('exam:sms:Campus B')
+        self.assertEqual(template['Absent'],DEFAULT_STUDENT_SMS['Absent'])
+
+    def test_sms_defaults_merge_older_school_templates_and_keep_campus_edits_private(self):
+        Setting=self.m['setting']
+        custom='Dear [studentName], attendance has been updated by [institute_name].'
+        db.session.add(Setting(key='exam:sms:Campus A',
+                               data={'Absent':custom,'Present':'','Individual Marks':''}))
+        db.session.commit()
+        campus_a=self.c.get('/workspace/core/exam/sms?campus=Campus%20A')
+        self.assertEqual(campus_a.status_code,200)
+        self.assertIn(custom.encode(),campus_a.data)
+        self.assertIn(b'Happy Birthday, [studentName]!',campus_a.data)
+        self.assertIn(b'Dear Parent, [studentName] obtained',campus_a.data)
+        self.assertIn(b'dear Parent,' .strip(), b'dear Parent,') # No changes to existing school text.
+        self.assertEqual(self.config('exam:sms:Campus A').data['Present'],'')
+        payload={'campus':'Campus A','version':'1'}
+        payload.update({'sms_'+str(i): DEFAULT_STUDENT_SMS[name] for i,name in enumerate(STUDENT_SMS)})
+        payload['sms_'+str(STUDENT_SMS.index('Absent'))]=custom
+        payload['sms_'+str(STUDENT_SMS.index('Present'))]=''
+        self.assertEqual(self.post('exam','sms',**payload).status_code,302)
+        saved=self.config('exam:sms:Campus A')
+        self.assertEqual(saved.data['_schoolflow_student_sms_defaults_version'],STUDENT_SMS_DEFAULTS_VERSION)
+        self.assertEqual(saved.data['Absent'],custom)
+        self.assertEqual(saved.data['Present'],'')
+        view=self.c.get('/workspace/core/exam/sms?campus=Campus%20A')
+        self.assertIn(custom.encode(),view.data)
+        # Deliberately cleared saved text remains blank, rather than returning to default.
+        self.assertNotIn(DEFAULT_STUDENT_SMS['Present'].encode(),view.data)
+        other=self.c.get('/workspace/core/exam/sms?campus=Campus%20B')
+        self.assertIn(DEFAULT_STUDENT_SMS['Present'].encode(),other.data)
+        self.assertNotIn(custom.encode(),other.data)
+        self.assertIsNone(self.config('exam:sms:Campus B'))
+        self.assertEqual(self.post('exam','sms',campus='Campus B',sms_0='[unsupported]').status_code,422)
+        self.assertIsNone(self.config('exam:sms:Campus B'))
+
     def test_sms_saved_template_used_as_per_recipient_snapshot_no_delivery(self):
         self.assertEqual(self.post('hrm','sms',campus='Campus A',sms_0='Dear [emp_name], [date]: present.').status_code,302)
         self.assertEqual(self.c.post('/workspace/attendance/staff',data={'_csrf':self.csrf,'day':'2026-09-07','status_1':'Present','send':'1'}).status_code,302)
