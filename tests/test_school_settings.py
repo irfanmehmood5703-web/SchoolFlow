@@ -423,6 +423,36 @@ class SchoolSettingsTests(unittest.TestCase):
             self.assertIn('Examination Date Sheet',str(render('exam','Date Sheet','header','Campus A')))
         self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),2)
 
+    def test_ready_to_use_exam_branding_badge_opens_sample_preview_without_saving(self):
+        profile=app.extensions['institute_setup_models']['profile']
+        db.session.add(profile(id=1,data={'name':'Sample School Institute'}))
+        db.session.commit()
+        source=self.c.get('/workspace/core/exam/branding')
+        self.assertEqual(source.status_code,200)
+        self.assertIn(b'preview_layout=Result+Card',source.data)
+        self.assertIn(b'#exam-branding-preview',source.data)
+        self.assertIn(b'Preview design',source.data)
+        self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),0)
+        preview=self.c.get('/workspace/core/exam/branding?preview_layout=Result+Card&preview_campus=Campus+A')
+        self.assertEqual(preview.status_code,200)
+        for sample in (b'Sample Preview',b'Sample School Institute',b'Student Result Card',
+                       b'Fictional Student',b'Sample Examination',b'Report data table',
+                       b'it does not create or change any report'):
+            self.assertIn(sample,preview.data)
+        self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),0)
+        self.assertEqual(self.c.get('/workspace/core/exam/branding?preview_layout=Unknown').status_code,422)
+        self.assertEqual(self.c.get('/workspace/core/exam/branding?preview_layout=Result+Card&preview_campus=Unmapped').status_code,422)
+        self.assertEqual(self.post('exam','branding',name='Result Card',campus='Campus A',
+                                   header='<h2>Custom Campus A Result</h2>',body='<p>[studentName]</p>',
+                                   footer='<p>Verified</p>').status_code,302)
+        local=self.c.get('/workspace/core/exam/branding?preview_layout=Result+Card&preview_campus=Campus+A')
+        other=self.c.get('/workspace/core/exam/branding?preview_layout=Result+Card&preview_campus=Campus+B')
+        self.assertIn(b'Custom Campus A Result',local.data)
+        self.assertIn(b'Verified',local.data)
+        self.assertNotIn(b'Custom Campus A Result',other.data)
+        self.assertIn(b'Student Result Card',other.data)
+        self.assertEqual(self.m['item'].query.filter_by(kind='exam-branding').count(),1)
+
     def test_branding_sanitized_preview_no_writes_and_result_applies_campus(self):
         html='<h2>[institute_name]</h2><img src="https://evil.invalid/x" onerror="alert(1)"><script>alert(1)</script>'
         self.assertEqual(self.post('hrm','branding',name='Combine Attendance Report',campus='Campus A',header=html,body='[campus_name]',footer='Approved',action='preview').status_code,200)
