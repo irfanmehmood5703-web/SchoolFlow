@@ -416,9 +416,9 @@ def configure_school_settings(app,db,Student,Employee):
                 campus=choice('campus','campus');key=module+':sms:'+campus
                 names=HRM_SMS if module=='hrm' else STUDENT_SMS
                 payload={name:value('sms_'+str(i),limit=5000) for i,name in enumerate(names)}
-                if module=='exam':payload['_schoolflow_student_sms_defaults_version']=STUDENT_SMS_DEFAULTS_VERSION
                 allowed=set(tags(module))
                 if any(tag not in allowed for text in payload.values() for tag in re.findall(r'\[([A-Za-z0-9_]+)\]',text)):raise ValueError('Use only the listed template tags.')
+                if module=='exam':payload['_schoolflow_student_sms_defaults_version']=STUDENT_SMS_DEFAULTS_VERSION
                 save_config(key,payload)
             elif page=='weightage':
                 campus=choice('campus','campus');key='exam:weightage:'+campus;payload={}
