@@ -163,6 +163,33 @@ class SchoolSettingsTests(unittest.TestCase):
         page=self.c.get('/workspace/attendance/staff?day=2026-09-07');self.assertIn(b'07:45',page.data)
         self.assertEqual(self.post('hrm','shift-templates',id=r.id,version='1',action='delete').status_code,422)
         self.assertEqual(self.c.get(path+'?unassigned=1').status_code,200)
+    def test_student_shifts_checkbox_multi_class_save_edit(self):
+        db.session.add(self.rm['settings'](category='class_name',value='Class B',class_name=''))
+        db.session.commit()
+        page=self.c.get('/workspace/core/exam/student-shifts')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'class="settings-class-choice-grid"',page.data)
+        self.assertNotIn(b'<select multiple size="5" name="classes"',page.data)
+        for cls in [b'Class A',b'Class B']:
+            self.assertIn(b'type="checkbox" name="classes" value="'+cls+b'"',page.data)
+        args=dict(name='Early shift',campus='Campus A',classes=['Class A','Class B'],
+                  schedule_type='combined',section='')
+        args.update({'in_'+str(day):'08:30' for day in range(7)})
+        args.update({'out_'+str(day):'12:30' for day in range(7)})
+        self.assertEqual(self.post('exam','student-shifts',**args).status_code,302)
+        record=self.item('student-shift')
+        self.assertEqual(set(record.data['classes']),{'Class A','Class B'})
+        self.assertEqual(record.data['days']['0']['in'],'08:30')
+        self.assertEqual(record.data['days']['0']['out'],'12:30')
+        edit=self.c.get('/workspace/core/exam/student-shifts?edit='+str(record.id))
+        self.assertEqual(edit.status_code,200)
+        for cls in [b'Class A',b'Class B']:
+            self.assertIn(b'name="classes" value="'+cls+b'" checked',edit.data)
+        self.assertEqual(self.post('exam','student-shifts',name='Overlapping shift',
+            campus='Campus A',classes=['Class A'],schedule_type='combined',
+            **{'in_'+str(day):'08:30' for day in range(7)},
+            **{'out_'+str(day):'13:30' for day in range(7)}).status_code,422)
+
     def test_student_section_shift_overrides_default(self):
         def create(name,section,in_time):
             values=dict(name=name,campus='Campus A',classes=['Class A'],section=section,schedule_type='combined')
