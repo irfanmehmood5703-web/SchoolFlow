@@ -1208,14 +1208,139 @@ def configure_operations(app, db, Student, Employee):
         review_token=signer.dumps(dict(actor=actor,award_id=award.id,stamp=stamp,nonce=secrets.token_hex(16)))
         return render('marks.html',allowed=allowed,marks_review_token=review_token,qualitative=qlookup,direct=direct,title='Enter / Edit Marks',award=award,students=students,papers=papers,scores=scores,counts=counts,published=published,owner_can_correct=owner_can_correct)
 
+    def saved_roll_slip(slip_id):
+        row=db.get_or_404(Workflow,slip_id)
+        if row.kind!='roll-slips':abort(404)
+        allowed=getattr(g,'access_campuses',None)
+        if allowed is not None and row.data.get('campus') not in allowed:abort(403)
+        return row
+
+    def roll_slip_locked(row):
+        Item=app.extensions.get('parent_study_models',{}).get('item')
+        return bool(Item is not None and Item.query.filter(Item.kind=='rollslip',Item.data['workflow_id'].as_integer()==row.id).first())
+
+    def linked_roll_pupils(row):
+        pupils=date_sheet_pupils(row)
+        data=app.extensions['record_helpers']['raw_many']('student',pupils)
+        def key(p):
+            roll=str(data.get(p.id,{}).get('roll_no') or '').strip()
+            return (not bool(roll),not roll.isdigit(),int(roll) if roll.isdigit() else roll.casefold(),p.name.casefold(),p.id)
+        return sorted(pupils,key=key),data
+
+    def linked_roll_print(row):
+        pupils,data=linked_roll_pupils(row)
+        assigned=row.data['students']
+        pupils=[p for p in pupils if str(p.id) in assigned]
+        raw=request.args.get('student_id','')
+        if raw:
+            if not raw.isascii() or not raw.isdigit() or len(raw)>10:abort(404)
+            pupils=[p for p in pupils if str(p.id)==raw]
+            if not pupils:abort(404)
+        if not pupils:raise ValueError('No assigned active students remain in this examination cohort.')
+        show_photo=request.args.get('photo','1')=='1'
+        photos=set()
+        if show_photo:
+            F=rm['file'];seen=set()
+            for f in F.query.filter(F.owner_kind=='student',F.owner_id.in_([p.id for p in pupils]),F.photo.is_(True)).order_by(F.id.desc()).all():
+                if f.owner_id in seen:continue
+                seen.add(f.owner_id)
+                if f.mime in ('image/jpeg','image/png','image/webp'):photos.add(f.owner_id)
+        response=make_response(render('roll_linked_print.html',title='Examination Roll Number Slip',row=row,pupils=pupils,pupil_data=data,show_photo=show_photo,photo_ids=photos))
+        response.headers['Cache-Control']='private, no-store'
+        return response
+
+    @bp.get('/rolls/<int:slip_id>/photo/<int:sid>')
+    def roll_slip_photo(slip_id,sid):
+        row=saved_roll_slip(slip_id)
+        if str(sid) not in row.data['students']:abort(404)
+        pupil=date_sheet_student(row,sid);photo=date_sheet_student_photo(pupil)
+        if not photo or photo.mime not in ('image/jpeg','image/png','image/webp'):abort(404)
+        response=send_file(io.BytesIO(photo.content),mimetype=photo.mime,max_age=0)
+        response.headers['Cache-Control']='private, no-store'
+        response.headers['X-Content-Type-Options']='nosniff'
+        return response
+
     @bp.route('/rolls',methods=['GET','POST'])
     def rolls():
+        action=request.form.get('action','')
+        if request.method=='GET' and request.args.get('print_id'):
+            return linked_roll_print(saved_roll_slip(request.args.get('print_id',type=int) or 0))
+        if request.method=='POST' and action in ('save-linked','delete-linked'):
+            app.extensions['admission_capacity']['lock']()
+            edit_id=request.form.get('edit_id',type=int)
+            existing=saved_roll_slip(edit_id) if edit_id else None
+            if existing:
+                if roll_slip_locked(existing):raise ValueError('This slip has a parent review record. Keep the approved record; unpublish it and create a revised examination date sheet if necessary.')
+                if request.form.get('slip_revision')!=date_sheet_revision(existing):raise ValueError('The saved slip changed. Reload before editing.')
+            if action=='delete-linked':
+                if not existing:abort(404)
+                audit('Delete examination roll slips',slip_id=existing.id,campus=existing.data['campus'])
+                db.session.delete(existing);commit();flash('Roll number slips deleted. Admission records are unchanged.','success')
+                return redirect(url_for('ops.rolls'))
+            source=saved_date_sheet(request.form.get('source_id',type=int) or 0)
+            d=source.data
+            if request.form.get('source_revision')!=date_sheet_revision(source):raise ValueError('Date sheet changed. Review the latest schedule.')
+            if not all(d.get(k) for k in ('campus','class_name','academic_session','exam_test_type')):raise ValueError('Choose a date sheet with complete examination scope.')
+            if existing and existing.data.get('source_date_sheet_id')!=source.id:raise ValueError('An existing slip cannot change its source date sheet.')
+            batches=Workflow.query.filter_by(kind='roll-slips').all()
+            if not existing and any(b.data.get('source_date_sheet_id')==source.id for b in batches):raise ValueError('Slips already exist for this date sheet. Open Edit in Saved Roll Number Slips.')
+            pupils,pupil_data=linked_roll_pupils(source);ids=selected('student_ids')
+            if not ids or not set(ids)<={p.id for p in pupils}:raise ValueError('Choose active students from the selected date sheet only.')
+            if not d.get('papers'):raise ValueError('The date sheet has no examination papers.')
+            start=request.form.get('start','1').strip()
+            if not start.isascii() or not start.isdigit() or len(start)>9 or int(start)<1:raise ValueError('Enter a positive roll number start counter.')
+            title=request.form.get('slip_name','').strip() or d.get('name','Exam')
+            hall=request.form.get('hall','').strip();instructions=request.form.get('instructions','').strip()
+            if len(title)>160 or len(hall)>120 or len(instructions)>2000:raise ValueError('Shorten the title, hall or instructions.')
+            # Uniqueness within the campus/session/exam identity, across class batches.
+            exam_key=[d.get('campus',''),d.get('academic_session',''),d.get('exam_test_type',''),str(d.get('batch_name') or d.get('name','')).strip().casefold()]
+            used={str(v['roll']) for b in batches if (not existing or b.id!=existing.id) and b.data.get('exam_key')==exam_key for v in b.data.get('students',{}).values()}
+            roster={};next_roll=int(start);old_roster=existing.data['students'] if existing else {}
+            for p in pupils:
+                if p.id not in ids:continue
+                sid=str(p.id);raw=request.form.get('roll_'+sid,'').strip()
+                if not raw and sid in old_roster:raw=str(old_roster[sid]['roll'])
+                if raw:
+                    if not raw.isascii() or not raw.isdigit() or len(raw)>9 or int(raw)<1:raise ValueError('Exam roll numbers must be positive integers.')
+                    roll=str(int(raw))
+                else:
+                    while str(next_roll) in used:next_roll+=1
+                    roll=str(next_roll);next_roll+=1
+                if roll in used:raise ValueError('Duplicate exam roll number: '+roll)
+                used.add(roll);roster[sid]=dict(roll=roll,hall=hall)
+            data={k:d.get(k,'') for k in ('campus','class_name','section','academic_session','exam_test_type')}
+            data.update(name=title,exam_name=d.get('name','Exam'),source_date_sheet_id=source.id,source_revision=date_sheet_revision(source),exam_key=exam_key,papers=[dict(p) for p in d['papers']],students=roster,hall=hall,instructions=instructions)
+            if existing:existing.data=data;obj=existing
+            else:obj=Workflow(kind='roll-slips',status='Active',data=data);db.session.add(obj)
+            db.session.flush();audit('Save examination roll slips',slip_id=obj.id,campus=data['campus'],count=len(roster));commit()
+            flash('Exam roll numbers saved for this examination only.','success')
+            return redirect(url_for('ops.rolls',source_id=source.id,edit_id=obj.id))
+        if request.method=='GET':
+            sources=award_date_sheet_options()
+            scope={k:request.args.get(k,'') for k in ('campus','class_name','section','academic_session','exam_type')}
+            source_id=request.args.get('source_id',type=int)
+            edit_id=request.args.get('edit_id',type=int)
+            edit=saved_roll_slip(edit_id) if edit_id else None
+            if edit:source_id=edit.data['source_date_sheet_id']
+            source=saved_date_sheet(source_id) if source_id else None
+            if source:
+                scope={k:source.data.get('exam_test_type' if k=='exam_type' else k,'') for k in scope}
+            filtered=[s for s in sources if all(not v or s.get('session' if k=='academic_session' else k)==v for k,v in scope.items())]
+            pupils,pupil_data=linked_roll_pupils(source) if source else ([],{})
+            saved=Workflow.query.filter_by(kind='roll-slips').order_by(Workflow.id.desc()).all()
+            allowed=getattr(g,'access_campuses',None)
+            saved=[b for b in saved if allowed is None or b.data.get('campus') in allowed]
+            return render('rolls_linked.html',title='Roll Number Slip',sources=sources,filtered=filtered,scope=scope,source=source,revision=date_sheet_revision,edit=edit,pupils=pupils,pupil_data=pupil_data,saved=saved,locked=roll_slip_locked,legacy_students=people(),details=details)
         if request.method=='POST':
             ids=selected('student_ids')
             if not ids: raise ValueError('Select students.')
+            if not set(ids)<={p.id for p in people()}:raise ValueError('Choose active students from your permitted roster.')
             if request.form.get('action')=='assign':
+                app.extensions['admission_capacity']['lock']()
                 start=request.form.get('start','1')
-                if not start.isdigit() or int(start)<1: raise ValueError('Roll start must be positive.')
+                if not start.isascii() or not start.isdigit() or len(start)>9 or int(start)<1: raise ValueError('Roll start must be positive.')
+                used={str(x.data.get('exam_roll_no','')) for x in rm['student'].query.all() if x.student_id not in ids}
+                if any(str(int(start)+i) in used for i in range(len(ids))):raise ValueError('Duplicate legacy exam roll number. Use the linked date sheet workflow.')
                 for i,id in enumerate(ids):
                     d=rm['student'].query.filter_by(student_id=id).first()
                     if not d: d=rm['student'](student_id=id,data={});db.session.add(d)

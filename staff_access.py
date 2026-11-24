@@ -406,14 +406,14 @@ def configure_staff_access(app,db,Student,Employee):
             if name=='entry':
                 key=args.get('key','');area='dashboard' if key=='dashboard' else 'admissions' if key in ('students','queries','approvals') else 'hrm' if key=='employees' else None
             else:
-                area={'dashboard':'dashboard','register':'hrm','approve_students':'admissions','fees':'fees','generate_challans':'fees','pay':'fees','fee_action':'fees','reverse_receipts':'fees','history':'fees','take_attendance':'attendance','attendance_report':'attendance','examination':'exam','date_sheet_edit':'exam','date_sheet_print':'exam','date_sheet_photo':'exam','assessment_category':'exam','marks':'exam','rolls':'exam','plans':'payroll','payroll':'payroll','lecture_import':'payroll','messages':'communication','message_log':'communication','installment':'fees','batch_payment':'fees','readiness':'dashboard'}.get(name)
+                area={'dashboard':'dashboard','register':'hrm','approve_students':'admissions','fees':'fees','generate_challans':'fees','pay':'fees','fee_action':'fees','reverse_receipts':'fees','history':'fees','take_attendance':'attendance','attendance_report':'attendance','examination':'exam','date_sheet_edit':'exam','date_sheet_print':'exam','date_sheet_photo':'exam','assessment_category':'exam','marks':'exam','rolls':'exam','roll_slip_photo':'exam','plans':'payroll','payroll':'payroll','lecture_import':'payroll','messages':'communication','message_log':'communication','installment':'fees','batch_payment':'fees','readiness':'dashboard'}.get(name)
                 if name=='register' and args.get('kind') in ('increments','advances','loans','lecture-rates','lecture-register'):area='payroll'
         else:
             prefix=ep.split('.')[0]
             area={'dashboard':'dashboard','student_plans':'fees','student_overview':'admissions','admission_limits':'admissions','student_import':'admissions','fee_setup':'core','fee_increments':'fees','yearly_fees':'core','roll_numbers':'core','holiday_calendar':'core','fine_automation':'core','late_fees':'core','attendance_fines':'core','fine_queue':'fees','challan_branding':'core','institute_setup':'core','school_settings':'core','certificates':'certificates','certificate_manager':'certificates','staff_access':'access','user_logging':'logs','payroll_calendar':'payroll','hrm_reports':'hrm','reports':'fees' if args.get('view') and ep.endswith('.fees') else 'attendance' if 'attendance' in ep else 'exam'}.get(prefix)
         if ep=='school_settings.results':area='exam'
         if not area:return None
-        action='print' if ep in ('ops.date_sheet_print','ops.date_sheet_photo') or (ep=='school_settings.results' and request.args.get('mode')=='print') else 'update' if ep=='ops.date_sheet_edit' else 'view'
+        action='print' if ep in ('ops.date_sheet_print','ops.date_sheet_photo','ops.roll_slip_photo') or (ep=='ops.rolls' and request.args.get('print_id')) or (ep=='school_settings.results' and request.args.get('mode')=='print') else 'update' if ep=='ops.date_sheet_edit' else 'view'
         if request.args.get('export') or ep=='records.export':action='export'
         if request.method=='POST':
             value=request.form.get('action','').split(':')[0]
@@ -421,7 +421,7 @@ def configure_staff_access(app,db,Student,Employee):
             elif ep=='certificate_manager.copy' or (ep in ('certificate_manager.editor','staff_access.editor') and not (args.get('tid') or args.get('sid'))):action='view' if value=='preview' else 'create'
             elif value in ('preview','simulate','review'):action='view'
             elif value in ('approve','allow','reject','refuse','unlock-daily','unlock-monthly'):action='approve'
-            elif value in ('delete','remove','undo','cancel'):action='delete'
+            elif value in ('delete','delete-linked','remove','undo','cancel'):action='delete'
             elif value in ('pay','paid') or ep in ('ops.pay','ops.batch_payment') or (ep=='ops.payroll' and value=='send'):action='pay'
             elif value in ('reverse','unpay') or ep=='ops.reverse_receipts':action='reverse'
             elif value in ('issue','print','branded','horizontal','vertical','family') or ep.endswith('.qr_print'):action='print'

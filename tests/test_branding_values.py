@@ -228,6 +228,25 @@ class BrandingValueTests(unittest.TestCase):
         page=self.c.get('/workspace/core/exam/results/'+str(award.id));self.assertEqual(page.status_code,200);self.assertIn(b'&lt;Study well&gt;',page.data);self.assertNotIn(b'<Study well>',page.data)
         second.obtained=None;db.session.commit();self.assertNotIn(b'&lt;Study well&gt;',self.c.get('/workspace/core/exam/results/'+str(award.id)).data)
 
+    def test_linked_roll_slips_scope_persistence_and_print(self):
+        import hashlib,json
+        data=dict(name='Linked Exam',campus='Campus A',class_name='Class A',section='A',academic_session='2026-27',exam_test_type='Monthly',papers=[dict(subject='Math',date='2026-11-25',type='Written',time='09:00',total=50)])
+        source=self.ops['workflow'](kind='date-sheets',status='Active',data=data);db.session.add(source);db.session.commit()
+        revision=hashlib.sha256(json.dumps(data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        form=dict(_csrf=self.csrf,action='save-linked',source_id=source.id,source_revision=revision,student_ids=str(self.student.id),start='101',hall='Hall A',slip_name='Linked Exam',instructions='Bring stationery')
+        page=self.c.get('/workspace/rolls?source_id='+str(source.id));self.assertEqual(page.status_code,200);self.assertIn(b'Load Papers',page.data)
+        self.assertEqual(self.c.post('/workspace/rolls',data=form).status_code,302)
+        slip=self.ops['workflow'].query.filter_by(kind='roll-slips').one()
+        self.assertEqual(slip.data['students'][str(self.student.id)]['roll'],'101')
+        self.assertEqual(self.student_detail.data['exam_roll_no'],'900')
+        self.assertEqual(self.c.post('/workspace/rolls',data=form).status_code,422)
+        page=self.c.get('/workspace/rolls?print_id='+str(slip.id)+'&photo=0')
+        self.assertEqual(page.status_code,200)
+        for value in (b'101',b'Hall A',b'Math',b'Bring stationery',b'25-11-2026'):self.assertIn(value,page.data)
+        self.assertNotIn(b'Photo not available',page.data)
+        self.assertEqual(self.c.get('/workspace/rolls?print_id='+str(slip.id)+'&student_id=99999').status_code,404)
+        self.assertEqual(self.c.get('/workspace/rolls/'+str(slip.id)+'/photo/99999').status_code,404)
+
     def test_roll_slip_expands_actual_exam_context_and_assigned_hall(self):
         self.student_detail.data={**self.student_detail.data,'exam_hall':'Hall A','exam_class':'Exam Class','exam_section':'Exam Section'};db.session.commit()
         self.template('[rollnosliptitle] [Examstartingdate] [examtimeduration] [examHall] [examRollNo]',kind='exam-branding',name='Roll No. Slip')

@@ -53,7 +53,7 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
     app.extensions['parent_study_models']=dict(item=Item,file=File,submission=Submission)
     def choices(key):return sorted({r.value for r in rm['settings'].query.filter_by(category=key).all()})
     def visible(row,s,d):
-        return row.published and row.starts<=school_today()<=row.ends and row.campus==d.get('campus','') and row.class_name==s.class_name and (not row.section or row.section==d.get('section','')) and (not row.subject or not d.get('subjects') or row.subject in d['subjects']) and (not row.data.get('students') or str(s.id) in row.data['students'])
+        return row.published and row.starts<=school_today()<=row.ends and row.campus==d.get('campus','') and row.class_name==s.class_name and (not row.section or row.section==d.get('section','')) and (not row.subject or not d.get('subjects') or row.subject in d['subjects']) and (not row.data.get('students') or str(s.id) in row.data['students']) and (not row.data.get('academic_session') or row.data['academic_session']==d.get('academic_session',''))
     def allowed(row,s,d):return access(s.id,d.get('campus',''),'dates' if row.kind=='dates' else 'rollslip' if row.kind=='rollslip' else 'quizzes' if row.kind=='vacation' else 'diary')['effective']!='block'
     def listing(kind,s,d):return [r for r in Item.query.filter_by(kind=kind).order_by(Item.starts.desc(),Item.id.desc()).all() if visible(r,s,d) and allowed(r,s,d)]
     def parent_page(kind,s,d,renderer):
@@ -91,12 +91,16 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
     def conflict(e):db.session.rollback();return 'Publication changed. Reload this page before saving.',409
     def document(wid):
         row=db.get_or_404(ops['workflow'],wid)
-        if row.kind not in ('awards','date-sheets'):abort(404)
+        if row.kind not in ('awards','date-sheets','roll-slips'):abort(404)
         pupils=app.extensions['record_helpers']['read_many']('student',Student.query.filter_by(status='Active').all())
         matched={str(s.id):dict(roll=d.get('roll_no',''),section=d.get('section','')) for s,d in pupils if s.class_name==row.data.get('class_name') and all(not row.data.get(k) or d.get(k)==row.data[k] for k in ('campus','section','gender','group_name','academic_session')) and (row.data.get('student_filter')!='subject' or not d.get('subjects') or any(p.get('subject') in d['subjects'] for p in row.data.get('papers',[])))}
+        if row.kind=='roll-slips':
+            assigned=row.data.get('students',{})
+            matched={sid:dict(roll=assigned[sid]['roll'],hall=assigned[sid].get('hall',''),section=value['section']) for sid,value in matched.items() if sid in assigned}
         if not matched:raise ValueError('No active students match this saved document.')
         papers=[{k:p.get(k,'') for k in ('subject','date','time','type','syllabus')} for p in row.data.get('papers',[])]
         value=dict(workflow_id=wid,exam=row.data.get('name','Exam'),students=matched,papers=papers)
+        if row.kind=='roll-slips':value.update(academic_session=row.data.get('academic_session',''),instructions=row.data.get('instructions',''))
         return row,value,hashlib.sha256(json.dumps(dict(source=row.data,snapshot=value),sort_keys=True).encode()).hexdigest()
     @bp.route('',methods=['GET','POST'])
     def publisher():
