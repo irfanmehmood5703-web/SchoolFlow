@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const path=require('node:path');
+const sandbox={document:{addEventListener(){}}};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../static/exam_grading.js'),'utf8'),sandbox);
+const result=(eligible,selected)=>Array.from(sandbox.dateSheetTestNames(eligible,selected));
+const north=['Monthly','First Term','Second Term','Final Term'],south=['Monthly','Weekly','First Term'];
+assert.deepEqual(result([north],[]),north);
+assert.deepEqual(result([north,south],[]),[...north,'Weekly']);
+assert.deepEqual(result([north,south],[north]),north);
+assert.deepEqual(result([north,south],[north,south]),['Monthly','First Term']);
+assert.deepEqual(result([],[]),[]);
+assert.deepEqual(result([north,south],[[]]),[]);
+console.log('PASS Date sheet test types: initial list, selected campus, intersection, empty selection');

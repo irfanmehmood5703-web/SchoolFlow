@@ -6,6 +6,11 @@ document.addEventListener('DOMContentLoaded',()=>{
  table.querySelectorAll('tbody tr').forEach(update);
 });
 
+function dateSheetTestNames(eligible,selected){
+ if(selected.length)return [...new Set(selected[0])].filter(name=>selected.every(list=>list.includes(name)));
+ return [...new Set(eligible.flat())];
+}
+
 /* Mapped date-sheet cohort selection. Only the checked, session-matched leaves submit. */
 document.addEventListener('DOMContentLoaded',()=>{
  const panel=document.querySelector('[data-date-scope]');if(!panel)return;
@@ -21,15 +26,26 @@ document.addEventListener('DOMContentLoaded',()=>{
   campuses.forEach(group=>{const items=available(group);group.hidden=!items.length;syncToggle(group.querySelector(':scope > label [data-date-toggle]'),items);});
   syncToggle(master,available(panel));const checked=selected();
   if(count)count.textContent=checked.length+' class/section selection(s)';
-  const testNames=intersection(checked.map(l=>JSON.parse(l.closest('[data-date-campus]').dataset.testTypes)));
+  // Before any class is checked, show configured tests from campuses available
+  // in this session. Once selected, only tests common to all chosen campuses apply.
+  const eligible=campuses.filter(group=>available(group).length);
+  const chosenCampuses=[...new Set(checked.map(l=>l.closest('[data-date-campus]')))];
+  const testNames=dateSheetTestNames(eligible.map(group=>JSON.parse(group.dataset.testTypes)),chosenCampuses.map(group=>JSON.parse(group.dataset.testTypes)));
   const subjectNames=intersection(checked.map(l=>JSON.parse(l.closest('[data-date-class]').dataset.subjects)));
-  const prev=test.value;test.replaceChildren(new Option('Unclassified',''),...testNames.map(v=>new Option(v,v)));if(testNames.includes(prev))test.value=prev;
+  const prev=test.value;test.replaceChildren(new Option('Unclassified',''),...testNames.map(v=>new Option(v,v)));
+  if(testNames.includes(prev))test.value=prev;
+  if(prev&&!testNames.includes(prev)){
+   const unavailable=new Option(prev+' (not available for selection)',prev,true,true);unavailable.disabled=true;test.add(unavailable);
+   test.setCustomValidity('Choose an exam test type available in every selected campus.');
+  }else test.setCustomValidity('');
+  
   subjects.replaceChildren(...subjectNames.map(v=>new Option(v,v)));
   form.querySelectorAll('[name=subject]').forEach(input=>input.setCustomValidity(input.value&&!subjectNames.includes(input.value)?'Choose a subject assigned to all selected classes.':''));
   return subjectNames;
  }
  panel.addEventListener('change',e=>{const t=e.target;if(t.matches('[data-date-all]'))available(panel).forEach(l=>l.checked=t.checked);else if(t.matches('[data-date-toggle]'))available(t.closest('fieldset')).forEach(l=>l.checked=t.checked);sync();});
  session.addEventListener('change',sync);
+ test.addEventListener('change',()=>{test.setCustomValidity('');[...test.options].filter(o=>o.disabled).forEach(o=>o.remove());});
  form.addEventListener('input',e=>{if(e.target.name==='subject')sync();});
  form.addEventListener('submit',e=>{if(!selected().length){e.preventDefault();if(count){count.textContent='Select at least one class and section.';count.scrollIntoView({block:'nearest'});}else session.focus();}});
  sync();
