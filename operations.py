@@ -916,7 +916,28 @@ def configure_operations(app, db, Student, Employee):
     def date_sheet_print(sheet_id):
         row=saved_date_sheet(sheet_id)
         copy=request.args.get('copy','parent')
-        if copy not in ('parent','office','student'):abort(404)
+        if copy not in ('parent','office','student','class'):abort(404)
+        if copy=='class':
+            pupils=date_sheet_pupils(row)
+            if not pupils:raise ValueError('No active students match this date sheet campus, class, section and session.')
+            data=app.extensions['record_helpers']['raw_many']('student',pupils)
+            def roll_key(p):
+                roll=str(data.get(p.id,{}).get('roll_no') or '').strip()
+                return (not bool(roll),not roll.isdigit(),int(roll) if roll.isdigit() else roll.casefold(),p.name.casefold(),p.id)
+            pupils.sort(key=roll_key)
+            show_photo=request.args.get('photo','1')=='1'
+            photos=set()
+            if show_photo:
+                F=rm['file']
+                # Load photo metadata in one query, without copying image bytes into HTML.
+                seen=set()
+                for f in F.query.filter(F.owner_kind=='student',F.owner_id.in_([p.id for p in pupils]),F.photo.is_(True)).order_by(F.id.desc()).all():
+                    if f.owner_id in seen:continue
+                    seen.add(f.owner_id)
+                    if f.mime in ('image/jpeg','image/png','image/webp'):photos.add(f.owner_id)
+            response=make_response(render('date_sheet_print.html',title='Class-wise Student Date Sheets',row=row,office=False,batch_pupils=pupils,pupil_data=data,photo_ids=photos,show_photo=show_photo))
+            response.headers['Cache-Control']='private, no-store'
+            return response
         if copy=='student':
             raw=request.args.get('student_id','')
             if not raw:

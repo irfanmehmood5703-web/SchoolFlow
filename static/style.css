@@ -376,3 +376,23 @@ html,body{max-width:100%}
 @media print{.date-sheet-table{min-width:0!important}.date-sheet-table td.date-sheet-date,.date-sheet-table td.date-sheet-time{white-space:nowrap!important;overflow-wrap:normal}}
 
 .date-sheet-student{display:flex;justify-content:space-between;align-items:center;gap:16px;border:1px solid #a9c2b1;border-radius:5px;padding:12px;margin:12px 0;break-inside:avoid}.date-sheet-student-details{display:grid;gap:6px;grid-template-columns:repeat(2,minmax(0,1fr));flex:1;min-width:0;font-size:12px;overflow-wrap:anywhere}.date-sheet-student-photo{width:84px;height:104px;object-fit:contain;flex:none;border:1px solid #a9c2b1;background:#f7faf8;border-radius:4px}.date-sheet-photo-empty{display:grid;place-items:center;text-align:center;font-size:10px;color:#53695e;padding:5px}@media(max-width:500px){.date-sheet-student-details{grid-template-columns:1fr}}@media print{.date-sheet-student{padding:7pt;margin:7pt 0}.date-sheet-student-details{font-size:9pt;grid-template-columns:repeat(2,minmax(0,1fr))}.date-sheet-student-photo{width:20mm;height:25mm}}
+
+/* Individual and class batch date-sheet copies share the same professional student panel. */
+.date-sheet-student{direction:ltr;align-items:flex-start;padding:14px}
+.date-sheet-student-details{align-self:center;gap:9px 16px}
+.date-sheet-student-details>div{padding:4px 0;border-bottom:1px solid #e4ece7}
+.date-sheet-student-photo{margin-left:auto;flex-shrink:0;width:88px;height:110px}
+.date-sheet-batch-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.date-sheet-batch-summary p{flex-basis:100%;margin:0}
+.date-sheet-batch-copy{margin:0 0 20px}
+@media print{
+.date-sheet-batch-summary{display:none!important}
+.date-sheet-batch,.date-sheet-batch-copy{display:block!important;overflow:visible!important;break-inside:auto!important}
+.date-sheet-batch-copy{margin:0!important}
+.date-sheet-batch-copy+.date-sheet-batch-copy{break-before:page;page-break-before:always}
+.date-sheet-batch-copy .date-sheet-paper{margin:0!important;break-inside:auto!important}
+.date-sheet-student{padding:7pt;align-items:flex-start}
+.date-sheet-student-details{gap:4pt 8pt}
+.date-sheet-student-details>div{padding:2pt 0}
+.date-sheet-student-photo{width:20mm;height:25mm}
+}

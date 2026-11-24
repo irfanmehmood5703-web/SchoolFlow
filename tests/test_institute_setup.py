@@ -134,6 +134,43 @@ class InstituteSetupTests(unittest.TestCase):
         self.assertNotIn(b'Student admission photo',self.c.get(path+'/print?copy=student&photo=0&student_id='+str(sid)).data)
         self.assertNotIn(b'Matching Student',self.c.get(path+'/print?copy=parent').data)
 
+    def test_class_date_sheet_print_uses_only_matching_active_students(self):
+        W=app.extensions['ops_models']['workflow']
+        row=W(kind='date-sheets',data=dict(name='Class copies',campus='Campus A',class_name='Class A',section='A',academic_session='2026-27',papers=[dict(subject='Math',date='2026-11-25',type='Written',total=20,time='09:00',syllabus='Chapter 1')],recheck=True),status='Active')
+        db.session.add(row)
+        pupils=[]
+        for n,(name,campus,cls,sec,academic,status,roll) in enumerate([
+            ('Matching Alpha','Campus A','Class A','A','2026-27','Active','2'),
+            ('Matching Beta','Campus A','Class A','A','2026-27','Active','1'),
+            ('Wrong Campus','Campus B','Class A','A','2026-27','Active','3'),
+            ('Wrong Class','Campus A','Class B','A','2026-27','Active','4'),
+            ('Wrong Section','Campus A','Class A','B','2026-27','Active','5'),
+            ('Wrong Session','Campus A','Class A','A','2027-28','Active','6'),
+            ('Inactive Pupil','Campus A','Class A','A','2026-27','Inactive','7')]):
+            pupil=Student(admission_no='BATCH-'+str(n),name=name,class_name=cls,status=status)
+            db.session.add(pupil);db.session.flush();pupils.append(pupil)
+            db.session.add(self.rm['student'](student_id=pupil.id,data=dict(campus=campus,section=sec,academic_session=academic,roll_no=roll)))
+        buf=io.BytesIO();Image.new('RGB',(20,20),'green').save(buf,format='PNG')
+        db.session.add(self.rm['file'](owner_kind='student',owner_id=pupils[0].id,title='Photo',filename='photo.png',mime='image/png',photo=True,content=buf.getvalue()))
+        db.session.commit()
+        path='/workspace/date-sheet/'+str(row.id)+'/print'
+        page=self.c.get(path+'?copy=class')
+        self.assertEqual(page.status_code,200)
+        self.assertEqual(page.data.count(b'class="date-sheet-batch-copy"'),2)
+        self.assertIn(b'2 student copies',page.data)
+        self.assertLess(page.data.index(b'Matching Beta'),page.data.index(b'Matching Alpha'))
+        self.assertEqual(page.data.count(b'Student admission photo'),1)
+        self.assertEqual(page.data.count(b'Photo not available'),1)
+        self.assertNotIn(b'Recheck / Initials',page.data)
+        for name in ['Wrong Campus','Wrong Class','Wrong Section','Wrong Session','Inactive Pupil']:self.assertNotIn(name.encode(),page.data)
+        self.assertIn('no-store',page.headers['Cache-Control'])
+        no_photo=self.c.get(path+'?copy=class&photo=0')
+        self.assertEqual(no_photo.status_code,200);self.assertNotIn(b'Student admission photo',no_photo.data);self.assertNotIn(b'Photo not available',no_photo.data)
+        self.assertEqual(no_photo.data.count(b'class="date-sheet-batch-copy"'),2)
+        self.assertNotIn(b'Matching Alpha',self.c.get(path+'?copy=parent').data)
+        row.data={**row.data,'class_name':'Missing class'};db.session.commit()
+        self.assertEqual(self.c.get(path+'?copy=class').status_code,422)
+
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
         page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
         ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))

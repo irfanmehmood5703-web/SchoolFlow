@@ -41,6 +41,7 @@
 <div class="date-sheet-actions">
 <a class="button secondary" href="{{url_for('ops.date_sheet_print',sheet_id=r.id,copy='parent')}}">Student / Parent Print</a>
 <a class="button secondary" href="{{url_for('ops.date_sheet_print',sheet_id=r.id,copy='student')}}">Student-wise Print (Photo)</a>
+<a class="button secondary" href="{{url_for('ops.date_sheet_print',sheet_id=r.id,copy='class')}}">Class-wise Student Print (Photos)</a>
 <a class="button secondary" href="{{url_for('ops.date_sheet_print',sheet_id=r.id,copy='office')}}">Internal Office Print</a>
 {% if not date_has_publication(r) %}
 <a class="button secondary" href="{{url_for('ops.date_sheet_edit',sheet_id=r.id)}}">Edit</a>

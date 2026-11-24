@@ -1,5 +1,16 @@
 {% extends 'base.html' %}{% block content %}
 <style>@page{size:A4 portrait;margin:12mm}@media print{.school-print-header,.date-sheet-print-actions,.flash,.app-header,.build-banner,footer,.workspace-tools{display:none!important}.page-content{padding:0!important}.date-sheet-paper{border:0!important;padding:0!important;box-shadow:none!important}.date-sheet-table-wrap{overflow:visible!important}.date-sheet-table{min-width:0!important;table-layout:fixed;width:100%;font-size:9pt;line-height:1.45}.date-sheet-table th,.date-sheet-table td{white-space:normal!important;overflow-wrap:anywhere;padding:5pt 3pt!important}.date-sheet-table td.date-sheet-date,.date-sheet-table td.date-sheet-time{white-space:nowrap!important;overflow-wrap:normal;font-variant-numeric:tabular-nums}.date-sheet-table td.date-sheet-syllabus{white-space:pre-wrap!important}.date-sheet-table td.date-sheet-recheck{min-width:0!important}.date-sheet-table thead{display:table-header-group}.date-sheet-table tr{break-inside:avoid}}</style>
 <div class="date-sheet-print-actions"><a class="button secondary" href="{{url_for('ops.examination',kind='date-sheets')}}">Back to Date Sheets</a> {% if student is defined and student %}<a class="button secondary" href="{{url_for('ops.date_sheet_print',sheet_id=row.id,copy='student')}}">Choose Another Student</a>{% endif %}<button type="button" onclick="window.print()">Print / Save PDF</button></div>
-{% include 'date_sheet_document.html' %}
+{% if batch_pupils is defined %}
+<div class="date-sheet-batch">
+<div class="date-sheet-batch-summary"><strong>{{batch_pupils|length}} student copies</strong> · {{row.data.class_name}} / {{row.data.section or 'All sections'}} · {{row.data.campus}} · {{row.data.academic_session or '—'}}
+<a class="button secondary" href="{{url_for('ops.date_sheet_print',sheet_id=row.id,copy='class',photo='0' if show_photo else '1')}}">{{'Print without photos' if show_photo else 'Include admission photos'}}</a>
+<p class="muted">Each student starts on a new page. Longer syllabuses can continue onto another page.</p></div>
+{% for pupil in batch_pupils %}
+{% with student=pupil,student_data=pupil_data[pupil.id],student_photo=pupil.id in photo_ids %}
+<div class="date-sheet-batch-copy" data-student-id="{{pupil.id}}">{% include 'date_sheet_document.html' %}</div>
+{% endwith %}
+{% endfor %}
+</div>
+{% else %}{% include 'date_sheet_document.html' %}{% endif %}
 {% endblock %}
