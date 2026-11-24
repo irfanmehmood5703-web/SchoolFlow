@@ -165,6 +165,19 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertNotIn(b'Fictional pupil Campus B',page.data)
         self.assertIn(b'<option value="Campus A" selected>',page.data)
 
+    def test_attendance_sms_only_not_present_and_parent_option(self):
+        self.login()
+        a='2026-11-05_1';b='2026-11-05_2'
+        form={'_csrf':self.token(),'grid_mode':'1','mode':'take','from':'2026-11-05','attendance_keys':[a,b],'original_'+a:'','original_'+b:'','status_'+a:'Present','status_'+b:'Absent','action':'send','app_sms':'on','father_contact':'on','only_not_present':'on','parent_notification':'on'}
+        response=self.c.post('/workspace/attendance/student',data=form)
+        self.assertEqual(response.status_code,302,response.data)
+        messages,policy=self.tenant(lambda:([r.data for r in self.ops['workflow'].query.filter_by(kind='message').all()],self.ops['workflow'].query.filter_by(kind='attendance-notification-policy').one().data))
+        self.assertEqual(len(messages),1);self.assertEqual(messages[0]['audience'],'parent')
+        self.assertEqual(messages[0]['ids'],[2]);self.assertEqual(messages[0]['attendance_statuses'],{'2':'Absent'})
+        self.assertTrue(messages[0]['preferences']['app_sms']);self.assertTrue(messages[0]['preferences']['father_contact'])
+        self.assertTrue(policy['students']['2']['enabled'])
+        self.assertEqual({r['pid']:r['status'] for r in self.daily()},{1:'Present',2:'Absent'})
+
     def test_student_attendance_grid_selected_bulk_update_and_delete(self):
         self.login()
         url='/workspace/attendance/student'

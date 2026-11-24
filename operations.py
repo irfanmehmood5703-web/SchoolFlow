@@ -203,7 +203,11 @@ def configure_operations(app, db, Student, Employee):
                 item['text']=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school_name,str(item.get('text') or ''),flags=re.IGNORECASE)
                 if item.get('unresolved'):
                     item['unresolved']=[tag for tag in item['unresolved'] if str(tag).strip('{} ').lower()!='school_name']
-        db.session.add(Workflow(kind='message',status='Provider not configured',data=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=snapshots)))
+        payload=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=snapshots)
+        if event=='attendance':payload.update(attendance_day=(context or {}).get('day'),attendance_statuses={str(item['person_id']):item.get('template','') for item in snapshots})
+        row=Workflow(kind='message',status='Pending SMS review' if audience=='parent' and prefs['app_sms'] else 'Provider not configured',data=payload)
+        db.session.add(row)
+        return row
     def render(name, **kw):
         return render_template(name, choices=choices, today=school_today().isoformat(), statuses=app.extensions.get('attendance_control_helpers',{}).get('statuses',lambda k:STATUSES)(kw.get('kind','student')), **kw)
 
@@ -835,7 +839,10 @@ def configure_operations(app, db, Student, Employee):
             available={r['key']:r for r in rows}
             if not picked or not picked<=available.keys():raise ValueError('Select valid attendance rows from the loaded roster.')
             if action=='delete' and (mode!='update' or request.form.get('confirm_delete')!='1'):raise ValueError('Confirm deletion in View / Update Attendance.')
-            count=0;notify=defaultdict(list)
+            count=0;notify=defaultdict(list);parent_policy=defaultdict(dict)
+            sms_selected=any(request.form.get(k)=='on' for k in ('app_sms','branded_sms','whatsapp_sms'))
+            if action=='send' and sms_selected and not any(request.form.get(k)=='on' for k in ('father_contact','mother_contact','student_contact')):raise ValueError('Choose Father, Mother or Student as an SMS recipient.')
+            if action=='send' and not sms_selected and request.form.get('parent_notification')!='on':raise ValueError('Choose at least one notification method, or use Save Attendance.')
             for r in rows:
                 key=r['key']
                 if key not in picked:continue
@@ -850,7 +857,9 @@ def configure_operations(app, db, Student, Employee):
                 status=request.form.get('status_'+key,'')
                 if not status:continue
                 if status not in STATUSES or not app.extensions['attendance_control_helpers']['allowed']('student',status,r['status']):raise ValueError('Invalid or disabled attendance status.')
-                if action=='send' and (request.form.get('only_not_present')!='on' or status not in ('Present','Late','Off Day')):notify[d.isoformat()].append(p.id)
+                if action=='send' and sms_selected and (request.form.get('only_not_present')!='on' or status not in ('Present','Late','Off Day')):
+                    notify[(d.isoformat(),r['detail'].get('campus',''))].append(p.id)
+                parent_policy[d.isoformat()][str(p.id)]=dict(status=status,enabled=request.form.get('parent_notification')=='on')
                 if status==r['status']:continue
                 if not record:
                     record=Daily(kind='student',person_id=p.id,day=d);db.session.add(record)
@@ -858,9 +867,17 @@ def configure_operations(app, db, Student, Employee):
                 app.extensions['attendance_device_helpers']['manual_write'](record)
                 audit('Save student attendance',student_id=p.id,campus=r['detail'].get('campus',''),day=d.isoformat(),previous=r['status'],status=status)
                 count+=1
-            for d,ids in notify.items():queue('Attendance',ids,audience='student',event='attendance',context={'day':d})
+            for d,entries in parent_policy.items():
+                policy=Workflow.query.filter(Workflow.kind=='attendance-notification-policy',Workflow.data['day'].as_string()==d).order_by(Workflow.id.desc()).first()
+                if not policy:
+                    policy=Workflow(kind='attendance-notification-policy',status='Active',data=dict(day=d,students=entries));db.session.add(policy)
+                else:policy.data=dict(day=d,students={**policy.data.get('students',{}),**entries})
+            db.session.flush()
+            for (d,campus),ids in notify.items():
+                # One campus per request, compatible with the campus-bound SIM device.
+                for offset in range(0,len(ids),60):queue('Attendance',ids[offset:offset+60],audience='parent',event='attendance',context={'day':d})
             commit()
-            flash(f'{count} attendance records '+('deleted.' if action=='delete' else 'saved.')+(f' Notification requests queued for {sum(map(len,notify.values()))} student-day records.' if action=='send' else ''),'success')
+            flash(f'{count} attendance records '+('deleted.' if action=='delete' else 'saved.')+(f' SMS requests prepared for {sum(map(len,notify.values()))} student-day records; no SMS sent yet.' if action=='send' else ''),'success')
             return redirect(url_for('ops.take_attendance',kind='student',**{k:request.form[k] for k in ('mode','from','to','campus','class_name','section','academic_session','gender','search','status_filter','origin_filter') if request.form.get(k)}))
         if request.args.get('export'):
             return csv_response(['Date','Attendance Type','SID','Roll No','Student','Father Name','Attendance','Campus','Class','Section','Session','Gender','Shift In','Mark In','Shift Out','Mark Out'],[[r['day'],r['origin'],r['p'].id,r['detail'].get('roll_no',''),r['p'].name,r['p'].father,r['status'] or 'Unmarked',r['detail'].get('campus',''),r['p'].class_name,r['detail'].get('section',''),r['detail'].get('academic_session',''),r['detail'].get('gender',''),r['schedule'].get('in',''),r['record'].time_in if r['record'] else '',r['schedule'].get('out',''),r['record'].time_out if r['record'] else ''] for r in rows],'student-attendance')
@@ -896,7 +913,7 @@ def configure_operations(app, db, Student, Employee):
                     if val and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',val): raise ValueError('Enter valid times.')
                     setattr(row,k,val)
                 count+=1
-            if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience=kind,event='attendance',context={'day':d.isoformat()})
+            if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience='parent' if kind=='student' else kind,event='attendance',context={'day':d.isoformat()})
             audit('Save attendance',kind=kind,day=str(d),count=count);commit();flash(f'{count} attendance records saved.','success')
             return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat(),**{k:request.form[k] for k in ('campus','class_name','section','academic_session') if request.form.get(k)}))
         existing={r.person_id:r for r in Daily.query.filter_by(kind=kind,day=d).all()}

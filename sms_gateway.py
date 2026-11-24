@@ -239,6 +239,11 @@ def configure_sms_gateway(app,db,Student):
             if message.get('unresolved') and any(str(tag).strip('{} ').lower()!='school_name' for tag in message['unresolved']):raise ValueError('Resolve missing template values before releasing this request.')
             person=db.session.get(Student,message.get('person_id'));details=rm['student'].query.filter_by(student_id=person.id).first() if person else None
             if not person or not details or details.data.get('campus')!=device.campus:raise ValueError('All recipients must belong to the selected device campus.')
+            if data.get('attendance_day'):
+                from datetime import date
+                current=app.extensions['ops_models']['daily'].query.filter_by(kind='student',person_id=person.id,day=date.fromisoformat(data['attendance_day'])).first()
+                expected=data.get('attendance_statuses',{}).get(str(person.id))
+                if not current or current.status!=expected:raise ValueError('Attendance changed after this SMS request. Review the latest attendance and prepare a new request.')
             family=db.session.get(rm['family'],details.family_id) if details.family_id else None
             family_data=family.data if family else {};body=resolve_school_template(message.get('text','').strip())
             if not 1<=len(body)<=1000:raise ValueError('SMS text must contain 1–1,000 characters.')

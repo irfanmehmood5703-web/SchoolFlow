@@ -45,6 +45,17 @@ class ParentAppTests(unittest.TestCase):
             self.assertEqual(self.page(p,view,2).status_code,404,view)
         self.assertEqual(self.page(p,'fees',3).status_code,200);self.assertIn(b'Fictional Sibling',p.get(self.base+'/app/profile').data)
         self.assertEqual(self.page(p,'fees','bad').status_code,404)
+    def test_attendance_parent_alert_option_hides_alert_not_attendance(self):
+        self.seed_app()
+        def policy():
+            db.session.add(self.ops['workflow'](kind='attendance-notification-policy',status='Active',data=dict(day=school_today().isoformat(),students={'1':dict(status='Absent',enabled=False)})))
+        self.tenant(policy);p=self.parent()
+        page=self.page(p,'notifications')
+        self.assertEqual(page.status_code,200)
+        daily_id=self.tenant(lambda:self.ops['daily'].query.filter_by(person_id=1,day=school_today()).one().id)
+        self.assertNotIn(('data-notice-key="attendance:'+str(daily_id)+'"').encode(),page.data)
+        self.assertIn(b'Absent',self.page(p,'attendance').data)
+
     def test_attendance_real_counts_and_unmarked(self):
         self.seed_app();p=self.parent();r=self.page(p,'attendance');self.assertIn(b'50%',r.data);self.assertIn(b'08:35',r.data);self.assertIn(b'Absent',r.data)
         self.assertIn(b'Not marked',self.page(p,'attendance',3).data)

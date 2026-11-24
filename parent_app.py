@@ -115,7 +115,19 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
         out=[]
         def add(key,revision,title,body,url,when):out.append(dict(key=key,revision=hashlib.sha256(str(revision).encode()).hexdigest(),title=title,body=body,url=url,when=str(when)))
         if allowed(s,d,'attendance'):
-            for r in attendance(s.id)['rows'][:12]:add('attendance:'+str(r.id),r.status,'Attendance · '+str(r.day),r.status,link('attendance',s.id),r.day)
+            attendance_rows=attendance(s.id)['rows']
+            days=[r.day.isoformat() for r in attendance_rows]
+            policies={}
+            if days:
+                for policy in ops['workflow'].query.filter(ops['workflow'].kind=='attendance-notification-policy',ops['workflow'].data['day'].as_string().in_(days)).order_by(ops['workflow'].id).all():
+                    entry=policy.data.get('students',{}).get(str(s.id))
+                    if entry is not None:policies[policy.data['day']]=entry
+            visible=[]
+            for r in attendance_rows:
+                policy=policies.get(r.day.isoformat(),{})
+                if policy.get('status')==r.status and not policy.get('enabled'):continue
+                visible.append(r)
+            for r in visible[:12]:add('attendance:'+str(r.id),r.status,'Attendance · '+str(r.day),r.status,link('attendance',s.id),r.day)
         fee=fees(s.id)
         for r in fee['receipts'][:12]:add('receipt:'+str(r.id),(r.amount,r.discount,r.voided),'Fee payment · '+str(r.day),'Paid '+f'{r.amount/100:,.2f}'+' · Discount '+f'{r.discount/100:,.2f}',link('fees',s.id),r.day)
         for b in fee['bills'][:12]:add('bill:'+str(b.id),(b.version,b.remaining),'Challan · '+b.month,'Remaining '+f'{b.remaining/100:,.2f}',link('fees',s.id),b.month+'-01')
