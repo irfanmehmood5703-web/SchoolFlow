@@ -107,6 +107,20 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
             row,data,digest=document(int(raw));review=dict(row=row,data=data,fingerprint=digest)
         if request.method=='POST':
             action=request.form.get('action')
+            if action=='edit-dates':
+                row=db.get_or_404(Item,request.form.get('id',type=int))
+                if request.form.get('version')!=str(row.version):abort(409)
+                if row.published:raise ValueError('Unpublish the resource before changing its visibility dates.')
+                try:
+                    start=date.fromisoformat(request.form.get('starts',''))
+                    end=date.fromisoformat(request.form.get('ends',''))
+                except ValueError:raise ValueError('Choose valid publication dates.')
+                if end<start or (end-start).days>1096 or (row.due and not start<=row.due<=end):raise ValueError('Check the publication window and existing assignment deadline.')
+                before=dict(starts=row.starts.isoformat(),ends=row.ends.isoformat())
+                row.starts=start;row.ends=end
+                db.session.add(ops['audit'](action='Edit parent study visibility dates',data=dict(item_id=row.id,campus=row.campus,before=before,after=dict(starts=start.isoformat(),ends=end.isoformat()))))
+                db.session.commit();flash('Visibility dates updated. Resource remains unpublished.','success')
+                return redirect(url_for('parent_study.publisher'))
             if action=='toggle':
                 row=db.get_or_404(Item,request.form.get('id',type=int))
                 if request.form.get('version')!=str(row.version):abort(409)

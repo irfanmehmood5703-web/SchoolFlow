@@ -97,6 +97,25 @@ class ParentAppTests(unittest.TestCase):
         self.assertEqual(self.post('/workspace/general/parent-study',dict(data,campus='Fake')).status_code,422)
         self.assertEqual(self.post('/workspace/general/parent-study',data).status_code,302)
         page=self.page(self.parent(),'learning');self.assertIn(b'Safe',page.data);self.assertNotIn(b'<script>secret',page.data)
+    def test_draft_visibility_dates_edit_without_publication(self):
+        path='/workspace/general/parent-study'
+        data=dict(action='publish',token=secrets.token_urlsafe(32),kind='learning',campus='North',class_name='One',section='A',title='Draft dates regression',starts='2026-11-24',ends='2027-05-30',body='Original instructions')
+        self.assertEqual(self.post(path,data).status_code,302)
+        I=app.extensions['parent_study_models']['item']
+        def snapshot():
+            row=I.query.filter_by(title='Draft dates regression').one()
+            return row.id,row.version,row.starts.isoformat(),row.ends.isoformat(),row.published,row.body
+        rid,version,*_=self.tenant(snapshot)
+        self.assertIn(b'Edit Visibility Dates',self.c.get(path).data)
+        edit=dict(action='edit-dates',id=rid,version=version,starts='2026-11-24',ends='2026-11-30')
+        self.assertEqual(self.post(path,dict(edit,ends='2026-11-23')).status_code,422)
+        self.assertEqual(self.post(path,edit).status_code,302)
+        self.assertEqual(self.tenant(snapshot)[2:],('2026-11-24','2026-11-30',False,'Original instructions'))
+        self.assertEqual(self.post(path,edit).status_code,409)
+        current_version=self.tenant(snapshot)[1]
+        self.assertEqual(self.post(path,dict(action='toggle',id=rid,version=current_version)).status_code,302)
+        self.assertEqual(self.post(path,dict(edit,version=self.tenant(snapshot)[1])).status_code,422)
+
     def test_fee_rules_hide_summary_results_study_and_files(self):
         self.seed_app();fixture.ParentsPtmTests.seed_debt(self)
         self.assertEqual(self.post('/workspace/general/parents/privileges',dict(version='0',action='rules',attendance_3='block',diary_3='block',marks_3='block',results_3='block')).status_code,302)
