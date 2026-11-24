@@ -784,7 +784,34 @@ def configure_school_settings(app,db,Student,Employee):
         rows=result_rows(award,group_view)
         publication=app.extensions.get('parent_exam_helpers',{}).get('review')
         release=publication(award,rows if not group_view else result_rows(award)) if publication else None
-        return render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+award.data['name'],award=award,rows=rows,group_view=group_view,parent_release=release)
+        def roll_key(r):
+            roll=str(r['details'].get('roll_no') or '').strip()
+            return (not bool(roll),not roll.isdigit(),int(roll) if roll.isdigit() else roll.casefold(),r['student'].id)
+        rows.sort(key=roll_key)
+        ranks={}
+        if not group_view and rows and award.data.get('campus') and award.data.get('class_name'):
+            paper_sets={tuple(i for i,p in enumerate(r['papers']) if not p.get('excluded') and p['paper'].get('grading','Marks')=='Marks') for r in rows}
+            matching=all(r['student'].status=='Active' and r['student'].class_name==award.data['class_name'] and all(not award.data.get(k) or r['details'].get(k)==award.data[k] for k in ('campus','section','academic_session','gender','group_name')) for r in rows)
+            if matching and len(paper_sets)==1 and all(r['complete'] and r['percentage'] is not None and r['total']>0 for r in rows):
+                ordered=sorted((r['percentage'] for r in rows),reverse=True)
+                ranks={r['student'].id:ordered.index(r['percentage'])+1 for r in rows}
+        roster=[(r['student'].id,r['student'].name,r['details'].get('roll_no','')) for r in rows]
+        selected=request.args.get('student_id','')
+        if selected:
+            rows=[r for r in rows if str(r['student'].id)==selected]
+            if not rows:abort(404)
+        campus=award.data.get('campus','')
+        layout='Subject Group Wise Report' if group_view else 'Result Card'
+        branding_row=next((r for r in items('exam-branding',campus) if r.name==layout),None)
+        if not branding_row and campus:branding_row=next((r for r in items('exam-branding','') if r.name==layout),None)
+        custom_body=bool(branding_row and branding_row.data.get('body') and branding_row.data['body']!=default_exam_branding(layout).get('body'))
+        photo_ids=tag_values['prefetch_photos']('student',[r['student'] for r in rows])
+        exam_name=award.data['name']
+        if award.data.get('source_date_sheet_id') and exam_name.startswith('Award — '):exam_name=exam_name[len('Award — '):]
+        from flask import make_response
+        response=make_response(render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+exam_name,award=award,rows=rows,group_view=group_view,parent_release=release,roster=roster,selected_student=selected,ranks=ranks,photo_ids=photo_ids,custom_body=custom_body,exam_name=exam_name))
+        response.headers['Cache-Control']='private, no-store'
+        return response
 
     @bp.get('/hrm/increment-sheet')
     def increment_sheet():
