@@ -212,7 +212,7 @@ public final class QrActivity extends Activity {
             store(state);
             return "This gate does not allow that direction. Choose IN or OUT and scan again.";
         }
-        long age = java.time.Duration.between(Instant.parse(event.getString("occurred_at")), Instant.now()).toSeconds();
+        long age = java.time.Duration.between(Instant.parse(event.getString("occurred_at")), Instant.now()).getSeconds();
         if (age < -60 || age > 840) {
             JSONObject state = new JSONObject(data.toString());
             state.remove("pending");
@@ -239,7 +239,7 @@ public final class QrActivity extends Activity {
         String state = reply.body.getString("status");
         if (!"Approved".equals(state) && !"Pending".equals(state)) throw new IllegalStateException("This gate is paused.");
         Instant server = OffsetDateTime.parse(reply.body.getString("server_time")).toInstant();
-        if (Math.abs(java.time.Duration.between(Instant.now(), server).toSeconds()) > 60) {
+        if (Math.abs(java.time.Duration.between(Instant.now(), server).getSeconds()) > 60) {
             throw new IllegalStateException("Set automatic date and time on this phone, then retry.");
         }
         return reply.body;
