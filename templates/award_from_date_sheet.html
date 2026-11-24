@@ -1,0 +1,16 @@
+<section class="form-card award-quick"><h2>Create from Date Sheet</h2><p class="muted">Choose Class and Exam Type. All saved subjects, exam dates, marks and teachers are copied together, without adding papers one by one.</p>
+{% if award_date_sources %}
+<form method="post" data-award-import>{{m.csrf()}}<input type="hidden" name="action" value="from-date-sheet"><input type="hidden" name="source_revision" value="">
+<div class="fields-grid">
+<label>Class<select name="class_name" required><option value="">Select Class</option>{% for cls in award_date_sources|map(attribute='class_name')|unique|sort %}<option>{{cls}}</option>{% endfor %}</select></label>
+<label>Exam Type<select name="exam_test_type" required><option value="">Select Exam Type</option>{% for typ in award_date_sources|map(attribute='exam_type')|unique|sort %}<option>{{typ}}</option>{% endfor %}</select></label>
+<label data-award-source-label>Matching Date Sheet<select name="source_sheet_id" required><option value="">Select Class and Exam Type</option></select></label>
+<label>Assessment Category <select name="assessment_category"><option value="">Unclassified</option>{% for t in ('Weekly','Monthly','First Term','Second Term') %}<option>{{t}}</option>{% endfor %}</select></label>
+</div>
+<div data-award-preview hidden><h3>Automatically Loaded Papers</h3><p data-award-scope></p><div class="table"><table><thead><tr><th>Subject</th><th>Exam Date</th><th>Paper Type</th><th>Total Marks</th><th>Time</th></tr></thead><tbody data-award-papers></tbody></table></div></div>
+<p role="status" data-award-status>Choose a class and exam type to load papers.</p>
+<details><summary>Advanced student filtering</summary><label>Student Filtering<select name="student_filter"><option value="class">Class Wise — all students</option><option value="subject">Subject Wise — enrolled students only</option></select></label></details>
+<div class="form-actions"><button type="submit" disabled data-award-submit>Generate Award List</button></div>
+</form>
+<script id="award-date-sources" type="application/json">{{award_date_sources|tojson}}</script><script src="{{asset_url('award_date_import.js')}}" defer></script>
+{% else %}<p>No saved date sheets with an exam type are available. <a href="{{url_for('ops.examination',kind='date-sheets')}}">Create Date Sheet</a> first, or use advanced manual creation below.</p>{% endif %}</section>

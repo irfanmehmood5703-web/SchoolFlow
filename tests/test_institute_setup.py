@@ -173,6 +173,31 @@ class InstituteSetupTests(unittest.TestCase):
         row.data={**row.data,'class_name':'Missing class'};db.session.commit()
         self.assertEqual(self.c.get(path+'?copy=class').status_code,422)
 
+    def test_award_import_copies_all_saved_papers_and_reuses_existing_list(self):
+        self.assertEqual(self.mapping().status_code,302)
+        for subject in ('Math','English'):
+            db.session.add(self.rm['settings'](category='subject',value=subject,class_name=''))
+        I=app.extensions['school_settings_models']['item']
+        db.session.add(I(kind='test-type',scope='Campus A',name='Monthly Test',data={}))
+        W=app.extensions['ops_models']['workflow']
+        papers=[dict(subject=s,date='2026-11-25',type='Written',total=n,teacher='',time='09:00',syllabus='Chapter 1',grading='Marks') for s,n in [('Math',20),('English',50)]]
+        sheet=W(kind='date-sheets',status='Active',data=dict(name='Monthly source',campus='Campus A',class_name='Class A',section='A',academic_session='2026-27',exam_test_type='Monthly Test',papers=papers))
+        db.session.add(sheet);db.session.commit()
+        path='/workspace/examination/awards'
+        rev=hashlib.sha256(json.dumps(sheet.data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        args=dict(_csrf=self.csrf,action='from-date-sheet',source_sheet_id=sheet.id,source_revision=rev,class_name='Class A',exam_test_type='Monthly Test',assessment_category='Monthly')
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200);self.assertIn(b'Create from Date Sheet',page.data);self.assertIn(b'Monthly source',page.data)
+        self.assertEqual(self.c.post(path,data={**args,'class_name':'Class B'}).status_code,422)
+        self.assertEqual(self.c.post(path,data={**args,'source_revision':'stale'}).status_code,422)
+        response=self.c.post(path,data={**args,'subject':'Fake','total':'999'})
+        self.assertEqual(response.status_code,302)
+        award=W.query.filter_by(kind='awards').one()
+        self.assertEqual(award.data['papers'],papers);self.assertEqual(award.data['source_date_sheet_id'],sheet.id)
+        self.assertEqual(award.data['class_name'],'Class A');self.assertEqual(award.data['assessment_category'],'Monthly')
+        self.assertEqual(self.c.post(path,data=args).status_code,302)
+        self.assertEqual(W.query.filter_by(kind='awards').count(),1)
+
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
         page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
         ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))

@@ -963,9 +963,64 @@ def configure_operations(app, db, Student, Employee):
         subjects=[s for s in subjects if helpers['subject_allowed'](row.data.get('campus',''),row.data.get('class_name',''),s)]
         return render('date_sheet_edit.html',title='Edit Date Sheet',row=row,revision=date_sheet_revision(row),subjects=subjects,exam_types=helpers['exam_types'](row.data.get('campus','')),subject_grading={r.name:r.data.get('grading','Marks') for r in helpers['items']('subject')})
 
+    def award_from_date_sheet():
+        # Always read the saved school-scoped document, not client-supplied papers.
+        app.extensions['admission_capacity']['lock']()
+        sid=request.form.get('source_sheet_id',type=int)
+        if not sid:raise ValueError('Choose a saved date sheet.')
+        source=saved_date_sheet(sid);d=source.data
+        if request.form.get('source_revision')!=date_sheet_revision(source):raise ValueError('The date sheet changed. Review its papers again.')
+        if not d.get('campus') or not d.get('class_name') or not d.get('academic_session') or not d.get('exam_test_type'):raise ValueError('The saved date sheet must have a campus, class, session and exam type.')
+        if any(request.form.get(k)!=d.get(k) for k in ('class_name','exam_test_type')):raise ValueError('Choose a date sheet matching the selected class and exam type.')
+        # Existing linked lists remain independent snapshots; reopening never overwrites marks.
+        existing=Workflow.query.filter_by(kind='awards').all()
+        prior=next((r for r in existing if r.data.get('source_date_sheet_id')==source.id),None)
+        if prior:
+            if any(prior.data.get(k)!=d.get(k) for k in ('campus','class_name','section','academic_session')):raise ValueError('The linked award list has a different scope.')
+            flash('An award list already exists for this date sheet. Existing marks are preserved.','success')
+            return redirect(url_for('ops.marks',award_id=prior.id))
+        helpers=app.extensions['school_settings_helpers']
+        if d['exam_test_type'] not in helpers['exam_types'](d['campus']):raise ValueError('The exam type is no longer configured for this campus.')
+        mapped,_,tokens=date_sheet_scopes()
+        if mapped and not any(all(scope[k]==d.get(k,'') for k in ('campus','class_name','section','academic_session')) for scope in tokens.values()):raise ValueError('The date sheet cohort is no longer active in Institute Setup.')
+        papers=[]
+        for p in d.get('papers',[]):
+            subject=p.get('subject','')
+            if not subject or not helpers['subject_allowed'](d['campus'],d['class_name'],subject):raise ValueError('A saved paper is no longer assigned to this class. Review the date sheet.')
+            day(p.get('date',''))
+            if p.get('type') not in ('Written','Oral','Practical'):raise ValueError('Review the paper types on the date sheet.')
+            grading=helpers['subject_config'](subject).get('grading','Marks')
+            if grading!=p.get('grading','Marks'):raise ValueError('Subject grading changed since the date sheet was saved. Review the date sheet first.')
+            if grading=='Marks':
+                try:total=float(p.get('total',0))
+                except (TypeError,ValueError):raise ValueError('Review total marks on the date sheet.')
+                if not 0<total<=10000:raise ValueError('Review total marks on the date sheet.')
+            papers.append(dict(p))
+        if not papers:raise ValueError('The selected date sheet has no papers.')
+        category=request.form.get('assessment_category','')
+        if category and category not in PERFORMANCE_CATEGORIES:raise ValueError('Choose a valid assessment category.')
+        student_filter=request.form.get('student_filter','class')
+        if student_filter not in ('class','subject'):raise ValueError('Choose a valid student filtering mode.')
+        used={r.data.get('name') for r in existing}|{r.data.get('batch_name') for r in existing}
+        name=('Award — '+d.get('name','Exam'))[:950]
+        if name in used:name=name+' — '+str(source.id)
+        if name in used:raise ValueError('An award list with this name already exists.')
+        data={k:d.get(k,'') for k in ('campus','class_name','section','academic_session','exam_test_type','print_heading')}
+        data.update(name=name,papers=papers,gender='',group_name='',return_date='',sort_order='roll',student_filter=student_filter,recheck=bool(d.get('recheck')),assessment_category=category,source_date_sheet_id=source.id,source_date_sheet_revision=date_sheet_revision(source))
+        obj=Workflow(kind='awards',data=data,status='Active')
+        db.session.add(obj);db.session.flush();audit('Create award list from date sheet',award_id=obj.id,source_sheet_id=source.id,campus=d['campus']);commit()
+        return redirect(url_for('ops.marks',award_id=obj.id))
+
+    def award_date_sheet_options():
+        allowed=getattr(g,'access_campuses',None)
+        rows=Workflow.query.filter_by(kind='date-sheets').order_by(Workflow.id.desc()).all()
+        return [dict(id=r.id,revision=date_sheet_revision(r),name=r.data.get('name',''),campus=r.data['campus'],class_name=r.data['class_name'],section=r.data.get('section',''),session=r.data['academic_session'],exam_type=r.data['exam_test_type'],papers=[{k:p.get(k,'') for k in ('subject','date','type','total','grading','time')} for p in r.data.get('papers',[])]) for r in rows if all(r.data.get(k) for k in ('campus','class_name','academic_session','exam_test_type')) and (allowed is None or r.data['campus'] in allowed)]
+
     @bp.route('/examination/<kind>',methods=['GET','POST'])
     def examination(kind):
         if kind not in ('date-sheets','awards'): abort(404)
+        if kind=='awards' and request.method=='POST' and request.form.get('action')=='from-date-sheet':
+            return award_from_date_sheet()
         if kind=='date-sheets' and request.method=='POST':
             # Serialize name checks and the entire batch, not individual rows.
             app.extensions['admission_capacity']['lock']()
@@ -1053,7 +1108,7 @@ def configure_operations(app, db, Student, Employee):
                 return redirect(url_for('ops.examination',kind=kind))
             obj=Workflow(kind=kind,data=data,status='Active');db.session.add(obj);audit('Create '+kind);commit()
             return redirect(url_for('ops.marks',award_id=obj.id)) if kind=='awards' else redirect(url_for('ops.examination',kind=kind))
-        return render('examination.html',date_revision=date_sheet_revision,date_has_publication=date_sheet_has_publication,date_mapped=mapped,date_groups=date_groups,date_sessions=sorted({s['academic_session'] for s in date_tokens.values()}),subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
+        return render('examination.html',award_date_sources=award_date_sheet_options() if kind=='awards' else [],date_revision=date_sheet_revision,date_has_publication=date_sheet_has_publication,date_mapped=mapped,date_groups=date_groups,date_sessions=sorted({s['academic_session'] for s in date_tokens.values()}),subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
 
     def award_students(award):
         Details=rm['student']

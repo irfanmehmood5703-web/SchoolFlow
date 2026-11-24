@@ -405,3 +405,5 @@ html,body{max-width:100%}
 .date-sheet-student-photo{box-sizing:border-box;width:68px;height:85px;object-fit:contain;object-position:center;align-self:flex-start;flex:0 0 auto;margin-left:auto}
 .date-sheet-photo-empty{font-size:9px;padding:3px}
 @media print{.date-sheet-student{padding:6pt 7pt;gap:8pt;margin:6pt 0}.date-sheet-student-details{align-self:start;gap:3pt 8pt;line-height:1.35}.date-sheet-student-details>div{padding:2pt 0}.date-sheet-student-photo{width:18mm;height:22.5mm}.date-sheet-photo-empty{font-size:7pt}}
+
+.award-quick [hidden]{display:none!important}.award-quick [data-award-preview]{margin-top:12px;border:1px solid #cbded3;border-radius:8px;padding:12px;background:#f6faf7}.award-quick [data-award-status]{color:#174b35;font-weight:600}.award-manual>summary{cursor:pointer;color:#174b35;font-weight:600}.award-manual>form{margin:12px 0 0;box-shadow:none}.award-quick details{margin-top:12px}
