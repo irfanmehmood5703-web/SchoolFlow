@@ -14,7 +14,8 @@ def verify():
         os.environ['DATABASE_URL']='sqlite:///'+str(Path(tmp)/'control.db');os.environ['INSTITUTE_DATABASE_DIR']=str(Path(tmp)/'schools');os.environ['SCHOOLFLOW_FINE_WORKER']='0'
         from app import app,db
         import app_builder_auth
-        from scripts.school_app_worker import run
+        from scripts.school_app_worker import run,build,inspect_apks,make_key,CLIENTS
+        import shutil
         from werkzeug.serving import make_server
         app.config.update(TESTING=True,IDENTITY_ENFORCE_IN_TESTS=True,SECRET_KEY='fictional-build-test-only')
         ids=[];clients=[];password=secrets.token_urlsafe(24)
@@ -71,8 +72,20 @@ def verify():
                 assert run(base,fixture_token=token)
                 with app.app_context():
                     latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
-                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==13
+                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==14
                     assert db.session.get(models['signing'],scope).fingerprint==first_key
+            with tempfile.TemporaryDirectory(prefix='face-build-qa-') as folder:
+                path=Path(folder)/'test.p12'
+                key_password=secrets.token_urlsafe(24)
+                make_key(path,key_password)
+                sample=dict(name='Fictional Academy',code='FACE-APP-QA',school_key='a'*32,sequence=1,face_storage=True)
+                try:
+                    build(sample,b'',path,key_password)
+                    results=inspect_apks(sample,sha)
+                    face=next(item for item in results['artifacts'] if item['role']=='face')
+                    assert face['label']=='Fictional Academy Face Attendance' and 100<face['size']<170*1024*1024
+                finally:
+                    shutil.rmtree(CLIENTS/'generated-school-res',ignore_errors=True)
             print('Verified 20 compiled school APKs: two schools, real logo restoration after a central upgrade, labels, packages, private signing, APK-only sharing and stable-key updates.')
         finally:server.shutdown();thread.join(timeout=5)
 

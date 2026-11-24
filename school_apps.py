@@ -13,10 +13,12 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder,QR_WORKFLOW,REPOSITORY
 from itsdangerous import BadData, URLSafeTimedSerializer
 
-SOURCE_VERSION=13
-ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}
+SOURCE_VERSION=14
+ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance','face':'Face Attendance'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
+MAX_FACE_APK=170*1024*1024
+APK_MIME='application/vnd.android.package-archive'
 UPDATE_TICKET_MAX_AGE=30*60
 BUILD_FAILED='The app build did not finish. The school owner can retry from App Links.'
 
@@ -73,6 +75,29 @@ def configure_school_apps(app,db):
         engine=db.session.get_bind(mapper=Gate.__mapper__);insert=postgres_insert if engine.dialect.name=='postgresql' else sqlite_insert
         db.session.execute(insert(Gate).values(id=1,revision=1).on_conflict_do_update(index_elements=['id'],set_={'revision':Gate.revision+1}))
     def cipher():return Fernet(base64.urlsafe_b64encode(hashlib.sha256(str(app.config.get('SCHOOL_APP_SIGNING_KEY') or app.config['SECRET_KEY']).encode()+b'school-app-signing-v1').digest()))
+    def face_storage():
+        from school_face_storage import configured_storage
+        return configured_storage()
+    def face_key(build_id,digest):
+        return 'face/'+build_id+'/'+digest+'.apk'
+    def required_roles(spec):
+        return set(ROLES) if spec.get('face_storage') else set(ROLES)-{'face'}
+    def artifact_response(school, file):
+        filename='School-'+school.code+'-'+file.role+'.apk'
+        if file.role=='face':
+            storage=face_storage()
+            if not storage:abort(503,'Face Attendance download storage is unavailable.')
+            client,bucket=storage
+            url=client.generate_presigned_url('get_object',Params={
+                'Bucket':bucket,'Key':face_key(file.build_id,file.sha256),'ResponseContentDisposition':f'attachment; filename="{filename}"',
+                'ResponseContentType':APK_MIME},ExpiresIn=600)
+            response=redirect(url)
+            response.headers['Referrer-Policy']='no-referrer'
+        else:
+            response=send_file(io.BytesIO(file.content),mimetype=APK_MIME,as_attachment=True,download_name=filename)
+        response.headers['X-APK-SHA256']=file.sha256
+        response.headers['Cache-Control']='private, no-store'
+        return response
     def qr_release():
         row=db.session.get(QRRelease,1)
         return row.published if row else {}
@@ -132,6 +157,7 @@ def configure_school_apps(app,db):
         name=display_name((row.data.get('display_name') if row else '') or ' '.join(str((profile.data.get('name') if profile else '') or school.name).split())[:80])
         logo=bytes(profile.logo) if profile and profile.logo_mime and profile.logo else b''
         spec=dict(name=name,code=school.code,school_key=school.storage_key,logo_sha256=hashlib.sha256(logo).hexdigest(),source_version=SOURCE_VERSION)
+        if face_storage():spec['face_storage']=True
         fingerprint=hashlib.sha256(json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
         return spec,logo,fingerprint,row
     def current(school):
@@ -157,7 +183,7 @@ def configure_school_apps(app,db):
         files={f.role:f for f in Artifact.query.filter_by(build_id=build.id).all()} if build and build.state=='ready' else {}
         signer=db.session.get(Signing,school.storage_key) if files else None
         for row in rows:
-            if row['key'] not in ROLES:continue
+            if row['key'] not in required_roles(spec):continue
             role=row['key'];file=files.get(role)
             row.pop('official_qr',None)
             row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school name and icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
@@ -216,8 +242,7 @@ def configure_school_apps(app,db):
         spec,build,_=current(school)
         if not build or build.state!='ready':abort(409,'Your school app is not ready yet. Prepare it in App Links.')
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
-        response=send_file(io.BytesIO(file.content),mimetype='application/vnd.android.package-archive',as_attachment=True,download_name='School-'+school.code+'-'+role+'.apk')
-        response.headers['X-APK-SHA256']=file.sha256;response.headers['Cache-Control']='private, no-store';return response
+        return artifact_response(school,file)
     @bp.get('/apps/school/<token>/<role>.apk')
     def public_download(token,role):
         if role not in ROLES or not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):abort(404)
@@ -228,8 +253,7 @@ def configure_school_apps(app,db):
         spec,build,_=current(school)
         if not build or build.state!='ready':abort(409,'The school app is being prepared. Ask the school for its current download link.')
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
-        response=send_file(io.BytesIO(file.content),mimetype='application/vnd.android.package-archive',as_attachment=True,download_name='School-'+school.code+'-'+role+'.apk')
-        response.headers['Cache-Control']='private, no-store';response.headers['X-APK-SHA256']=file.sha256;return response
+        return artifact_response(school,file)
     def update_ticket():
         return URLSafeTimedSerializer(app.config['SECRET_KEY'],salt='schoolflow-apk-update-v1')
 
@@ -246,11 +270,7 @@ def configure_school_apps(app,db):
         _,build,_=current(school)
         if not build or build.state!='ready' or build.sequence!=sequence:abort(404)
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
-        response=send_file(io.BytesIO(file.content),mimetype='application/vnd.android.package-archive',
-                           as_attachment=True,download_name='School-'+school.code+'-'+role+'.apk')
-        response.headers['Cache-Control']='private, no-store'
-        response.headers['X-APK-SHA256']=file.sha256
-        return response
+        return artifact_response(school,file)
 
     @bp.get('/api/mobile-app/update/<scope>/<role>')
     def mobile_update(scope,role):
@@ -292,7 +312,7 @@ def configure_school_apps(app,db):
         latest=db.session.query(Build.school_key,db.func.max(Build.sequence)).group_by(Build.school_key).all()
         for school_key,sequence in latest:
             previous=Build.query.filter_by(school_key=school_key,sequence=sequence).one()
-            upgrade=previous.state=='ready' and previous.spec.get('source_version',1)<SOURCE_VERSION
+            upgrade=previous.state=='ready' and (previous.spec.get('source_version',1)<SOURCE_VERSION or bool(previous.spec.get('face_storage'))!=bool(face_storage()))
             recover=(previous.state=='failed' and previous.attempts==1
                      and previous.error==BUILD_FAILED and previous.spec.get('source_version')==SOURCE_VERSION)
             if not upgrade and not recover:continue
@@ -343,16 +363,43 @@ def configure_school_apps(app,db):
         if not key.fingerprint:
             key.fingerprint=fingerprint;private['keystore']=base64.b64encode(blob).decode();key.encrypted=cipher().encrypt(json.dumps(private).encode())
         db.session.commit();return jsonify(saved=True,fingerprint=fingerprint)
+    @bp.post('/api/app-builder/<bid>/face-upload')
+    def face_upload(bid):
+        claims=authenticate_builder();data=payload();row=leased(bid,claims)
+        storage=face_storage()
+        if not row.spec.get('face_storage') or not storage:abort(404)
+        digest=data.get('sha256');size=data.get('size')
+        if type(size) is not int or not 100<size<=MAX_FACE_APK or not re.fullmatch(r'[a-f0-9]{64}',str(digest)):
+            raise ValueError('Provide the Face APK size and checksum.')
+        client,bucket=storage
+        fields={'Bucket':bucket,'Key':face_key(row.id,digest),'ContentType':APK_MIME,'ContentLength':size,'Metadata':{'sha256':digest}}
+        response=jsonify(url=client.generate_presigned_url('put_object',Params=fields,ExpiresIn=900))
+        response.headers['Cache-Control']='no-store'
+        return response
+
     @bp.post('/api/app-builder/<bid>/complete')
     def complete(bid):
         claims=authenticate_builder();data=payload();lock();row=leased(bid,claims);key=db.session.get(Signing,row.school_key)
         if not key or not key.fingerprint:raise ValueError('Store the school signing identity before publishing apps.')
         files=data.get('artifacts')
-        if not isinstance(files,list) or len(files)!=len(ROLES) or {f.get('role') for f in files if isinstance(f,dict)}!=set(ROLES):raise ValueError('Provide exactly one APK for each school app.')
+        roles=required_roles(row.spec)
+        if not isinstance(files,list) or len(files)!=len(roles) or {f.get('role') for f in files if isinstance(f,dict)}!=roles:raise ValueError('Provide exactly one APK for each school app.')
         if data.get('source_sha')!=claims['sha']:raise ValueError('Build provenance does not match this workflow.')
         for f in files:
             role=f['role'];expected='com.schoolflow.schools.s'+row.school_key+'.'+role+'.test'
             if f.get('package')!=expected or f.get('label')!=row.spec['name']+' '+ROLES[role] or f.get('version_code')!=row.sequence or f.get('signing_sha256')!=key.fingerprint:raise ValueError('APK branding, package, version or signing identity does not match its school.')
+            if role=='face':
+                storage=face_storage()
+                if not storage:abort(503,'Face Attendance build storage is unavailable.')
+                client,bucket=storage
+                digest=f.get('sha256');size=f.get('size')
+                if type(size) is not int or not 100<size<=MAX_FACE_APK or not re.fullmatch(r'[a-f0-9]{64}',str(digest)):
+                    raise ValueError('Provide verified Face APK metadata.')
+                header=client.head_object(Bucket=bucket,Key=face_key(row.id,digest))
+                if header['ContentLength']!=size or header.get('Metadata',{}).get('sha256')!=digest:
+                    raise ValueError('Uploaded Face APK metadata does not match.')
+                db.session.add(Artifact(build_id=row.id,role=role,sha256=digest,size=size,content=b''))
+                continue
             try:
                 blob=base64.b64decode(f.get('content',''),validate=True)
                 if not 100<len(blob)<=MAX_APK:raise ValueError()
@@ -365,8 +412,16 @@ def configure_school_apps(app,db):
         row.state='ready';row.finished=time.time();row.source_sha=claims['sha'];row.lease_until=0;row.logo=b''
         # Keep two completed APK revisions; never discard a signing identity.
         old_ids=[r.id for r in Build.query.filter_by(school_key=row.school_key,state='ready').order_by(Build.sequence.desc()).offset(2).all()]
+        old_face_keys=[face_key(f.build_id,f.sha256) for f in Artifact.query.filter(Artifact.build_id.in_(old_ids),Artifact.role=='face').all()] if old_ids else []
         if old_ids:Artifact.query.filter(Artifact.build_id.in_(old_ids)).delete(synchronize_session=False)
-        db.session.commit();return jsonify(ready=True)
+        db.session.commit()
+        if old_face_keys and (storage:=face_storage()):
+            client,bucket=storage
+            try:
+                client.delete_objects(Bucket=bucket,Delete={'Objects':[{'Key':key} for key in old_face_keys]})
+            except Exception:
+                app.logger.warning('Could not clean up older Face Attendance APKs.')
+        return jsonify(ready=True)
     @bp.post('/api/app-builder/<bid>/fail')
     def fail(bid):
         claims=authenticate_builder();payload();lock();row=leased(bid,claims)

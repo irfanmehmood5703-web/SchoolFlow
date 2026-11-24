@@ -2,7 +2,7 @@
 import os,tempfile,time,unittest,base64,io,zipfile,hashlib,secrets
 from urllib.parse import urlsplit
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock,patch
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 import jwt
 from cryptography import x509
@@ -43,7 +43,7 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':13},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':14},headers=headers or self.headers)
     def key(self,job,other=False):
         if job['signing'].get('keystore') and not other:return self.worker.put('/api/app-builder/'+job['id']+'/signing',json={'keystore':job['signing']['keystore']},headers=self.headers)
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
@@ -52,11 +52,12 @@ class SchoolAppTests(unittest.TestCase):
         content=pkcs12.serialize_key_and_certificates(b'schoolflow',key,certificate,None,serialization.BestAvailableEncryption(password.encode()))
         response=self.worker.put('/api/app-builder/'+job['id']+'/signing',json={'keystore':base64.b64encode(content).decode()},headers=self.headers)
         return response
-    def complete(self,job):
+    def complete(self,job,face=None):
         response=self.key(job);self.assertEqual(response.status_code,200);fingerprint=response.json['fingerprint'];blob=io.BytesIO()
         with zipfile.ZipFile(blob,'w') as archive:archive.writestr('AndroidManifest.xml','Synthetic unit-test fixture, not an installable Android build');archive.writestr('classes.dex','fictional-dex')
         content=blob.getvalue();files=[]
         for role,title in {'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}.items():files.append(dict(role=role,label=job['branding']['name']+' '+title,package='com.schoolflow.schools.s'+job['branding']['school_key']+'.'+role+'.test',version_code=job['sequence'],signing_sha256=fingerprint,sha256=hashlib.sha256(content).hexdigest(),content=base64.b64encode(content).decode()))
+        if face:files.append({**files[0],**face,'role':'face','label':job['branding']['name']+' Face Attendance','package':files[0]['package'].replace('.parents.','.face.'),'content':None})
         body=dict(source_sha='a'*40,artifacts=files)
         self.assertEqual(self.worker.post('/api/app-builder/'+job['id']+'/complete',json=body,headers=self.headers).status_code,200)
         return body
@@ -105,6 +106,29 @@ class SchoolAppTests(unittest.TestCase):
         self.assertIn(b'Face Attendance (shared)',page)
         self.assertIn(public.json['url'].encode(),page)
         self.assertNotIn(b'signing',self.clients[0].get('/workspace/general/school-apps/status').data)
+    def test_face_apk_stays_bound_to_the_current_school(self):
+        storage=Mock()
+        face=dict(sha256='d'*64,size=120000000)
+        storage.head_object.return_value={'ContentLength':face['size'],'Metadata':{'sha256':face['sha256']}}
+        storage.generate_presigned_url.return_value='https://private-download.example/face.apk'
+        with patch('school_face_storage.configured_storage',return_value=(storage,'private-face')):
+            self.prepare()
+            job=self.claim().json['job']
+            self.assertTrue(job['branding']['face_storage'])
+            upload='/api/app-builder/'+job['id']+'/face-upload'
+            self.assertEqual(self.worker.post(upload,json=face,headers=self.token(run_id='56')).status_code,409)
+            self.assertEqual(self.worker.post(upload,json=face,headers=self.headers).status_code,200)
+            self.complete(job,face=face)
+            primary=self.clients[0].get('/workspace/general/app-links').data
+            self.assertIn(b'ISF School System Face Attendance',primary)
+            self.assertIn(b'/face.apk',primary)
+            self.assertNotIn(b'ISF School System Face Attendance',self.clients[1].get('/workspace/general/app-links').data)
+            download=self.clients[0].get('/workspace/general/school-apps/face/download')
+            self.assertEqual(download.status_code,302)
+            self.assertEqual(download.location,'https://private-download.example/face.apk')
+            self.assertEqual(download.headers['X-APK-SHA256'],face['sha256'])
+            self.assertEqual(self.clients[1].get('/workspace/general/school-apps/face/download').status_code,409)
+
     def test_oidc_rejects_foreign_repo_branch_workflow_expiry_and_missing_auth(self):
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={}).status_code,401)
         for changes in [dict(repository_id='wrong'),dict(repository='someone/SchoolFlow'),dict(ref='refs/heads/feature'),dict(workflow_ref='different'),dict(event_name='pull_request')]:self.assertEqual(self.claim(self.token(**changes)).status_code,403)
@@ -196,7 +220,7 @@ class SchoolAppTests(unittest.TestCase):
         old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
         update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
-        self.assertEqual(update['branding']['source_version'],13)
+        self.assertEqual(update['branding']['source_version'],14)
         self.assertEqual(self.claim().json['job']['id'],update['id'])
         self.assertEqual(self.M['build'].query.count(),2)
 

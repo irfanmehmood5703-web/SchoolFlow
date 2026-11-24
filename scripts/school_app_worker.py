@@ -5,6 +5,9 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 CLIENTS=ROOT/'mobile'/'clients'
+GATE=ROOT/'mobile'/'gate'
+FACE_APK=GATE/'app/build/outputs/apk/release/app-release.apk'
+FACE_MIME='application/vnd.android.package-archive'
 AUDIENCE='https://schoolflow-phase1.onrender.com/api/app-builder'
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}
 
@@ -50,10 +53,11 @@ def verify_school_icon(archive,expected_path):
             if actual.size==size and visible(actual)==pixels:matches+=1
     if matches!=1:raise RuntimeError('APK icon does not match its school logo')
 
-def inspect_apks(branding,source_sha):
+def inspect_apks(branding,source_sha,upload_face=None):
     aapt,signer=tools();artifacts=[]
-    for role,title in ROLES.items():
-        path=CLIENTS/'app'/'build'/'outputs'/'apk'/role/'debug'/('app-'+role+'-debug.apk')
+    roles={**ROLES,'face':'Face Attendance'} if branding.get('face_storage') else ROLES
+    for role,title in roles.items():
+        path=FACE_APK if role=='face' else CLIENTS/'app'/'build'/'outputs'/'apk'/role/'debug'/('app-'+role+'-debug.apk')
         badging=subprocess.check_output([str(aapt),'dump','badging',str(path)],text=True)
         package=re.search(r"package: name='([^']+)' versionCode='(\d+)'",badging)
         label=re.search(r"^application-label:'(.*)'$",badging,re.MULTILINE)
@@ -70,7 +74,15 @@ def inspect_apks(branding,source_sha):
         if not fingerprint:raise RuntimeError('APK signing certificate could not be verified')
         with zipfile.ZipFile(path) as archive:
             verify_school_icon(archive,CLIENTS/'generated-school-res'/'drawable'/'school_icon_foreground.png')
-        blob=path.read_bytes();artifacts.append(dict(role=role,package=package[1],label=label_text,version_code=int(package[2]),signing_sha256=fingerprint,sha256=hashlib.sha256(blob).hexdigest(),content=base64.b64encode(blob).decode()))
+        with path.open('rb') as stream:
+            digest=hashlib.file_digest(stream,'sha256').hexdigest()
+        metadata=dict(role=role,package=package[1],label=label_text,version_code=int(package[2]),signing_sha256=fingerprint,sha256=digest)
+        if role=='face':
+            metadata['size']=path.stat().st_size
+            if upload_face:upload_face(path,metadata)
+        else:
+            metadata['content']=base64.b64encode(path.read_bytes()).decode()
+        artifacts.append(metadata)
     return dict(source_sha=source_sha,artifacts=artifacts)
 
 def build(branding,logo,keyfile,password):
@@ -79,26 +91,32 @@ def build(branding,logo,keyfile,password):
     with tempfile.TemporaryDirectory(prefix='schoolflow-brand-') as tmp:
         manifest=Path(tmp)/'branding.json';manifest.write_text(json.dumps(branding))
         args=['gradle','--no-daemon','--console=plain','-PschoolBrandingFile='+str(manifest),'-PschoolSigningFile='+str(keyfile)]
+        if branding.get('face_storage'):
+            subprocess.run([os.sys.executable,'download_models.py'],cwd=GATE,check=True)
+            run_gradle([*args,':app:lintRelease',':app:assembleRelease'],GATE,password)
         for role in ROLES:
             cap=role.capitalize();args.extend([':app:test'+cap+'DebugUnitTest',':app:lint'+cap+'Debug',':app:assemble'+cap+'Debug'])
-        # Dependency servers occasionally throttle GitHub runners. Keep the same
-        # claimed build and signing key while Gradle retries the download.
-        for attempt in range(3):
-            rate_limited=False
-            with subprocess.Popen(args,cwd=CLIENTS,env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password},
-                                  stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace') as process:
-                for line in process.stdout:
-                    print(line,end='',flush=True)
-                    rate_limited |= 'Received status code 429' in line
-                status=process.wait()
-            if status==0:return
-            if not rate_limited or attempt==2:raise subprocess.CalledProcessError(status,args)
-            delay=20*(attempt+1)
-            print(f'Dependency server is rate limiting Gradle. Retrying in {delay} seconds.',flush=True)
-            time.sleep(delay)
+        run_gradle(args,CLIENTS,password)
+
+def run_gradle(args,directory,password):
+    # Dependency servers occasionally throttle GitHub runners. Keep the same
+    # claimed build and signing key while Gradle retries the download.
+    for attempt in range(3):
+        rate_limited=False
+        with subprocess.Popen(args,cwd=directory,env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password},
+                              stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace') as process:
+            for line in process.stdout:
+                print(line,end='',flush=True)
+                rate_limited |= 'Received status code 429' in line
+            status=process.wait()
+        if status==0:return
+        if not rate_limited or attempt==2:raise subprocess.CalledProcessError(status,args)
+        delay=20*(attempt+1)
+        print(f'Dependency server is rate limiting Gradle. Retrying in {delay} seconds.',flush=True)
+        time.sleep(delay)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{'source_version':13},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':14},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:
@@ -109,9 +127,19 @@ def run(base,fixture_token=None):
             else:make_key(key,signing['password'])
             api(base,bid+'/signing',{'keystore':base64.b64encode(key.read_bytes()).decode()},method='PUT',token=fixture_token)
             build(branding,base64.b64decode(job['logo'],validate=True),key,signing['password'])
-            result=inspect_apks(branding,os.environ['GITHUB_SHA'])
+            def upload_face(path,metadata):
+                target=api(base,bid+'/face-upload',{'sha256':metadata['sha256'],'size':metadata['size']},token=fixture_token)
+                with path.open('rb') as stream:
+                    request=urllib.request.Request(target['url'],method='PUT',data=stream,headers={
+                        'Content-Length':str(metadata['size']),'Content-Type':FACE_MIME,'x-amz-meta-sha256':metadata['sha256']})
+                    try:
+                        with urllib.request.urlopen(request,timeout=150) as response:
+                            if response.status not in (200,201,204):raise RuntimeError('Face APK storage refused upload.')
+                    except (OSError,urllib.error.HTTPError):
+                        raise RuntimeError('Face APK upload failed.') from None
+            result=inspect_apks(branding,os.environ['GITHUB_SHA'],upload_face)
             api(base,bid+'/complete',result,token=fixture_token)
-        print('Five school-specific APKs verified and returned to the correct school.');return True
+        print(f'{len(result["artifacts"])} school-specific APKs verified and returned to the correct school.');return True
     except Exception:
         try:api(base,bid+'/fail',{},token=fixture_token)
         except Exception:pass
