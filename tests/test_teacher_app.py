@@ -67,6 +67,44 @@ class TeacherAppTests(unittest.TestCase):
         data[f'mark_{self.pupil}']='35';data['mark_999']='12';self.assertEqual(self.c.post(path,data=data).status_code,403)
         data.pop('mark_999');self.assertEqual(self.c.post(path,data=data).status_code,302)
         self.tenant(lambda:self.assertEqual(self.ops['score'].query.one().obtained,35))
+    def test_teacher_marks_sync_to_school_multi_subject_award(self):
+        self.seed()
+        def make():
+            W=self.ops['workflow'];teacher=str(db.session.get(self.Staff,self.sid).employee_id)
+            detail=self.rm['student'].query.filter_by(student_id=self.pupil).one()
+            detail.data={**detail.data,'academic_session':'2027'}
+            papers=[dict(subject=subject,grading='Marks',total=maximum,date=str(school_today()),type='Written',teacher=teacher,time='',syllabus='') for subject,maximum in [('English',40),('Math',50),('Urdu',50)]]
+            scope=dict(campus='Campus A',class_name='One',section='A',academic_session='2027',exam_test_type='Monthly Test')
+            sheet=W(kind='date-sheets',status='Active',data=dict(name='Fictional monthly sheet',papers=papers,**scope))
+            db.session.add(sheet);db.session.flush()
+            award=W(kind='awards',status='Active',data=dict(name='Fictional imported award',source_date_sheet_id=sheet.id,assessment_category='Monthly',student_filter='class',papers=papers,**scope))
+            db.session.add(award);db.session.flush()
+            db.session.add(self.ops['score'](award_id=award.id,student_id=self.pupil,paper=0,obtained=30,state=''))
+            return award.id
+        aid=self.tenant(make)
+        root=f'/teacher-app/classes/{self.cid}'
+        listing=self.c.get(root+'/exams')
+        self.assertEqual(listing.status_code,200)
+        self.assertIn(f'/marks/{aid}/1'.encode(),listing.data)
+        for i in (0,2):
+            self.assertNotIn(f'/marks/{aid}/{i}'.encode(),listing.data)
+            self.assertEqual(self.c.get(root+f'/marks/{aid}/{i}').status_code,403)
+        path=root+f'/marks/{aid}/1'
+        token=self.review(path)
+        data={'_csrf':self.token(),'review':token,f'mark_{self.pupil}':'51'}
+        self.assertEqual(self.c.post(path,data=data).status_code,422)
+        data[f'mark_{self.pupil}']='44'
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        def check():
+            rows=self.ops['score'].query.filter_by(award_id=aid).order_by(self.ops['score'].paper).all()
+            self.assertEqual([(r.student_id,r.paper,r.obtained) for r in rows],[(self.pupil,0,30),(self.pupil,1,44)])
+        self.tenant(check)
+        self.assertEqual(self.login('owner@example.invalid').status_code,302)
+        page=self.c.get(f'/workspace/marks/{aid}')
+        self.assertEqual(page.status_code,200)
+        self.assertRegex(page.data,rb'name="mark_'+str(self.pupil).encode()+rb'_1" value="44(?:\.0)?"')
+        self.assertRegex(page.data,rb'name="mark_'+str(self.pupil).encode()+rb'_0" value="30(?:\.0)?"')
+
     def test_material_publication_and_files_stay_assigned(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/materials';page=self.c.get(path);token=re.search(rb'name="token" value="([^"]+)"',page.data).group(1).decode()
         data={'_csrf':self.token(),'action':'create','token':token,'kind':'notes','title':'Fictional study','body':'<script>evil()</script><b>Read</b>','starts':str(school_today()),'ends':str(school_today()+timedelta(days=3)),'published':'1'}
