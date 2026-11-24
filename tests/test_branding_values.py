@@ -177,6 +177,29 @@ class BrandingValueTests(unittest.TestCase):
         self.assertEqual(self.ops['score'].query.count(),2)
         self.assertIn(b'<th>Percentage</th>',self.c.get(path).data)
 
+    def test_result_card_grand_total_row_respects_display_options(self):
+        import re
+        award=self.award()
+        first=self.ops['score'](award_id=award.id,student_id=self.student.id,paper=0,obtained=15,state='')
+        second=self.ops['score'](award_id=award.id,student_id=self.student.id,paper=1,obtained=20,state='')
+        db.session.add_all([first,second]);db.session.commit()
+        path='/workspace/core/exam/results/'+str(award.id)
+        def total_row(url):
+            page=self.c.get(url)
+            self.assertEqual(page.status_code,200)
+            return re.search(rb'<tr class="grand-total-row">(.*?)</tr>',page.data,re.S).group(1)
+        row=total_row(path)
+        self.assertIn(b'Grand Total',row)
+        self.assertIn(b'<td>35.00</td><td>50.00</td><td>70.00%</td>',row)
+        self.assertEqual(len(re.findall(rb'<(?:th|td)\\b',row)),7)
+        row=total_row(path+'?display_options=1')
+        self.assertEqual(len(re.findall(rb'<(?:th|td)\\b',row)),3)
+        self.assertNotIn(b'%',row)
+        second.obtained=None;db.session.commit()
+        row=total_row(path)
+        self.assertIn(b'Incomplete',row)
+        self.assertNotIn(b'%',row)
+
     def test_group_report_clear_totals_and_display_options(self):
         award=self.award()
         award.data={**award.data,'papers':[dict(p,subject_group='Core subjects') for p in award.data['papers']]}

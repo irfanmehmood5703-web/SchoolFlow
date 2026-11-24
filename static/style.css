@@ -460,3 +460,6 @@ body:has(.exam-result-page) .school-print-header,body:has(.exam-result-page) .ex
 
 /* Subject group report shares result-card styling and uses explicit totals. */
 .group-report-note{font-size:11px;color:#50665a;margin:9px 0}.result-group-title{border-left:3px solid #176b51;padding-left:7px}.result-group-table .group-total-row>*{background:#e8f3ed;color:#164c37;font-weight:700}.result-group-table td{text-align:center}.result-group-table td:first-child,.result-group-table td:last-child{text-align:left}@media print{.group-report-note{font-size:8pt;margin:4pt 0}.result-group-title{break-after:avoid}.result-group-table .group-total-row{break-inside:avoid}.result-group-block{margin:0}.professional-result-card[data-compact-print="true"] .result-group-title{margin:5pt 0 3pt}}
+
+/* Grand total uses the same numeric columns as the subject rows. */
+.result-marks-table .grand-total-row>*{background:#e8f3ed;color:#164c37;font-weight:700}.result-marks-table .grand-total-row{break-inside:avoid;page-break-inside:avoid}
