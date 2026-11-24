@@ -370,3 +370,7 @@ html,body{max-width:100%}
 .date-sheet-meta{display:flex;flex-wrap:wrap;gap:8px 18px;border:1px solid #c5d8cc;padding:10px;background:#f3f8f4;font-size:12px;margin:10px 0}
 .date-sheet-table-wrap{overflow:auto}.date-sheet-table{width:100%;border-collapse:collapse;font-size:12px}.date-sheet-table th,.date-sheet-table td{border:1px solid #a9c2b1;padding:9px;vertical-align:top;white-space:normal}.date-sheet-table th{background:#e6f2ea;color:#194f39;font-weight:700}.date-sheet-syllabus{white-space:pre-wrap!important;overflow-wrap:anywhere;text-align:start}.date-sheet-recheck{min-width:80px}
 @media print{.date-sheet-actions,.date-sheet-print-actions{display:none!important}.date-sheet-table th{print-color-adjust:exact}.date-sheet-meta{print-color-adjust:exact}.date-sheet-paper{box-shadow:none}}
+
+/* Give long syllabus text the largest share without squeezing dates. */
+.date-sheet-table{table-layout:fixed;min-width:640px;line-height:1.45}.date-sheet-table td.date-sheet-date,.date-sheet-table td.date-sheet-time{white-space:nowrap;font-variant-numeric:tabular-nums}.date-sheet-center,.date-sheet-time{text-align:center}.date-sheet-table td.date-sheet-syllabus{overflow-wrap:anywhere;word-break:normal}.date-sheet-table td{overflow-wrap:anywhere}
+@media print{.date-sheet-table{min-width:0!important}.date-sheet-table td.date-sheet-date,.date-sheet-table td.date-sheet-time{white-space:nowrap!important;overflow-wrap:normal}}

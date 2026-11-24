@@ -95,6 +95,11 @@ class InstituteSetupTests(unittest.TestCase):
             self.assertEqual(page.status_code,200)
             for v in [b'25-11-2026',b'Wednesday',b'Total Marks',b'Chapter 1']:self.assertIn(v,page.data)
             self.assertEqual(b'Recheck / Initials' in page.data,copy=='office')
+            columns=dict((key.decode(),float(width)) for key,width in re.findall(rb'<col class="date-sheet-col-([^"]+)" style="width:([0-9.]+)%">',page.data))
+            self.assertEqual(len(columns),8 if copy=='office' else 7)
+            self.assertAlmostEqual(sum(columns.values()),100,places=1)
+            self.assertGreater(columns['syllabus'],2*columns['date'])
+            self.assertEqual('recheck' in columns,copy=='office')
         self.assertEqual(self.c.get('/workspace/date-sheet/'+str(rid)+'/edit').status_code,200)
         edit={**args,'action':'edit','sheet_id':rid,'revision':rev,'total':'60'}
         self.assertEqual(self.c.post(path,data=edit).status_code,302)
