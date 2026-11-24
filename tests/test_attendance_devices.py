@@ -137,6 +137,21 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.config(auto_staff_short=True,staff_channel='none');self.stamp=self.stamp.replace(hour=9,minute=0)
         self.assertEqual(self.tenant(lambda:app.extensions['attendance_device_helpers']['tick'](self.stamp,force=True)),0)
         self.assertEqual(self.event(person_kind='staff',direction='out',event_id='after_manual_001').json['outcome'],'Not marked');self.assertEqual(self.daily()[0]['status'],'Present')
+    def test_manual_student_page_links_and_unchanged_qr_arrival_preserved(self):
+        self.assertEqual(self.event().json['outcome'],'Marked')
+        before=self.daily()[0].copy()
+        self.login()
+        page=self.c.get('/workspace/attendance/student?day=2026-11-05')
+        self.assertEqual(page.status_code,200)
+        for label in (b'Manual Attendance',b'QR Attendance / Scan Student Card',b'Time In',b'Time Out'):
+            self.assertIn(label,page.data)
+        response=self.c.post('/workspace/attendance/student',data={'_csrf':self.token(),'day':'2026-11-05','status_1':before['status'],'status_2':'Present'})
+        self.assertEqual(response.status_code,302,response.data)
+        self.assertEqual(next(r for r in self.daily() if r['pid']==1),before)
+        self.stamp=self.stamp.replace(hour=8,minute=10)
+        self.assertEqual(self.event(direction='out',event_id='student_out_after_manual_save').json['outcome'],'Marked')
+        self.assertTrue(next(r for r in self.daily() if r['pid']==1)['time_out'])
+
     def test_schoolflow_student_and_employee_qr_tokens_resolve_only_in_their_campus(self):
         namespace=self.tenant(lambda:app.extensions['identity_models']['institute'].query.filter_by(id=self.school).one().storage_key)
         def qr(typ,pid,number):return 'schoolflow:'+typ+':'+hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:{typ}-qr:{namespace}:{pid}:{number}'.encode(),hashlib.sha256).hexdigest()

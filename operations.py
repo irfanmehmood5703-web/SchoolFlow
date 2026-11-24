@@ -804,6 +804,7 @@ def configure_operations(app, db, Student, Employee):
                 if not status: continue
                 row=Daily.query.filter_by(kind=kind,person_id=p.id,day=d).first()
                 if status not in STATUSES or not app.extensions['attendance_control_helpers']['allowed'](kind,status,row.status if row else None): raise ValueError('Invalid or disabled attendance status.')
+                if kind=='student' and row and row.status==status:continue
                 if not row: row=Daily(kind=kind,person_id=p.id,day=d);db.session.add(row)
                 row.status=status
                 app.extensions.get('attendance_device_helpers',{}).get('manual_write',lambda r:None)(row)
@@ -811,7 +812,9 @@ def configure_operations(app, db, Student, Employee):
                 if not val.isdigit() or int(val)>1000: raise ValueError('Invalid lecture count.')
                 row.lectures=int(val)
                 for k in ('time_in','time_out'):
-                    val=request.form.get(k+'_'+str(p.id),'')
+                    field=k+'_'+str(p.id)
+                    if kind=='student' and field not in request.form:continue
+                    val=request.form.get(field,'')
                     if val and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',val): raise ValueError('Enter valid times.')
                     setattr(row,k,val)
                 count+=1
