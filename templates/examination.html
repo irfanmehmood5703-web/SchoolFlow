@@ -6,12 +6,22 @@
 <h2>Campus, Class &amp; Section</h2>
 <p class="muted">Choose an academic session, then select one or more campuses, classes and sections. Each class and section receives only its assigned subjects. For different dates or marks for the same subject, create separate date sheets.</p>
 {% if date_groups %}
-<label class="date-scope-master"><input type="checkbox" data-date-all> All Campuses / All Classes / All Sections</label>
-<p role="status" data-date-count>No sections selected.</p>
+<fieldset class="date-campus-picker">
+<legend>Select Campus</legend>
+<label class="date-scope-master"><input type="checkbox" data-date-all-campuses> All Campuses</label>
+<div class="date-campus-options">
 {% for group in date_groups %}
-<fieldset class="date-campus-group" data-date-campus data-test-types="{{group.test_types|tojson|forceescape}}">
+<label data-date-campus-option><input type="checkbox" data-date-campus-choice value="{{group.name}}"> {{group.name}}</label>
+{% endfor %}
+</div>
+</fieldset>
+<h2>Select Classes &amp; Sections</h2>
+<p class="muted">Campus selection does not select any class or section. Select the required classes below.</p>
+<p role="status" data-date-count>No campuses or sections selected.</p>
+{% for group in date_groups %}
+<fieldset class="date-campus-group" data-date-campus data-campus-name="{{group.name}}" data-test-types="{{group.test_types|tojson|forceescape}}">
 <legend>{{group.name}}</legend>
-<label class="date-scope-master"><input type="checkbox" data-date-toggle> All Classes &amp; Sections — {{group.name}}</label>
+<label class="date-scope-master"><input type="checkbox" data-date-toggle> All Classes — {{group.name}} (all sections)</label>
 <div class="date-class-grid">
 {% for cls in group.classes %}
 <fieldset class="date-class-group" data-date-class data-session="{{cls.academic}}" data-subjects="{{cls.subjects|tojson|forceescape}}">

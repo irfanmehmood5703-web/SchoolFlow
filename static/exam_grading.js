@@ -19,7 +19,8 @@ function dateSheetSubjectNames(eligible,selected){
 /* Mapped date-sheet cohort selection. Only the checked, session-matched leaves submit. */
 document.addEventListener('DOMContentLoaded',()=>{
  const panel=document.querySelector('[data-date-scope]');if(!panel)return;
- const form=panel.closest('form'), session=form.querySelector('[data-date-session]'), master=panel.querySelector('[data-date-all]');
+ const form=panel.closest('form'), session=form.querySelector('[data-date-session]'), master=panel.querySelector('[data-date-all-campuses]');
+ const campusChoices=[...panel.querySelectorAll('[data-date-campus-choice]')];
  const campuses=[...panel.querySelectorAll('[data-date-campus]')], classes=[...panel.querySelectorAll('[data-date-class]')], leaves=[...panel.querySelectorAll('[data-date-leaf]')];
  const test=form.querySelector('#exam_test_type'), subjects=form.querySelector('#subjects'), count=panel.querySelector('[data-date-count]');
  const selected=()=>leaves.filter(l=>l.checked&&!l.disabled);
@@ -37,16 +38,19 @@ document.addEventListener('DOMContentLoaded',()=>{
  
  function syncToggle(toggle,items){if(!toggle)return;const n=items.filter(l=>l.checked).length;toggle.checked=items.length>0&&n===items.length;toggle.indeterminate=n>0&&n<items.length;toggle.disabled=!items.length;}
  function sync(){
-  classes.forEach(group=>{const visible=Boolean(session.value)&&group.dataset.session===session.value;group.hidden=!visible;group.querySelectorAll('[data-date-leaf]').forEach(l=>{l.disabled=!visible;if(!visible)l.checked=false;});syncToggle(group.querySelector('[data-date-toggle]'),available(group));});
-  campuses.forEach(group=>{const items=available(group);group.hidden=!items.length;syncToggle(group.querySelector(':scope > label [data-date-toggle]'),items);});
-  syncToggle(master,available(panel));const checked=selected();
-  if(count)count.textContent=checked.length+' class/section selection(s)';
-  // Before any class is checked, show configured tests from campuses available
-  // in this session. Once selected, only tests common to all chosen campuses apply.
-  const eligible=campuses.filter(group=>available(group).length);
-  const chosenCampuses=[...new Set(checked.map(l=>l.closest('[data-date-campus]')))];
+  const eligible=campuses.filter(group=>[...group.querySelectorAll('[data-date-class]')].some(cls=>Boolean(session.value)&&cls.dataset.session===session.value));
+  const eligibleNames=eligible.map(group=>group.dataset.campusName);
+  campusChoices.forEach(choice=>{choice.disabled=!eligibleNames.includes(choice.value);if(choice.disabled)choice.checked=false;choice.closest('[data-date-campus-option]').hidden=choice.disabled;});
+  const enabledChoices=campusChoices.filter(choice=>!choice.disabled);
+  const chosenNames=enabledChoices.filter(choice=>choice.checked).map(choice=>choice.value);
+  const chosenCampuses=eligible.filter(group=>chosenNames.includes(group.dataset.campusName));
+  syncToggle(master,enabledChoices);
+  classes.forEach(group=>{const visible=Boolean(session.value)&&group.dataset.session===session.value&&chosenCampuses.includes(group.closest('[data-date-campus]'));group.hidden=!visible;group.querySelectorAll('[data-date-leaf]').forEach(l=>{l.disabled=!visible;if(!visible)l.checked=false;});syncToggle(group.querySelector('[data-date-toggle]'),available(group));});
+  campuses.forEach(group=>{group.hidden=!chosenCampuses.includes(group);syncToggle(group.querySelector(':scope > label [data-date-toggle]'),available(group));});
+  const checked=selected();
+  if(count)count.textContent=chosenNames.length+' campus(es) selected · '+checked.length+' class/section selection(s)';
   const testNames=dateSheetTestNames(eligible.map(group=>JSON.parse(group.dataset.testTypes)),chosenCampuses.map(group=>JSON.parse(group.dataset.testTypes)));
-  const eligibleClasses=classes.filter(group=>available(group).length);
+  const eligibleClasses=classes.filter(group=>Boolean(session.value)&&group.dataset.session===session.value&&(!chosenCampuses.length||chosenCampuses.includes(group.closest('[data-date-campus]'))));
   const chosenClasses=[...new Set(checked.map(l=>l.closest('[data-date-class]')))];
   const subjectNames=dateSheetSubjectNames(eligibleClasses.map(group=>JSON.parse(group.dataset.subjects)),chosenClasses.map(group=>JSON.parse(group.dataset.subjects)));
   const prev=test.value;test.replaceChildren(new Option('Unclassified',''),...testNames.map(v=>new Option(v,v)));
@@ -62,7 +66,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(subjectStatus)subjectStatus.textContent=subjectNames.length?subjectNames.length+' configured subject(s) available. Each selected class receives only its assigned papers.':'No configured subjects for this selection. Check Subjects in Classes.';
   return subjectNames;
  }
- panel.addEventListener('change',e=>{const t=e.target;if(t.matches('[data-date-all]'))available(panel).forEach(l=>l.checked=t.checked);else if(t.matches('[data-date-toggle]'))available(t.closest('fieldset')).forEach(l=>l.checked=t.checked);sync();});
+ panel.addEventListener('change',e=>{const t=e.target;if(t.matches('[data-date-all-campuses]'))campusChoices.filter(c=>!c.disabled).forEach(c=>c.checked=t.checked);else if(t.matches('[data-date-toggle]'))available(t.closest('fieldset')).forEach(l=>l.checked=t.checked);sync();});
  session.addEventListener('change',sync);
  test.addEventListener('change',()=>{test.setCustomValidity('');[...test.options].filter(o=>o.disabled).forEach(o=>o.remove());});
  form.addEventListener('change',e=>{if(e.target.name==='subject'){e.target.setCustomValidity('');[...e.target.options].filter(o=>o.disabled).forEach(o=>o.remove());}});
@@ -71,6 +75,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   const input=node.querySelector('select[name=subject]');
   if(input){input.value='';fillSubject(input,currentSubjects);input.dispatchEvent(new Event('change',{bubbles:true}));}
  }))).observe(table.querySelector('tbody'),{childList:true});
- form.addEventListener('submit',e=>{if(!selected().length){e.preventDefault();if(count){count.textContent='Select at least one class and section.';count.scrollIntoView({block:'nearest'});}else session.focus();}});
+ form.addEventListener('submit',e=>{const chosen=campusChoices.filter(c=>c.checked&&!c.disabled);const used=new Set(selected().map(l=>l.closest('[data-date-campus]').dataset.campusName));if(!chosen.length||!selected().length||chosen.some(c=>!used.has(c.value))){e.preventDefault();if(count){count.textContent='Select a campus and at least one class/section in every selected campus.';count.scrollIntoView({block:'nearest'});}else session.focus();}});
  sync();
 });

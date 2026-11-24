@@ -358,3 +358,7 @@ html,body{max-width:100%}
 .date-section-grid{display:flex;flex-wrap:wrap;gap:6px 14px}
 .date-scope-panel [hidden]{display:none!important}
 @media print{.date-scope-panel{display:none!important}}
+
+.date-campus-picker{margin-bottom:16px!important}
+.date-campus-options{display:flex;flex-wrap:wrap;gap:4px 24px}
+.date-scope-panel .date-campus-picker legend{font-size:1rem}

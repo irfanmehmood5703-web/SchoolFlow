@@ -30,7 +30,11 @@ class InstituteSetupTests(unittest.TestCase):
         path='/workspace/examination/date-sheets'
         page=self.c.get(path)
         self.assertEqual(page.status_code,200)
-        self.assertIn(b'All Campuses / All Classes / All Sections',page.data)
+        self.assertIn(b'data-date-all-campuses> All Campuses',page.data)
+        self.assertIn(b'data-date-campus-choice value="Campus A"',page.data)
+        self.assertIn(b'data-date-campus-choice value="Campus B"',page.data)
+        self.assertIn(b'All Classes',page.data)
+        self.assertNotIn(b'All Campuses / All Classes / All Sections',page.data)
         self.assertIn(b'Academic Session',page.data)
         token=lambda campus,cls,section,academic='2026-27':json.dumps([campus,cls,section,academic],ensure_ascii=False,separators=(',',':'))
         chosen=[token('Campus A','Class A','A'),token('Campus A','Class B','A'),token('Campus B','Class A','B')]
