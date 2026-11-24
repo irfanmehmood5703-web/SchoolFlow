@@ -91,8 +91,6 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private void switchAttendanceMode(boolean useQr){
   stopCamera();
   qrAttendance=useQr;
-  if(useQr)getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-  else if(!BuildConfig.DEBUG)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   boolean hasRearCamera=getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA);
   camera.setCameraIndex(useQr&&hasRearCamera?CameraBridgeViewBase.CAMERA_ID_BACK:CameraBridgeViewBase.CAMERA_ID_FRONT);
   qrModeButton.setText(useQr?"Face Attendance":"QR Attendance");

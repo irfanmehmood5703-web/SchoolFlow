@@ -116,7 +116,7 @@ def run_gradle(args,directory,password):
         time.sleep(delay)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{'source_version':14},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':15},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:

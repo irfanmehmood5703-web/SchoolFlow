@@ -8,7 +8,6 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.*;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
@@ -164,7 +163,6 @@ public final class QrActivity extends Activity {
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Connect " + BuildConfig.INSTITUTE_CODE)
                 .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Connect", null).create();
         dialog.show();
-        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             String id = device.getText().toString().trim();
             String token = key.getText().toString().trim();
