@@ -345,3 +345,16 @@ html,body{max-width:100%}
 .sample-data-label{font-weight:700;font-size:9pt}
 .sample-data-note{font-size:9pt}
 }
+
+/* Date sheet cohort selector, scoped to its own form. */
+.date-scope-panel{margin:16px 0;padding:16px;border:1px solid #cbded3;border-radius:10px;background:#f6faf7}
+.date-scope-panel h2{font-size:1rem;margin:0 0 6px;color:#174b35}
+.date-scope-panel fieldset{min-width:0;border:1px solid #cbded3;border-radius:8px;padding:10px 12px;margin:8px 0;background:#fff}
+.date-scope-panel legend{font-weight:700;color:#174b35;padding:0 6px}
+.date-scope-panel label{display:flex;gap:8px;align-items:center;min-height:32px;cursor:pointer}
+.date-scope-panel input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:#176b51}
+.date-scope-master{font-weight:650}
+.date-class-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px}
+.date-section-grid{display:flex;flex-wrap:wrap;gap:6px 14px}
+.date-scope-panel [hidden]{display:none!important}
+@media print{.date-scope-panel{display:none!important}}

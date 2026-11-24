@@ -20,6 +20,38 @@ class InstituteSetupTests(unittest.TestCase):
         values=dict(action='map',version='0',campus='Campus A',class_name='Class A',sections=['A'],groups=['General'],fee_plans=['Plan A'],academic_session='2026-27',active='1');values.update(changes);return self.post(**values)
     def student(self,**changes):
         data=dict(_csrf=self.csrf,name='Fictional Pupil',father='Fictional Guardian',father_cnic='TEST-ONLY',phone='00000000000',family_mode='new',gender='Female',guardian_relation='Father',admission_date='2026-10-31',campus='Campus A',class_name='Class A',section='A',group_name='General',academic_session='2026-27',fee_plan='Plan A',status='Active',save_action='view');data.update(changes);return data
+
+    def test_date_sheet_multiple_campuses_classes_sections_and_session(self):
+        self.assertEqual(self.mapping(sections=['A','B']).status_code,302)
+        self.assertEqual(self.mapping(class_name='Class B',sections=['A']).status_code,302)
+        self.assertEqual(self.mapping(campus='Campus B',sections=['B']).status_code,302)
+        db.session.add(self.rm['settings'](category='subject',value='Math',class_name=''))
+        db.session.commit()
+        path='/workspace/examination/date-sheets'
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'All Campuses / All Classes / All Sections',page.data)
+        self.assertIn(b'Academic Session',page.data)
+        token=lambda campus,cls,section,academic='2026-27':json.dumps([campus,cls,section,academic],ensure_ascii=False,separators=(',',':'))
+        chosen=[token('Campus A','Class A','A'),token('Campus A','Class B','A'),token('Campus B','Class A','B')]
+        args=dict(_csrf=self.csrf,name='Weekly batch',date_scope='mapped',academic_session='2026-27',date_cohort=chosen,subject='Math',exam_date='2026-11-25',test_type='Written',total='20')
+        W=app.extensions['ops_models']['workflow']
+        self.assertEqual(self.c.post(path,data={**args,'date_cohort':chosen+[token('Campus B','Class B','A')]}).status_code,422)
+        self.assertEqual(self.c.post(path,data={**args,'academic_session':'2027-28'}).status_code,422)
+        self.assertEqual(W.query.filter_by(kind='date-sheets').count(),0)
+        self.assertEqual(self.c.post(path,data=args).status_code,302)
+        db.session.expire_all()
+        rows=W.query.filter_by(kind='date-sheets').all()
+        self.assertEqual(len(rows),3)
+        self.assertEqual({(r.data['campus'],r.data['class_name'],r.data['section'],r.data['academic_session']) for r in rows},{('Campus A','Class A','A','2026-27'),('Campus A','Class B','A','2026-27'),('Campus B','Class A','B','2026-27')})
+        self.assertTrue(all(r.data['papers'][0]['total']==20 and r.data['batch_name']=='Weekly batch' for r in rows))
+        self.assertEqual(self.c.post(path,data=args).status_code,422)
+        self.assertEqual(W.query.filter_by(kind='date-sheets').count(),3)
+        refreshed=self.c.get(path)
+        self.assertIn(b'Weekly batch',refreshed.data)
+        self.assertIn(b'Campus B',refreshed.data)
+        self.assertIn(b'2026-27',refreshed.data)
+
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
         page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
         ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))

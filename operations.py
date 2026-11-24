@@ -835,20 +835,61 @@ def configure_operations(app, db, Student, Employee):
         if request.args.get('export'): return csv_response(['Date','Name','Status','Lectures','Time In','Time Out'],[[r.day,db.session.get(cls,r.person_id).name,r.status,r.lectures,r.time_in,r.time_out] for r in rows],'attendance')
         return render('attendance_report.html',title=TITLES.get(view,'Attendance Report'),rows=rows,person=lambda id:db.session.get(cls,id),summary=Counter(r.status for r in rows),kind=kind)
 
+    def date_sheet_scopes():
+        """Only active, permitted, institute-mapped cohorts; keep legacy records unchanged."""
+        mapping=app.extensions['institute_setup_helpers']['payload'](refresh=request.method=='POST')
+        helpers=app.extensions['school_settings_helpers']
+        permitted=getattr(g,'access_campuses',None)
+        catalog={v for v,_ in choices('campus')}
+        subjects=list(dict.fromkeys([v for v,_ in choices('subject')]+[r.name for r in helpers['items']('subject')]))
+        rank={v:i for i,v in enumerate(('Montessori','Play','Nursery','KG-I','KG-II','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Tenth'))}
+        groups=[];tokens={}
+        for campus in sorted(mapping['maps']):
+            if campus not in catalog or mapping['campuses'].get(campus) is False or (permitted is not None and campus not in permitted):continue
+            classes=[]
+            for cohort in sorted(mapping['maps'][campus],key=lambda x:(rank.get(x['class_name'],1000),x['class_name'].casefold())):
+                cls=cohort['class_name'];academic=cohort.get('academic_session','')
+                if not academic:continue
+                sections=[]
+                for section in sorted(set(cohort.get('sections') or [''])):
+                    scope=dict(campus=campus,class_name=cls,section=section,academic_session=academic)
+                    token=json.dumps([campus,cls,section,academic],ensure_ascii=False,separators=(',',':'))
+                    tokens[token]=scope
+                    sections.append(dict(token=token,section=section))
+                classes.append(dict(name=cls,academic=academic,sections=sections,subjects=[s for s in subjects if helpers['subject_allowed'](campus,cls,s)]))
+            if classes:groups.append(dict(name=campus,classes=classes,test_types=helpers['exam_types'](campus)))
+        return bool(mapping['maps']),groups,tokens
+
     @bp.route('/examination/<kind>',methods=['GET','POST'])
     def examination(kind):
         if kind not in ('date-sheets','awards'): abort(404)
+        if kind=='date-sheets' and request.method=='POST':
+            # Serialize name checks and the entire batch, not individual rows.
+            app.extensions['admission_capacity']['lock']()
+        mapped,date_groups,date_tokens=date_sheet_scopes() if kind=='date-sheets' else (False,[],{})
         if request.method=='POST':
             name=request.form.get('name','').strip()
-            if not name: raise ValueError('Name is required.')
-            if any(x.data.get('name')==name for x in Workflow.query.filter_by(kind=kind).all()): raise ValueError('Name must be unique.')
+            if not name or len(name)>500: raise ValueError('Enter a name of 1–500 characters.')
+            existing=Workflow.query.filter_by(kind=kind).all()
+            if any(name in (x.data.get('name'),x.data.get('batch_name')) for x in existing): raise ValueError('Name must be unique.')
+            scopes=[{k:request.form.get(k,'').strip() for k in ('campus','class_name','section','academic_session')}]
+            if kind=='date-sheets' and (mapped or request.form.get('date_scope')):
+                chosen=request.form.getlist('date_cohort');academic=request.form.get('academic_session','')
+                if request.form.get('date_scope')!='mapped' or not 1<=len(chosen)<=500 or len(chosen)!=len(set(chosen)) or any(t not in date_tokens for t in chosen):
+                    raise ValueError('Select at least one active campus, class and section from Institute Setup.')
+                scopes=[date_tokens[t] for t in chosen]
+                if not academic or any(s['academic_session']!=academic for s in scopes):
+                    raise ValueError('Choose classes and sections from one academic session.')
+            permitted=getattr(g,'access_campuses',None)
+            if kind=='date-sheets' and permitted is not None and any(s['campus'] not in permitted for s in scopes):abort(403)
             exam_type=request.form.get('exam_test_type','')
-            if exam_type and exam_type not in app.extensions['school_settings_helpers']['exam_types'](request.form.get('campus','')):raise ValueError('Choose a test type configured for this campus.')
+            if exam_type and any(exam_type not in app.extensions['school_settings_helpers']['exam_types'](s['campus']) for s in scopes):raise ValueError('Choose a test type configured for every selected campus.')
             papers=[]
             subjects=request.form.getlist('subject');dates=request.form.getlist('exam_date');types=request.form.getlist('test_type');totals=request.form.getlist('total');teachers=request.form.getlist('teacher')
             for i,subject in enumerate(subjects):
                 if not subject: raise ValueError('Subject is required on every row.')
-                if not app.extensions['school_settings_helpers']['subject_allowed'](request.form.get('campus',''),request.form.get('class_name',''),subject):raise ValueError('Choose subjects assigned to this campus and class.')
+                if any(not app.extensions['school_settings_helpers']['subject_allowed'](s['campus'],s['class_name'],subject) for s in scopes):raise ValueError('Choose subjects assigned to every selected campus and class.')
+                if kind=='date-sheets' and mapped and subject not in ({v for v,_ in choices('subject')}|{r.name for r in app.extensions['school_settings_helpers']['items']('subject')}):raise ValueError('Choose a configured subject.')
                 if i>=len(dates) or i>=len(types): raise ValueError('Every paper needs an exam date and test type.')
                 d=day(dates[i]);typ=types[i]
                 if typ not in ('Written','Oral','Practical'): raise ValueError('Select a valid test type.')
@@ -872,9 +913,18 @@ def configure_operations(app, db, Student, Employee):
             if category and category not in PERFORMANCE_CATEGORIES: raise ValueError('Choose a valid assessment category.')
             data.update(papers=papers,recheck=bool(request.form.get('recheck')),assessment_category=category,exam_test_type=exam_type)
             if data.get('return_date'): day(data['return_date'])
+            if kind=='date-sheets' and mapped:
+                names=[name if len(scopes)==1 else name+' — '+' / '.join((s['campus'],s['class_name'],s['section'] or 'All sections',s['academic_session'])) for s in scopes]
+                used={x.data.get('name') for x in existing}|{x.data.get('batch_name') for x in existing}
+                if len(names)!=len(set(names)) or any(n in used or len(n)>1000 for n in names):raise ValueError('A generated date sheet name already exists or is too long. Choose another name.')
+                for scope,scope_name in zip(scopes,names):
+                    db.session.add(Workflow(kind=kind,data={**data,**scope,'name':scope_name,'batch_name':name},status='Active'))
+                audit('Create '+kind,name=name,count=len(scopes));commit()
+                flash(f'{len(scopes)} date sheet(s) saved.','success')
+                return redirect(url_for('ops.examination',kind=kind))
             obj=Workflow(kind=kind,data=data,status='Active');db.session.add(obj);audit('Create '+kind);commit()
             return redirect(url_for('ops.marks',award_id=obj.id)) if kind=='awards' else redirect(url_for('ops.examination',kind=kind))
-        return render('examination.html',subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
+        return render('examination.html',date_mapped=mapped,date_groups=date_groups,date_sessions=sorted({s['academic_session'] for s in date_tokens.values()}),subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
 
     def award_students(award):
         Details=rm['student']
