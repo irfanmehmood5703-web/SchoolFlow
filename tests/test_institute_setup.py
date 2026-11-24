@@ -1,5 +1,5 @@
 """Real setup/admission integration with fictional school data only."""
-import io,os,re,unittest,json,html,copy
+import io,os,re,unittest,json,html,copy,hashlib
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from PIL import Image
 from app import app,db,Student
@@ -119,7 +119,7 @@ class InstituteSetupTests(unittest.TestCase):
         rid,sid,oid=row.id,pupil.id,other.id
         for s,sec in [(pupil,'A'),(other,'B')]:db.session.add(self.rm['student'](student_id=s.id,data=dict(campus='Campus A',section=sec,academic_session='2026-27',roll_no='7')))
         buf=io.BytesIO();Image.new('RGB',(20,20),'green').save(buf,format='PNG')
-        db.session.add(self.rm['file'](owner_kind='student',owner_id=sid,title='Photo',filename='photo.png',mime='image/png',photo=True,content=buf.getvalue()))
+        db.session.add(self.rm['file'](owner_kind='student',owner_id=sid,title='Photo',filename='photo.png',mime='image/png',photo=True,content=buf.getvalue(),sha256=hashlib.sha256(buf.getvalue()).hexdigest()))
         db.session.commit()
         path='/workspace/date-sheet/'+str(rid)
         select=self.c.get(path+'/print?copy=student')
@@ -152,7 +152,7 @@ class InstituteSetupTests(unittest.TestCase):
             db.session.add(pupil);db.session.flush();pupils.append(pupil)
             db.session.add(self.rm['student'](student_id=pupil.id,data=dict(campus=campus,section=sec,academic_session=academic,roll_no=roll)))
         buf=io.BytesIO();Image.new('RGB',(20,20),'green').save(buf,format='PNG')
-        db.session.add(self.rm['file'](owner_kind='student',owner_id=pupils[0].id,title='Photo',filename='photo.png',mime='image/png',photo=True,content=buf.getvalue()))
+        db.session.add(self.rm['file'](owner_kind='student',owner_id=pupils[0].id,title='Photo',filename='photo.png',mime='image/png',photo=True,content=buf.getvalue(),sha256=hashlib.sha256(buf.getvalue()).hexdigest()))
         db.session.commit()
         path='/workspace/date-sheet/'+str(row.id)+'/print'
         page=self.c.get(path+'?copy=class')
