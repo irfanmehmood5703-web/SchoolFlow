@@ -14,3 +14,11 @@ assert.deepEqual(result([north,south],[north,south]),['Monthly','First Term']);
 assert.deepEqual(result([],[]),[]);
 assert.deepEqual(result([north,south],[[]]),[]);
 console.log('PASS Date sheet test types: initial list, selected campus, intersection, empty selection');
+
+const subjects=(eligible,selected)=>Array.from(sandbox.dateSheetSubjectNames(eligible,selected));
+assert.deepEqual(subjects([['Math','English'],['Physics']],[]),['Math','English','Physics']);
+assert.deepEqual(subjects([['Math','English'],['Physics']],[['Math','English'],['Physics']]),['Math','English','Physics']);
+assert.deepEqual(subjects([['Math','English'],['Physics']],[['Physics']]),['Physics']);
+assert.deepEqual(subjects([['Math'],['Math','English']],[['Math'],['Math','English']]),['Math','English']);
+assert.deepEqual(subjects([],[]),[]);
+console.log('PASS Date sheet subjects: disjoint classes, selected class, duplicates, initial list, empty list');

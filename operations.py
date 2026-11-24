@@ -888,7 +888,8 @@ def configure_operations(app, db, Student, Employee):
             subjects=request.form.getlist('subject');dates=request.form.getlist('exam_date');types=request.form.getlist('test_type');totals=request.form.getlist('total');teachers=request.form.getlist('teacher')
             for i,subject in enumerate(subjects):
                 if not subject: raise ValueError('Subject is required on every row.')
-                if any(not app.extensions['school_settings_helpers']['subject_allowed'](s['campus'],s['class_name'],subject) for s in scopes):raise ValueError('Choose subjects assigned to every selected campus and class.')
+                allowed=[app.extensions['school_settings_helpers']['subject_allowed'](s['campus'],s['class_name'],subject) for s in scopes]
+                if (not any(allowed) if kind=='date-sheets' and mapped else not all(allowed)):raise ValueError('Choose a subject assigned to the selected class(es).')
                 if kind=='date-sheets' and mapped and subject not in ({v for v,_ in choices('subject')}|{r.name for r in app.extensions['school_settings_helpers']['items']('subject')}):raise ValueError('Choose a configured subject.')
                 if i>=len(dates) or i>=len(types): raise ValueError('Every paper needs an exam date and test type.')
                 d=day(dates[i]);typ=types[i]
@@ -917,8 +918,12 @@ def configure_operations(app, db, Student, Employee):
                 names=[name if len(scopes)==1 else name+' — '+' / '.join((s['campus'],s['class_name'],s['section'] or 'All sections',s['academic_session'])) for s in scopes]
                 used={x.data.get('name') for x in existing}|{x.data.get('batch_name') for x in existing}
                 if len(names)!=len(set(names)) or any(n in used or len(n)>1000 for n in names):raise ValueError('A generated date sheet name already exists or is too long. Choose another name.')
-                for scope,scope_name in zip(scopes,names):
-                    db.session.add(Workflow(kind=kind,data={**data,**scope,'name':scope_name,'batch_name':name},status='Active'))
+                helpers=app.extensions['school_settings_helpers']
+                scoped_papers=[[p for p in papers if helpers['subject_allowed'](scope['campus'],scope['class_name'],p['subject'])] for scope in scopes]
+                missing=[s['campus']+' / '+s['class_name']+' / '+(s['section'] or 'All sections') for s,pp in zip(scopes,scoped_papers) if not pp]
+                if missing:raise ValueError('Add at least one applicable paper for each selected class/section: '+', '.join(missing))
+                for scope,scope_name,pp in zip(scopes,names,scoped_papers):
+                    db.session.add(Workflow(kind=kind,data={**data,**scope,'papers':pp,'name':scope_name,'batch_name':name},status='Active'))
                 audit('Create '+kind,name=name,count=len(scopes));commit()
                 flash(f'{len(scopes)} date sheet(s) saved.','success')
                 return redirect(url_for('ops.examination',kind=kind))

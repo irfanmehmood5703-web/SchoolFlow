@@ -52,6 +52,29 @@ class InstituteSetupTests(unittest.TestCase):
         self.assertIn(b'Campus B',refreshed.data)
         self.assertIn(b'2026-27',refreshed.data)
 
+    def test_date_sheet_different_class_subjects_are_saved_only_to_assigned_classes(self):
+        self.assertEqual(self.mapping().status_code,302)
+        self.assertEqual(self.mapping(class_name='Class B').status_code,302)
+        Item=app.extensions['school_settings_models']['item']
+        for name,subjects in [('Class A',['Math']),('Class B',['Physics'])]:
+            db.session.add(Item(kind='class-subjects',scope='Campus A',name=name,data={'subjects':subjects}))
+        for name in ['Math','Physics','Urdu']:
+            db.session.add(self.rm['settings'](category='subject',value=name,class_name=''))
+        db.session.commit()
+        path='/workspace/examination/date-sheets'
+        page=self.c.get(path)
+        self.assertIn(b'<select name="subject" required',page.data)
+        self.assertIn(b'Physics',page.data)
+        tokens=[json.dumps(['Campus A',cls,'A','2026-27'],separators=(',',':')) for cls in ['Class A','Class B']]
+        args=dict(_csrf=self.csrf,name='Mixed subjects',date_scope='mapped',academic_session='2026-27',date_cohort=tokens,subject=['Math','Physics'],exam_date=['2026-11-25','2026-11-26'],test_type=['Written','Written'],total=['20','50'])
+        W=app.extensions['ops_models']['workflow']
+        self.assertEqual(self.c.post(path,data={**args,'subject':['Math']}).status_code,422)
+        self.assertEqual(self.c.post(path,data={**args,'subject':['Math','Urdu']}).status_code,422)
+        self.assertEqual(W.query.filter_by(kind='date-sheets').count(),0)
+        self.assertEqual(self.c.post(path,data=args).status_code,302)
+        db.session.expire_all()
+        self.assertEqual({r.data['class_name']:[p['subject'] for p in r.data['papers']] for r in W.query.filter_by(kind='date-sheets').all()},{'Class A':['Math'],'Class B':['Physics']})
+
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
         page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
         ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))
