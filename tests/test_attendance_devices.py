@@ -152,6 +152,25 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertEqual(self.event(direction='out',event_id='student_out_after_manual_save').json['outcome'],'Marked')
         self.assertTrue(next(r for r in self.daily() if r['pid']==1)['time_out'])
 
+    def test_student_attendance_grid_selected_bulk_update_and_delete(self):
+        self.login()
+        url='/workspace/attendance/student'
+        page=self.c.get(url+'?mode=take&day=2026-11-05')
+        self.assertEqual(page.status_code,200,page.data)
+        for label in (b'Take Bulk Attendance',b'View / Update Attendance',b'QR Attendance / Scan Student Card',b'type="radio"',b'Only not present'):
+            self.assertIn(label,page.data)
+        key='2026-11-05_1';other='2026-11-05_2'
+        form={'_csrf':self.token(),'grid_mode':'1','mode':'bulk','from':'2026-11-05','attendance_keys':key,'original_'+key:'','status_'+key:'Present','status_'+other:'Absent'}
+        self.assertEqual(self.c.post(url,data=form).status_code,302)
+        self.assertEqual([(r['pid'],r['status']) for r in self.daily()],[(1,'Present')])
+        self.assertEqual(self.c.get(url+'?mode=update&from=2026-11-05&to=2026-11-05').status_code,200)
+        form.update(mode='update',action='save',to='2026-11-05');form['original_'+key]='Present';form['status_'+key]='Absent'
+        self.assertEqual(self.c.post(url,data=form).status_code,302)
+        self.assertEqual(self.daily()[0]['status'],'Absent')
+        form['original_'+key]='Absent';form.update(action='delete',confirm_delete='1')
+        self.assertEqual(self.c.post(url,data=form).status_code,302)
+        self.assertEqual(self.daily(),[])
+
     def test_schoolflow_student_and_employee_qr_tokens_resolve_only_in_their_campus(self):
         namespace=self.tenant(lambda:app.extensions['identity_models']['institute'].query.filter_by(id=self.school).one().storage_key)
         def qr(typ,pid,number):return 'schoolflow:'+typ+':'+hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:{typ}-qr:{namespace}:{pid}:{number}'.encode(),hashlib.sha256).hexdigest()

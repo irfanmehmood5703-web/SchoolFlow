@@ -790,9 +790,87 @@ def configure_operations(app, db, Student, Employee):
             return csv_response(['SID','Student','Payable','Discount','Paid','Remaining'],[[id,v['student'].name,*[f'{v[k]/100:.2f}' for k in ('payable','discount','paid','remaining')]] for id,v in summaries.items()],'payment-history')
         return render('history.html',title='Family Payment Statement' if family else TITLES.get(view,'Payment History'),view=view,rows=rows,summaries=summaries,families=families,detail=bool(request.args.get('detail') or family),student=lambda id:db.session.get(Student,id),details=details,receipts=lambda id:Receipt.query.filter_by(bill_id=id,voided=False).order_by(Receipt.day).all())
 
+    def student_attendance_grid():
+        mode=request.values.get('mode','take')
+        if mode not in ('take','bulk','update'):raise ValueError('Choose an attendance mode.')
+        start=day(request.values.get('from') or request.values.get('day') or school_today().isoformat())
+        end=day(request.values.get('to') or start.isoformat()) if mode=='update' else start
+        if end<start or (end-start).days>30:raise ValueError('Choose a date range of up to 31 days.')
+        if request.method=='POST':
+            app.extensions['admission_capacity']['lock']()
+        pupils=people('student',active=mode!='update')
+        info=app.extensions['record_helpers']['raw_many']('student',pupils)
+        gender=request.values.get('gender','')
+        term=request.values.get('search','').strip().casefold()
+        pupils=[p for p in pupils if (not gender or info.get(p.id,{}).get('gender')==gender) and (not term or term in ' '.join(str(x or '') for x in (p.id,p.name,p.father,p.admission_no,info.get(p.id,{}).get('roll_no'),p.class_name)).casefold())]
+        by_id={p.id:p for p in pupils}
+        query=Daily.query.filter(Daily.kind=='student',Daily.day>=start,Daily.day<=end,Daily.person_id.in_(by_id))
+        if query.count()>5000:raise ValueError('Too many attendance records. Narrow the dates or select a class.')
+        existing=query.order_by(Daily.day.desc(),Daily.person_id).all()
+        mark_model=app.extensions['attendance_device_models']['mark']
+        marks={m.daily_id:m for m in mark_model.query.filter(mark_model.daily_id.in_([r.id for r in existing])).all()}
+        status_filter=request.values.get('status_filter','')
+        origin_filter=request.values.get('origin_filter','')
+        rows=[]
+        def append_row(p,record,d):
+            detail=info.get(p.id,{})
+            mark=marks.get(record.id) if record else None
+            origin=('Automatic' if mark and mark.origin=='auto' else 'Device scan' if mark and mark.origin=='device' else 'Manual') if record else 'Unmarked'
+            status=record.status if record else ''
+            if status_filter and status_filter!=(status or 'Unmarked'):return
+            if origin_filter and origin_filter!=origin:return
+            schedule=app.extensions['school_settings_helpers']['shift']('student',p,detail,d)
+            key=f'{d.isoformat()}_{p.id}'
+            rows.append(dict(key=key,p=p,detail=detail,record=record,mark=mark,day=d,status=status,origin=origin,schedule=schedule))
+        if mode=='update':
+            for r in existing:append_row(by_id[r.person_id],r,r.day)
+        else:
+            if len(pupils)>5000:raise ValueError('Select a class or campus to load fewer students.')
+            lookup={r.person_id:r for r in existing}
+            for p in pupils:append_row(p,lookup.get(p.id),start)
+        if request.method=='POST':
+            action=request.form.get('action','save')
+            if action not in ('save','send','delete'):raise ValueError('Choose a valid attendance action.')
+            picked=set(request.form.getlist('attendance_keys'))
+            available={r['key']:r for r in rows}
+            if not picked or not picked<=available.keys():raise ValueError('Select valid attendance rows from the loaded roster.')
+            if action=='delete' and (mode!='update' or request.form.get('confirm_delete')!='1'):raise ValueError('Confirm deletion in View / Update Attendance.')
+            count=0;notify=defaultdict(list)
+            for r in rows:
+                key=r['key']
+                if key not in picked:continue
+                record=r['record'];p=r['p'];d=r['day']
+                app.extensions['school_settings_helpers']['attendance_guard']('student',d)
+                if request.form.get('original_'+key)!=r['status']:raise ValueError('Attendance changed since loading. Reload before editing.')
+                if action=='delete':
+                    if not record:raise ValueError('No saved attendance to delete.')
+                    if r['mark'] or record.time_in or record.time_out:raise ValueError('Device-linked or timed attendance cannot be deleted here. Correct its status instead to retain scan history.')
+                    audit('Delete student attendance',student_id=p.id,campus=r['detail'].get('campus',''),day=d.isoformat(),previous=record.status)
+                    db.session.delete(record);count+=1;continue
+                status=request.form.get('status_'+key,'')
+                if not status:continue
+                if status not in STATUSES or not app.extensions['attendance_control_helpers']['allowed']('student',status,r['status']):raise ValueError('Invalid or disabled attendance status.')
+                if action=='send' and (request.form.get('only_not_present')!='on' or status not in ('Present','Late','Off Day')):notify[d.isoformat()].append(p.id)
+                if status==r['status']:continue
+                if not record:
+                    record=Daily(kind='student',person_id=p.id,day=d);db.session.add(record)
+                record.status=status
+                app.extensions['attendance_device_helpers']['manual_write'](record)
+                audit('Save student attendance',student_id=p.id,campus=r['detail'].get('campus',''),day=d.isoformat(),previous=r['status'],status=status)
+                count+=1
+            for d,ids in notify.items():queue('Attendance',ids,audience='student',event='attendance',context={'day':d})
+            commit()
+            flash(f'{count} attendance records '+('deleted.' if action=='delete' else 'saved.')+(f' Notification requests queued for {sum(map(len,notify.values()))} student-day records.' if action=='send' else ''),'success')
+            return redirect(url_for('ops.take_attendance',kind='student',**{k:request.form[k] for k in ('mode','from','to','campus','class_name','section','academic_session','gender','search','status_filter','origin_filter') if request.form.get(k)}))
+        if request.args.get('export'):
+            return csv_response(['Date','Attendance Type','SID','Roll No','Student','Father Name','Attendance','Campus','Class','Section','Session','Gender','Shift In','Mark In','Shift Out','Mark Out'],[[r['day'],r['origin'],r['p'].id,r['detail'].get('roll_no',''),r['p'].name,r['p'].father,r['status'] or 'Unmarked',r['detail'].get('campus',''),r['p'].class_name,r['detail'].get('section',''),r['detail'].get('academic_session',''),r['detail'].get('gender',''),r['schedule'].get('in',''),r['record'].time_in if r['record'] else '',r['schedule'].get('out',''),r['record'].time_out if r['record'] else ''] for r in rows],'student-attendance')
+        codes={'Present':'P','Absent':'A','Late':'L','Leave':'LV','Short Leave':'SL','Off Day':'OD','Death Leave':'DL','Paper Leave':'PL'}
+        return render('student_attendance_grid.html',title='Student Attendance',kind='student',mode=mode,start=start,end=end,rows=rows,codes=codes,summary=Counter(r['status'] or 'Unmarked' for r in rows))
+    
     @bp.route('/attendance/<kind>',methods=['GET','POST'])
     def take_attendance(kind):
         if kind not in ('student','staff'): abort(404)
+        if kind=='student' and (request.method=='GET' or request.form.get('grid_mode')=='1'):return student_attendance_grid()
         d=day(request.values.get('day',school_today().isoformat()));people_kind='student' if kind=='student' else 'employee'
         objs=people(people_kind)
         if request.method=='POST':
