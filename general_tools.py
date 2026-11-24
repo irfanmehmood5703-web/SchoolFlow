@@ -114,7 +114,7 @@ def configure_general_tools(app,db,Student,Employee):
     def app_links():
         if request.method=='POST':
             full_scope();key=request.form.get('app','')
-            if key in ('parents','teacher','owner','sms') and app.extensions['school_app_helpers']['view_model']():raise ValueError('Use school app branding to prepare these apps. Generic URLs cannot replace a school-specific app.')
+            if key in ('parents','teacher','owner','sms','qr') and app.extensions['school_app_helpers']['view_model']():raise ValueError('Use school app branding to prepare these apps. Generic URLs cannot replace a school-specific app.')
             if key in ('qr','face') and app.extensions['school_app_helpers']['qr_release']():raise ValueError('SchoolFlow publishes the official QR Attendance link centrally.')
             if key not in dict((k,label) for k,label,_ in APPS):raise ValueError('Choose a valid app.')
             row=Item.query.filter_by(kind='app-release',scope='',name=key).first()

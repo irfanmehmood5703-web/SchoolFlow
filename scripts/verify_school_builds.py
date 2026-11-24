@@ -50,7 +50,7 @@ def verify():
                     first_key=db.session.get(models['signing'],scope).fingerprint;second_key=db.session.get(models['signing'],second.storage_key).fingerprint;assert first_key!=second_key
                     for client,other in [(clients[0],'Sadia School'),(clients[1],'ISF School System')]:
                         html=client.get('/workspace/general/app-links').data.decode();assert '<h2>'+other+' Parents</h2>' not in html
-                        assert html.count('/apps/school/')>=4
+                        assert html.count('/apps/school/')>=5 and '/qr.apk' in html
                     artifact=models['artifact'].query.filter_by(build_id=one.id,role='parents').one();assert artifact.size>10000
                     public_token=db.session.get(models['signing'],scope).download_token
                     anonymous=app.test_client();assert anonymous.get('/apps/school/'+public_token+'/parents.apk').status_code==200
@@ -71,9 +71,9 @@ def verify():
                 assert run(base,fixture_token=token)
                 with app.app_context():
                     latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
-                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==12
+                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==13
                     assert db.session.get(models['signing'],scope).fingerprint==first_key
-            print('Verified 16 compiled school APKs: two schools, real logo restoration after a central upgrade, labels, packages, private signing, APK-only sharing and stable-key updates.')
+            print('Verified 20 compiled school APKs: two schools, real logo restoration after a central upgrade, labels, packages, private signing, APK-only sharing and stable-key updates.')
         finally:server.shutdown();thread.join(timeout=5)
 
 if __name__=='__main__':verify()

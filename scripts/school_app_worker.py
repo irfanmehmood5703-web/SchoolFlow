@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 CLIENTS=ROOT/'mobile'/'clients'
 AUDIENCE='https://schoolflow-phase1.onrender.com/api/app-builder'
-ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
+ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}
 
 def oidc_token():
     url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&audience='+urllib.parse.quote(AUDIENCE,safe='')
@@ -98,7 +98,7 @@ def build(branding,logo,keyfile,password):
             time.sleep(delay)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{'source_version':12},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':13},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:
@@ -111,7 +111,7 @@ def run(base,fixture_token=None):
             build(branding,base64.b64decode(job['logo'],validate=True),key,signing['password'])
             result=inspect_apks(branding,os.environ['GITHUB_SHA'])
             api(base,bid+'/complete',result,token=fixture_token)
-        print('Four school-specific APKs verified and returned to the correct school.');return True
+        print('Five school-specific APKs verified and returned to the correct school.');return True
     except Exception:
         try:api(base,bid+'/fail',{},token=fixture_token)
         except Exception:pass
