@@ -44,7 +44,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   const enabledChoices=campusChoices.filter(choice=>!choice.disabled);
   const chosenNames=enabledChoices.filter(choice=>choice.checked).map(choice=>choice.value);
   const chosenCampuses=eligible.filter(group=>chosenNames.includes(group.dataset.campusName));
-  syncToggle(master,enabledChoices);
+  // All Campuses is an explicit bulk-selection control, not a derived
+  // checked state. Selecting the sole campus individually must not tick it.
+  if(master){
+   master.disabled=!enabledChoices.length;
+   master.indeterminate=false;
+   if(master.disabled||enabledChoices.some(choice=>!choice.checked))master.checked=false;
+  }
   classes.forEach(group=>{const visible=Boolean(session.value)&&group.dataset.session===session.value&&chosenCampuses.includes(group.closest('[data-date-campus]'));group.hidden=!visible;group.querySelectorAll('[data-date-leaf]').forEach(l=>{l.disabled=!visible;if(!visible)l.checked=false;});syncToggle(group.querySelector('[data-date-toggle]'),available(group));});
   campuses.forEach(group=>{group.hidden=!chosenCampuses.includes(group);syncToggle(group.querySelector(':scope > label [data-date-toggle]'),available(group));});
   const checked=selected();
@@ -66,8 +72,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(subjectStatus)subjectStatus.textContent=subjectNames.length?subjectNames.length+' configured subject(s) available. Each selected class receives only its assigned papers.':'No configured subjects for this selection. Check Subjects in Classes.';
   return subjectNames;
  }
- panel.addEventListener('change',e=>{const t=e.target;if(t.matches('[data-date-all-campuses]'))campusChoices.filter(c=>!c.disabled).forEach(c=>c.checked=t.checked);else if(t.matches('[data-date-toggle]'))available(t.closest('fieldset')).forEach(l=>l.checked=t.checked);sync();});
- session.addEventListener('change',sync);
+ panel.addEventListener('change',e=>{const t=e.target;if(t.matches('[data-date-all-campuses]'))campusChoices.filter(c=>!c.disabled).forEach(c=>c.checked=t.checked);else if(t.matches('[data-date-campus-choice]')){if(master)master.checked=false;}else if(t.matches('[data-date-toggle]'))available(t.closest('fieldset')).forEach(l=>l.checked=t.checked);sync();});
+ session.addEventListener('change',()=>{if(master)master.checked=false;sync();});
  test.addEventListener('change',()=>{test.setCustomValidity('');[...test.options].filter(o=>o.disabled).forEach(o=>o.remove());});
  form.addEventListener('change',e=>{if(e.target.name==='subject'){e.target.setCustomValidity('');[...e.target.options].filter(o=>o.disabled).forEach(o=>o.remove());}});
  new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>{

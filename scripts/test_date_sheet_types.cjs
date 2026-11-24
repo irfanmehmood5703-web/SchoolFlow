@@ -24,7 +24,7 @@ assert.deepEqual(subjects([],[]),[]);
 console.log('PASS Date sheet subjects: disjoint classes, selected class, duplicates, initial list, empty list');
 
 
-function verifyCampusControls(source){
+function verifyCampusControls(source,names=['North','South']){
  const assert=(ok,message)=>{if(!ok)throw Error(message);};
  const callbacks=[];
  const doc={addEventListener(type,fn){callbacks.push(fn);}};
@@ -32,7 +32,7 @@ function verifyCampusControls(source){
  const master=mk('[data-date-all-campuses]'), session=mk('session',{value:'2027'}), count=mk('count'), subjectStatus=mk('status'), tests=mk('test'), subjects=mk('subjects'), table=mk('table'), body=mk('body');
  table.querySelector=()=>body;
  const choices=[],campuses=[],classes=[],leaves=[];
- for(const name of ['North','South']){
+ for(const name of names){
   const choice=mk('[data-date-campus-choice]',{value:name});choice.closest=()=>mk('label');choices.push(choice);
   const group=mk('campus',{dataset:{campusName:name,testTypes:'["Monthly"]'}}),toggle=mk('[data-date-toggle]');campuses.push(group);
   const cls=mk('class',{dataset:{session:'2027',subjects:'["Math"]'}}),ct=mk('[data-date-toggle]'),leaf=mk('[data-date-leaf]');classes.push(cls);leaves.push(leaf);
@@ -50,6 +50,19 @@ function verifyCampusControls(source){
  const change=t=>panel.handlers.change({target:t});
  assert(campuses.every(c=>c.hidden),'Initial campus panels hidden');
  choices[0].checked=true;change(choices[0]);
+ if(names.length===1){
+  assert(choices[0].checked&&!master.checked&&!master.indeterminate,'Selecting RazaAbad alone must not tick All Campuses');
+  assert(!campuses[0].hidden&&!leaves[0].checked,'Individual campus opens its classes without selecting them');
+  leaves[0].checked=true;change(leaves[0]);
+  assert(!master.checked,'Selecting a class must not tick All Campuses');
+  master.checked=true;change(master);
+  assert(master.checked&&choices[0].checked,'Explicit All Campuses selection works with one campus');
+  master.checked=false;change(master);
+  assert(!choices[0].checked&&!leaves[0].checked&&campuses[0].hidden,'Explicit All Campuses deselection clears its campus and classes');
+  choices[0].checked=true;change(choices[0]);
+  assert(!master.checked,'Reselecting the sole campus is still independent');
+  return 7;
+ }
  assert(!campuses[0].hidden&&campuses[1].hidden,'Only selected campus shown');
  assert(!leaves[0].checked&&!leaves[1].checked,'Campus selection does not select classes');
  leaves[0].checked=true;change(leaves[0]);
@@ -58,7 +71,13 @@ function verifyCampusControls(source){
  assert(choices.every(c=>c.checked)&&!leaves[1].checked,'All campuses does not select classes');
  choices[0].checked=false;change(choices[0]);
  assert(leaves[0].disabled&&!leaves[0].checked&&campuses[0].hidden,'Deselect clears only its classes');
- return 6;
+ choices[0].checked=true;change(choices[0]);
+ assert(choices.every(c=>c.checked)&&!master.checked,'Individually selecting all campuses does not tick the explicit bulk control');
+ master.checked=true;change(master);
+ assert(master.checked,'Explicit bulk control remains ticked until changed');
+ return 8;
 }
 
 console.log('PASS '+verifyCampusControls(fs.readFileSync(path.join(__dirname,'../static/exam_grading.js'),'utf8'))+' independent campus selection interaction checks');
+
+console.log('PASS '+verifyCampusControls(fs.readFileSync(path.join(__dirname,'../static/exam_grading.js'),'utf8'),['RazaAbad'])+' single-campus interaction checks');
