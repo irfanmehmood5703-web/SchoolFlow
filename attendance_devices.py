@@ -17,6 +17,10 @@ TZ=ZoneInfo('Asia/Karachi')
 CHANNELS=('android','branded','whatsapp','none')
 DEFAULTS=dict(student_channel='android',student_only_absent=True,student_absent=60,student_late=30,staff_channel='android',staff_only_absent=False,staff_absent=0,staff_late=0,teacher_notification=False,auto_staff_absent=False,auto_staff_short=False,early_short=False,early_minutes=0,classes=[])
 API_ENDPOINTS=('attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card')
+BROWSER_ENDPOINT='attendance_devices.scanner_connection'
+QR_COOKIE='sf_qr_pair'
+QR_COOKIE_PATH='/workspace/core/qr-attendance/scanner'
+QR_PAIR_SECONDS=30*24*60*60
 
 def utc_now():return datetime.now(timezone.utc)
 
@@ -41,6 +45,13 @@ def configure_attendance_devices(app,db,Student,Employee):
         created=db.Column(db.DateTime,nullable=False,default=lambda:datetime.now(timezone.utc))
         revision=db.Column(db.Integer,nullable=False,default=1)
         __table_args__=(db.UniqueConstraint('kind','serial'),)
+    class BrowserPairing(db.Model):
+        __tablename__='attendance_browser_pairing'
+        digest=db.Column(db.String(64),primary_key=True)
+        device_id=db.Column(db.Integer,db.ForeignKey('attendance_device.id'),nullable=False,index=True)
+        device_revision=db.Column(db.Integer,nullable=False)
+        principal=db.Column(db.String(100),nullable=False)
+        expires=db.Column(db.DateTime,nullable=False,index=True)
     class Scan(db.Model):
         __tablename__='attendance_device_scan'
         id=db.Column(db.Integer,primary_key=True)
@@ -73,7 +84,7 @@ def configure_attendance_devices(app,db,Student,Employee):
         employee_id=db.Column(db.Integer,db.ForeignKey('employee.id',ondelete='CASCADE'),unique=True)
         nonce=db.Column(db.String(43),nullable=False,unique=True,default=lambda:secrets.token_urlsafe(32))
         __table_args__=(db.CheckConstraint('(student_id IS NOT NULL AND employee_id IS NULL) OR (student_id IS NULL AND employee_id IS NOT NULL)'),)
-    app.extensions['attendance_device_models']=dict(device=Device,scan=Scan,mark=Mark,binding=IdentityBinding)
+    app.extensions['attendance_device_models']=dict(device=Device,scan=Scan,mark=Mark,binding=IdentityBinding,browser_pairing=BrowserPairing)
     def device_scope(device):
         return hashlib.sha256(('schoolflow:gate-scope:'+g.attendance_namespace+':'+str(device.id)+':'+device.campus).encode()).hexdigest()
     def now():return utc_now()
@@ -103,18 +114,18 @@ def configure_attendance_devices(app,db,Student,Employee):
     @bp.errorhandler(ValueError)
     def invalid(error):
         db.session.rollback()
-        if request.endpoint in API_ENDPOINTS:return jsonify(error=str(error)),422
+        if request.endpoint in (*API_ENDPOINTS,BROWSER_ENDPOINT):return jsonify(error=str(error)),422
         return render_template('operation_error.html',title='Check attendance settings',error=str(error)),422
     @bp.errorhandler(IntegrityError)
     @bp.errorhandler(StaleDataError)
     def conflict(error):
         db.session.rollback()
-        if request.endpoint in API_ENDPOINTS:return jsonify(error='Concurrent event conflict; retry the same event ID.'),409
+        if request.endpoint in (*API_ENDPOINTS,BROWSER_ENDPOINT):return jsonify(error='Concurrent event conflict; retry the same event ID.'),409
         return render_template('operation_error.html',title='Reload attendance settings',error='This device ID already exists or the record changed. Reload before saving.'),422
     @bp.errorhandler(OperationalError)
     def unavailable(error):
         db.session.rollback()
-        if request.endpoint in API_ENDPOINTS:return jsonify(error='Attendance devices are unavailable for this institute.'),503
+        if request.endpoint in (*API_ENDPOINTS,BROWSER_ENDPOINT):return jsonify(error='Attendance devices are unavailable for this institute.'),503
         return render_template('operation_error.html',title='Attendance devices unavailable',error='The institute database needs the operator schema upgrade before this option can be used.'),503
     def form_config():
         result={}
@@ -198,6 +209,80 @@ def configure_attendance_devices(app,db,Student,Employee):
     @bp.get('/workspace/core/qr-attendance/scanner')
     def scanner():
         return render_template('attendance_scanner.html',title='QR Attendance Scanner')
+    def browser_principal():
+        school=getattr(g,'school_identity',None)
+        if not school or school.get('demo') or not school.get('scope'):abort(403)
+        if getattr(g,'staff_principal',None) is not None:
+            actor=f"staff:{session.get('staff_id')}:{session.get('staff_version')}"
+        elif session.get('owner_id'):
+            actor=f"owner:{session['owner_id']}:{session.get('owner_version')}"
+        else:abort(403)
+        return school['scope']+':'+actor
+
+    def browser_cookie():
+        token=request.cookies.get(QR_COOKIE,'')
+        return hashlib.sha256(token.encode()).hexdigest() if re.fullmatch(r'[A-Za-z0-9_-]{43}',token) else None
+
+    def browser_device(device):
+        allowed=getattr(g,'access_campuses',None)
+        return bool(device and device.kind=='biometric' and device.status=='Approved' and device.token_digest and (allowed is None or device.campus in allowed))
+
+    def clear_browser_cookie(response):
+        response.delete_cookie(QR_COOKIE,path=QR_COOKIE_PATH,httponly=True,secure=app.config['SESSION_COOKIE_SECURE'],samesite='Strict')
+        return response
+
+    def browser_info(device):
+        return dict(connected=True,device_id=device.id,name=device.name,campus=device.campus,marks=device.marks)
+
+    @bp.post('/workspace/core/qr-attendance/scanner/connection')
+    def scanner_connection():
+        # The ordinary authenticated institute session and form CSRF protection
+        # apply here, unlike the external device API. The raw device key is
+        # never retained in a cookie, browser storage or a pairing database row.
+        principal=browser_principal()
+        action=request.form.get('action','')
+        digest=browser_cookie()
+        pair=db.session.get(BrowserPairing,digest) if digest else None
+        if pair and pair.principal!=principal:pair=None
+        if action=='disconnect':
+            if pair:db.session.delete(pair);commit()
+            return clear_browser_cookie(jsonify(connected=False))
+        if action=='connect':
+            raw_id=request.form.get('device','');key=request.form.get('key','')
+            if not re.fullmatch(r'[1-9][0-9]{0,9}',raw_id) or not re.fullmatch(r'[A-Za-z0-9_-]{40,60}',key):raise ValueError('Enter the registered Device ID and connection key.')
+            device=db.session.get(Device,int(raw_id))
+            if not browser_device(device) or not hmac.compare_digest(device.token_digest,hashlib.sha256(key.encode()).hexdigest()):return jsonify(error='Invalid connection key, unavailable device or missing campus access.'),403
+            # Discard expired pairings and the previous pairing in this browser.
+            BrowserPairing.query.filter(BrowserPairing.expires<=now()).delete(synchronize_session=False)
+            if pair and aware(pair.expires)>now():db.session.delete(pair)
+            token=secrets.token_urlsafe(32)
+            remember=request.form.get('remember')=='1'
+            lifetime=QR_PAIR_SECONDS if remember else 8*3600
+            db.session.add(BrowserPairing(digest=hashlib.sha256(token.encode()).hexdigest(),device_id=device.id,device_revision=device.revision,principal=principal,expires=now()+timedelta(seconds=lifetime)))
+            seen(device,now());audit('Connect browser QR scanner',device_id=device.id,campus=device.campus,remember=remember);commit()
+            response=jsonify(**browser_info(device))
+            response.set_cookie(QR_COOKIE,token,max_age=lifetime if remember else None,path=QR_COOKIE_PATH,httponly=True,secure=app.config['SESSION_COOKIE_SECURE'],samesite='Strict')
+            return response
+        device=db.session.get(Device,pair.device_id) if pair else None
+        if not pair or aware(pair.expires)<=now() or not browser_device(device) or pair.device_revision!=device.revision:
+            if pair:db.session.delete(pair);commit()
+            return clear_browser_cookie(jsonify(connected=False,error='Connect this scanner first, or reconnect after a device change.')),401
+        g.attendance_namespace=g.school_identity['scope']
+        g.attendance_device_actor=dict(kind='Device',id=device.id,label=device.name)
+        if action=='status':
+            seen(device,now());commit();return jsonify(**browser_info(device))
+        if action=='heartbeat':
+            seen(device,now());commit();return jsonify(**browser_info(device))
+        if action=='events':
+            raw=request.form.get('payload','')
+            if len(raw)>8192:abort(413)
+            try:data=json.loads(raw)
+            except (ValueError,TypeError):raise ValueError('Invalid scan data.')
+            if not isinstance(data,dict) or set(data)!= {'event_id','qr_token','direction','occurred_at'}:raise ValueError('Use a SchoolFlow QR token.')
+            if getattr(g,'staff_principal',None) is not None and (not isinstance(data['qr_token'],str) or not data['qr_token'].startswith('schoolflow:student:')):return jsonify(error='Employee QR scanning requires an institute owner.'),403
+            return ingest_data(device,data)
+        raise ValueError('Choose a valid scanner action.')
+
     @bp.get('/workspace/core/face-gates/scans')
     def scans():
         try:
@@ -327,6 +412,8 @@ def configure_attendance_devices(app,db,Student,Employee):
     @bp.post('/api/attendance/devices/<int:did>/events')
     def ingest(did):
         data=payload(('event_id','person_kind','person_id','direction','occurred_at','qr_token','identity_binding'));device=authenticate_device(did)
+        return ingest_data(device,data)
+    def ingest_data(device,data):
         if not isinstance(data.get('event_id'),str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,100}',data['event_id']) or data.get('direction') not in ('in','out'):raise ValueError('Check event ID and IN/OUT direction.')
         if 'qr_token' in data:
             if 'person_kind' in data or 'person_id' in data or not isinstance(data['qr_token'],str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',data['qr_token']):raise ValueError('Use a SchoolFlow QR token, or an identified student/staff ID, not both.')

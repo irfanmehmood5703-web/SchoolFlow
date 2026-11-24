@@ -388,7 +388,7 @@ def configure_staff_access(app,db,Student,Employee):
         if ep.startswith('attendance_controls.'):
             return 'core.'+('delete' if ep=='attendance_controls.devices' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
         if ep.startswith('attendance_devices.'):
-            area='attendance' if ep in ('attendance_devices.scans','attendance_devices.scanner') else 'core'
+            area='attendance' if ep in ('attendance_devices.scans','attendance_devices.scanner','attendance_devices.scanner_connection') else 'core'
             return area+'.'+('export' if request.args.get('export') else 'create' if ep=='attendance_devices.gates' and request.method=='POST' else 'update' if request.method=='POST' else 'view')
         if ep=='staff_access.payment_requests':
             return 'fees.approve' if request.method=='POST' and request.form.get('action') in ('approve','reject') else 'fees.view'

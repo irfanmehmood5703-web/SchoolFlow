@@ -64,6 +64,34 @@ class AttendanceDeviceTests(unittest.TestCase):
         saved=self.tenant(lambda:dict(db.session.get(self.Setting,'attendance-devices').data));self.assertEqual(saved['classes'],[['Campus A','One']]);self.assertTrue(saved['auto_staff_absent'])
         for values in [dict(version='1',student_late='90'),dict(version='1',classes='{"bad":1}'),dict(version='1',classes='[[1],"One"]'),dict(version='1',early_minutes='-1'),dict(version='1',staff_channel='provider')]:self.assertEqual(self.c.post(url,data=self.settings_data(**values)).status_code,422)
         self.assertEqual(self.c.post(url,data=self.settings_data(_csrf='')).status_code,400)
+    def test_remembered_browser_qr_pairing_and_revocation(self):
+        def seed():
+            db.session.add(self.models['device'](kind='biometric',serial='browser-qr',name='Browser QR',campus='Campus A',status='Approved',marks='both',token_digest=hashlib.sha256(self.key.encode()).hexdigest()))
+        self.tenant(seed);self.login()
+        url='/workspace/core/qr-attendance/scanner/connection'
+        def action(name,**kw):return self.c.post(url,data={'_csrf':self.token(),'action':name,**kw})
+        self.assertEqual(action('status').status_code,401)
+        self.assertEqual(action('connect',device='3',key='x'*43,remember='1').status_code,403)
+        connected=action('connect',device='3',key=self.key,remember='1')
+        self.assertEqual(connected.status_code,200,connected.data)
+        self.assertTrue(connected.json['connected'])
+        cookie=connected.headers.get('Set-Cookie')
+        self.assertIn('HttpOnly',cookie);self.assertIn('SameSite=Strict',cookie);self.assertIn('Max-Age=2592000',cookie);self.assertNotIn(self.key,cookie)
+        self.assertEqual(self.tenant(lambda:self.models['browser_pairing'].query.count()),1)
+        self.assertEqual(action('status').json['device_id'],3)
+        self.assertEqual(action('events',payload=json.dumps(dict(event_id='browser_bad_01',person_kind='student',person_id=1,direction='in',occurred_at=self.stamp.isoformat()))).status_code,422)
+        self.assertEqual(self.c.post(url,data={'action':'disconnect'}).status_code,400)
+        self.login()
+        self.assertTrue(action('status').json['connected'])
+        self.assertEqual(action('disconnect').status_code,200)
+        self.assertEqual(action('status').status_code,401)
+        self.assertEqual(self.tenant(lambda:self.models['browser_pairing'].query.count()),0)
+        self.assertEqual(action('connect',device='3',key=self.key,remember='1').status_code,200)
+        def rotate():
+            d=db.session.get(self.models['device'],3);d.revision+=1;d.token_digest=hashlib.sha256(b'new-test-key').hexdigest()
+        self.tenant(rotate)
+        self.assertEqual(action('status').status_code,401)
+
     def test_heartbeat_requires_per_device_credential_and_records_no_attendance(self):
         url='/api/attendance/devices/1/heartbeat'
         self.assertEqual(self.c.post(url,json={}).status_code,401)
