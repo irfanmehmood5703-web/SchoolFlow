@@ -1,4 +1,10 @@
 const schoolFlow = 'https://schoolflow-phase1.onrender.com';
+const next = new URLSearchParams(window.location.search).get('next');
+const destinations = new Map([
+  ['sign-in', '/auth/institute'],
+  ['owner', '/vendor/login']
+]);
+const destination = destinations.get(next) || '/';
 const title = document.querySelector('#title');
 const status = document.querySelector('#status');
 const progress = document.querySelector('#progress');
@@ -38,7 +44,7 @@ async function openSchoolFlow() {
     while (Date.now() < deadline) {
       if (await isReady(Math.min(24_000, deadline - Date.now()))) {
         status.textContent = 'Workspace ready. Opening SchoolFlow.';
-        window.location.replace(schoolFlow + '/');
+        window.location.replace(schoolFlow + destination);
         return;
       }
       await new Promise(resolve => setTimeout(resolve, 2_500));
