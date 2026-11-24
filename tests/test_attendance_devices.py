@@ -157,6 +157,8 @@ class AttendanceDeviceTests(unittest.TestCase):
         page=self.c.get('/workspace/attendance/student?day=2026-11-05&campus=Campus+A')
         self.assertEqual(page.status_code,200,page.data)
         self.assertIn(b'class="attendance-column-filters no-print"',page.data)
+        self.assertIn(b'class="no-print attendance-select-column"><input type="checkbox" data-att-select-all',page.data)
+        self.assertIn(b'class="no-print attendance-select-column"><input type="checkbox" name="attendance_keys"',page.data)
         for key in ('campus','class_name','section','academic_session','gender'):
             self.assertIn(('form="attendance-filters" name="'+key+'"').encode(),page.data)
         self.assertIn(b'Fictional pupil Campus A',page.data)
