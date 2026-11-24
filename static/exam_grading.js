@@ -36,7 +36,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   input.setCustomValidity(prev&&!names.includes(prev)?'Choose a subject assigned to a selected class.':'');
  }
  
- function syncToggle(toggle,items){if(!toggle)return;const n=items.filter(l=>l.checked).length;toggle.checked=items.length>0&&n===items.length;toggle.indeterminate=n>0&&n<items.length;toggle.disabled=!items.length;}
+ // Bulk controls remain explicit, including the single-section and
+ // single-class cases. Individual selections never turn on a bulk control.
+ function syncToggle(toggle,items){if(!toggle)return;toggle.disabled=!items.length;toggle.indeterminate=false;if(toggle.disabled||items.some(l=>!l.checked))toggle.checked=false;}
  function sync(){
   const eligible=campuses.filter(group=>[...group.querySelectorAll('[data-date-class]')].some(cls=>Boolean(session.value)&&cls.dataset.session===session.value));
   const eligibleNames=eligible.map(group=>group.dataset.campusName);
@@ -72,8 +74,30 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(subjectStatus)subjectStatus.textContent=subjectNames.length?subjectNames.length+' configured subject(s) available. Each selected class receives only its assigned papers.':'No configured subjects for this selection. Check Subjects in Classes.';
   return subjectNames;
  }
- panel.addEventListener('change',e=>{const t=e.target;if(t.matches('[data-date-all-campuses]'))campusChoices.filter(c=>!c.disabled).forEach(c=>c.checked=t.checked);else if(t.matches('[data-date-campus-choice]')){if(master)master.checked=false;}else if(t.matches('[data-date-toggle]'))available(t.closest('fieldset')).forEach(l=>l.checked=t.checked);sync();});
- session.addEventListener('change',()=>{if(master)master.checked=false;sync();});
+ panel.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.matches('[data-date-all-campuses]'))campusChoices.filter(c=>!c.disabled).forEach(c=>c.checked=t.checked);
+  else if(t.matches('[data-date-campus-choice]')){if(master)master.checked=false;}
+  else if(t.matches('[data-date-toggle]')){
+   const scope=t.closest('fieldset');
+   available(scope).forEach(l=>l.checked=t.checked);
+   const campus=scope.closest('[data-date-campus]');
+   if(campus&&scope!==campus){
+    const parent=campus.querySelector(':scope > label [data-date-toggle]');
+    if(parent)parent.checked=false;
+   }else if(scope===campus){
+    classes.filter(cls=>cls.closest('[data-date-campus]')===campus).forEach(cls=>{
+     const child=cls.querySelector('[data-date-toggle]');if(child)child.checked=false;
+    });
+   }
+  }else if(t.matches('[data-date-leaf]')){
+   const cls=t.closest('[data-date-class]'),campus=t.closest('[data-date-campus]');
+   const sectionToggle=cls.querySelector('[data-date-toggle]'),classToggle=campus.querySelector(':scope > label [data-date-toggle]');
+   if(sectionToggle)sectionToggle.checked=false;if(classToggle)classToggle.checked=false;
+  }
+  sync();
+ });
+ session.addEventListener('change',()=>{if(master)master.checked=false;classes.forEach(cls=>{const t=cls.querySelector('[data-date-toggle]');if(t)t.checked=false;});campuses.forEach(c=>{const t=c.querySelector(':scope > label [data-date-toggle]');if(t)t.checked=false;});sync();});
  test.addEventListener('change',()=>{test.setCustomValidity('');[...test.options].filter(o=>o.disabled).forEach(o=>o.remove());});
  form.addEventListener('change',e=>{if(e.target.name==='subject'){e.target.setCustomValidity('');[...e.target.options].filter(o=>o.disabled).forEach(o=>o.remove());}});
  new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>{
