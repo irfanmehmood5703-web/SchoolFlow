@@ -771,7 +771,9 @@ def configure_school_settings(app,db,Student,Employee):
                 group_total=sum((e['total'] for e in numeric),Decimal(0))
                 group_obtained=sum((Decimal(str(e['obtained'] or 0)) for e in numeric),Decimal(0))
                 group_complete=all(e['marked'] for e in numeric)
-                grouped.append(dict(name=name,papers=entries,total=group_total,obtained=group_obtained,complete=group_complete,percentage=group_obtained/group_total*100 if group_total and group_complete else None))
+                group_percent=group_obtained/group_total*100 if group_total and group_complete else None
+                group_grade,group_remarks=grade_for(award.data.get('campus',''),award.data.get('class_name',''),group_percent) if group_percent is not None else ('','')
+                grouped.append(dict(name=name,papers=entries,total=group_total,obtained=group_obtained,complete=group_complete,percentage=group_percent,grade=group_grade,remarks=group_remarks))
             if group_view:
                 total=sum((g['total'] for g in grouped),Decimal(0));obtained=sum((g['obtained'] for g in grouped),Decimal(0));complete=all(g['complete'] for g in grouped)
             percent=obtained/total*100 if total and complete else None
@@ -793,7 +795,10 @@ def configure_school_settings(app,db,Student,Employee):
             ('paper_mode','Paper mode'),('father','Father name'),('admission','Admission number'),
             ('roll','Roll number'),('status','Result status'))
         shown={key for key,label in display_options}
-        if not group_view and request.args.get('display_options')=='1':
+        if group_view:
+            display_options=tuple((key, {'grade':'Grade (subject, group and overall)','percentage':'Percentage (subject, group and overall)'}.get(key,label)) for key,label in display_options if key!='position')
+            shown.discard('position')
+        if request.args.get('display_options')=='1':
             shown.intersection_update(request.args.getlist('show'))
         hidden_tags=[]
         for key,tags in {'grade':('grade',),'percentage':('percentage',),'photo':('stdPic',),'remarks':('remarks',),'father':('fatherName',),'admission':('regNo',),'roll':('rollNo','examRollNo'),'status':('currentStatus',)}.items():

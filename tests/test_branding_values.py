@@ -177,6 +177,25 @@ class BrandingValueTests(unittest.TestCase):
         self.assertEqual(self.ops['score'].query.count(),2)
         self.assertIn(b'<th>Percentage</th>',self.c.get(path).data)
 
+    def test_group_report_clear_totals_and_display_options(self):
+        award=self.award()
+        award.data={**award.data,'papers':[dict(p,subject_group='Core subjects') for p in award.data['papers']]}
+        db.session.add_all([self.ops['score'](award_id=award.id,student_id=self.student.id,paper=0,obtained=15,state=''),self.ops['score'](award_id=award.id,student_id=self.student.id,paper=1,obtained=20,state='')])
+        db.session.commit()
+        path='/workspace/core/exam/results/'+str(award.id)+'?view=groups&mode=print'
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        for value in (b'Subject Group Report Display Options',b'Combined Group Performance',b'Core subjects',b'Group Total',b'<td>35.00</td>',b'<td>50.00</td>',b'<td>70.00%</td>',b'Photo not available'):
+            self.assertIn(value,page.data)
+        self.assertNotIn(b'name="fingerprint"',page.data)
+        hidden=self.c.get(path+'&display_options=1&show=roll&student_id='+str(self.student.id))
+        self.assertEqual(hidden.status_code,200)
+        for value in (b'<th>Percentage</th>',b'<th>Grade</th>',b'<span>Percentage</span>',b'<span>Grade</span>',b'Photo not available',b'<span>Father Name</span>'):
+            self.assertNotIn(value,hidden.data)
+        self.assertIn(b'<span>Roll No.</span>',hidden.data)
+        self.assertIn(b'<td>35.00</td>',hidden.data)
+        self.assertEqual(self.ops['score'].query.count(),2)
+
     def test_final_policy_remarks_are_escaped_and_shown_only_for_complete_results(self):
         policy=self.m['item'](kind='grading',name='Policy',scope='',data={'bands':[{'min':'0','max':'100','grade':'A','remarks':'Good'}],'final_remarks':'<Study well>'})
         db.session.add(policy);db.session.flush();db.session.add(self.m['item'](kind='class-grading',name='Assignment',scope='Campus A',data={'classes':['Class A'],'policy':policy.id}));db.session.commit()
