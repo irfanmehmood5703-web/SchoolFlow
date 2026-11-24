@@ -3,7 +3,7 @@
 <div class="form-card">
 <h2>School SIM status</h2>
 <p><strong>{{devices|selectattr('active')|list|length}} active registered phone(s)</strong> · {{jobs|selectattr('state','equalto','queued')|list|length}} queued · {{jobs|selectattr('state','equalto','sent')|list|length}} submitted · {{jobs|selectattr('state','equalto','failed')|list|length}} failed (latest 100)</p>
-<p>To send: prepare and approve a message in Communication requests, then open the connected Android SMS App, refresh the queue and press Send Messages. Do not queue the same message again while its status is uncertain.</p>
+<p>Attendance Save &amp; Send SMS queues directly when a unique active campus phone and valid contacts are available. For other requests, review and approve in Communication requests. Open the connected Android SMS App, refresh the queue and press Send Messages. Do not queue the same message again while its status is uncertain.</p>
 <p><strong>Important:</strong> Submitted means the phone reported network submission, not confirmed recipient delivery.</p>
 </div>
 <form method="post" class="form-card filter-grid">{{m.csrf()}}<input type="hidden" name="action" value="add">{{m.input('name','Phone name','text','',true)}}{{m.input('campus','Campus',options=campuses)}}<button>Register phone</button></form>

@@ -878,11 +878,20 @@ def configure_operations(app, db, Student, Employee):
                     policy=Workflow(kind='attendance-notification-policy',status='Active',data=dict(day=d,students=entries));db.session.add(policy)
                 else:policy.data=dict(day=d,students={**policy.data.get('students',{}),**entries})
             db.session.flush()
+            queued_sms=0;review_reasons=set()
             for (d,campus),ids in notify.items():
                 # One campus per request, compatible with the campus-bound SIM device.
-                for offset in range(0,len(ids),60):queue('Attendance',ids[offset:offset+60],audience='parent',event='attendance',context={'day':d})
+                for offset in range(0,len(ids),60):
+                    message=queue('Attendance',ids[offset:offset+60],audience='parent',event='attendance',context={'day':d})
+                    if message.data['preferences'].get('app_sms'):
+                        db.session.flush()
+                        created,reason=app.extensions['auto_attendance_sms_queue'](message,campus)
+                        queued_sms+=created
+                        if reason:review_reasons.add(reason)
             commit()
-            flash(f'{count} attendance records '+('deleted.' if action=='delete' else 'saved.')+(f' SMS requests prepared for {sum(map(len,notify.values()))} student-day records; no SMS sent yet.' if action=='send' else ''),'success')
+            flash(f'{count} attendance records '+('deleted.' if action=='delete' else 'saved.')+(f' {queued_sms} new SMS queued for the phone; no SMS sent yet.' if action=='send' else ''),'success')
+            for reason in sorted(review_reasons):flash('SMS pending review: '+reason,'warning')
+            if action=='send' and (request.form.get('branded_sms')=='on' or request.form.get('whatsapp_sms')=='on'):flash('External SMS/WhatsApp requests require a connected provider.','warning')
             return redirect(url_for('ops.take_attendance',kind='student',**{k:request.form[k] for k in ('mode','from','to','campus','class_name','section','academic_session','gender','search','status_filter','origin_filter') if request.form.get(k)}))
         if request.args.get('export'):
             return csv_response(['Date','Attendance Type','SID','Roll No','Student','Father Name','Attendance','Campus','Class','Section','Session','Gender','Shift In','Mark In','Shift Out','Mark Out'],[[r['day'],r['origin'],r['p'].id,r['detail'].get('roll_no',''),r['p'].name,r['p'].father,r['status'] or 'Unmarked',r['detail'].get('campus',''),r['p'].class_name,r['detail'].get('section',''),r['detail'].get('academic_session',''),r['detail'].get('gender',''),r['schedule'].get('in',''),r['record'].time_in if r['record'] else '',r['schedule'].get('out',''),r['record'].time_out if r['record'] else ''] for r in rows],'student-attendance')

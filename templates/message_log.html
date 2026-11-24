@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% import 'ops_macros.html' as m with context %}
 {% block content %}
-{{m.heading(title,'Saved communication requests are drafts, not proof that SMS was sent. Review each request before submitting it to the school SIM.')}}
+{{m.heading(title,'Communication requests and SMS queue history. A queued message is not proof that SMS was sent.')}}
 {% if session.get('owner_id') and not session.get('demo') %}
 <p><a class="button" href="{{url_for('sms_gateway.index')}}">Open School SIM SMS &amp; Outbox</a></p>
 <div class="form-card">
   <h2>How SMS sending works</h2>
-  <p><strong>School SIM:</strong> Review a request, select the registered phone and approve the SMS queue. Then open the Android SMS App to submit the messages. SIM charges may apply.</p>
+  <p><strong>School SIM:</strong> Attendance SMS queues directly to a unique active campus phone for authorized users. Other or unresolved requests can be reviewed here. Open the Android SMS App to submit queued messages. SIM charges may apply.</p>
   <p><strong>External SMS provider:</strong> A request marked “Provider not configured” has not been sent through an external provider. This does not mean your registered school SIM is disconnected.</p>
   <p><strong>Delivery:</strong> A phone-reported “sent” status confirms network submission only. Check recipient receipt separately.</p>
 </div>
@@ -22,7 +22,7 @@
 <td>{{r.data.audience}}</td>
 <td>{{r.data.ids|length}}</td>
 <td>{{r.status}}{% if r.status == 'Provider not configured' %}<p class="muted">External provider not configured; school SIM review is available separately.</p>{% endif %}</td>
-<td>{% if session.get('owner_id') and not session.get('demo') %}<a class="button" href="{{url_for('sms_gateway.release',wid=r.id)}}">Review &amp; queue via School SIM</a>{% else %}Owner access required{% endif %}</td>
+<td>{% if r.status=='Queued for SMS App' %}Queued — open SMS App{% elif session.get('owner_id') and not session.get('demo') %}<a class="button" href="{{url_for('sms_gateway.release',wid=r.id)}}">Review &amp; queue via School SIM</a>{% else %}Owner access required{% endif %}</td>
 <td>{% if r.data.get('messages') %}<details><summary>Preview {{r.data.messages|length}} prepared messages</summary>{% for message in r.data.messages %}<p>Recipient #{{message.person_id}} · {{message.template or 'Custom message'}}</p><pre style="white-space:pre-wrap">{{message.text}}</pre>{% if message.get('unresolved') %}<p>Unresolved tags: {{message.unresolved|join(', ')}}</p>{% endif %}{% endfor %}</details>{% else %}No text snapshot was captured for this older request.{% endif %}</td>
 </tr>
 {% else %}<tr><td colspan="8">No requests yet.</td></tr>{% endfor %}

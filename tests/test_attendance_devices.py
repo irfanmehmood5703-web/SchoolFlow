@@ -178,6 +178,24 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertTrue(policy['students']['2']['enabled'])
         self.assertEqual({r['pid']:r['status'] for r in self.daily()},{1:'Present',2:'Absent'})
 
+    def test_attendance_direct_sms_queue_and_repeat_save_deduplication(self):
+        self.login()
+        M=app.extensions['sms_models']
+        def seed():
+            db.session.get(Student,2).phone='+12025550123'
+            db.session.add(M['device'](name='Fictional SMS phone',campus='Campus B',active=True,digest=hashlib.sha256(('k'*43).encode()).hexdigest()))
+        self.tenant(seed)
+        key='2026-11-05_2'
+        form={'_csrf':self.token(),'grid_mode':'1','mode':'take','from':'2026-11-05','attendance_keys':key,'original_'+key:'','status_'+key:'Absent','action':'send','app_sms':'on','father_contact':'on','only_not_present':'on'}
+        url='/workspace/attendance/student'
+        self.assertEqual(self.c.post(url,data=form).status_code,302)
+        def jobs():return [(j.source,j.phone,j.state) for j in M['job'].query.all()]
+        self.assertEqual(self.tenant(jobs),[('attendance:2026-11-05:2:Absent:+12025550123','+12025550123','queued')])
+        form.update(mode='update');form['original_'+key]='Absent'
+        self.assertEqual(self.c.post(url,data=form).status_code,302)
+        self.assertEqual(len(self.tenant(jobs)),1)
+        self.assertEqual(self.daily()[0]['status'],'Absent')
+
     def test_saved_attendance_moves_to_update_and_pending_roster_excludes_it(self):
         self.login()
         url='/workspace/attendance/student'

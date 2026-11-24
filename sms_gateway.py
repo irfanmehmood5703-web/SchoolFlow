@@ -254,9 +254,48 @@ def configure_sms_gateway(app,db,Student):
             if not contacts:raise ValueError('Choose a recipient contact in the communication request.')
             for raw in contacts:
                 recipient=phone(raw);source=f'workflow:{row.id}:{person.id}:{recipient}:{message.get("source_salary_id") or ""}'
+                if data.get('attendance_day'):
+                    source=f"attendance:{data['attendance_day']}:{person.id}:{expected}:{recipient}"
                 result[source]=dict(source=source,phone=recipient,text=body,name=person.name)
         if len(result)>200:raise ValueError('Release no more than 200 SMS at a time.')
         return list(result.values())
+    def enqueue_items(row,device,items):
+        # A second attendance save, or manual release of the same request, must not
+        # produce another SMS for the same pupil/date/status/recipient.
+        previous=[]
+        attendance_day=row.data.get('attendance_day')
+        if attendance_day:
+            previous=Workflow.query.filter(Workflow.kind=='message',Workflow.data['attendance_day'].as_string()==attendance_day).all()
+        created=0
+        for item in items:
+            source=item['source']
+            sources=[source]
+            if attendance_day:
+                _,_,sid,status,recipient=source.split(':',4)
+                # Recognize requests released before stable attendance keys were introduced.
+                sources.extend(f'workflow:{old.id}:{sid}:{recipient}:' for old in previous if old.data.get('attendance_statuses',{}).get(sid)==status)
+            if Job.query.filter(Job.source.in_(sources)).first():continue
+            db.session.add(Job(device_id=device.id,generation=device.generation,**{k:item[k] for k in ('source','phone','text')}))
+            created+=1
+        row.status='Queued for SMS App'
+        return created
+
+    def auto_attendance_queue(row,campus):
+        # The explicit Save & Send SMS action is the approval for direct queueing.
+        # Staff must separately hold communication-create access for this campus.
+        principal=getattr(g,'staff_principal',None)
+        permitted=(session.get('owner_id') and principal is None) or (principal is not None and campus in app.extensions['staff_access_helpers']['grant'](principal,'communication.create'))
+        if session.get('demo') or not permitted:return 0,'Owner review required for this account.'
+        devices=Device.query.filter_by(campus=campus,active=True).order_by(Device.id).all() if campus else []
+        if len(devices)!=1:return 0,'Select a school SMS phone in Communication Requests (no unique active campus phone).'
+        device=devices[0]
+        try:items=candidates(row,device)
+        except ValueError as error:return 0,str(error)
+        created=enqueue_items(row,device,items)
+        audit('Auto queue student attendance SMS',request_id=row.id,device_id=device.id,count=created,staff_id=principal.id if principal is not None else None)
+        return created,''
+    app.extensions['auto_attendance_sms_queue']=auto_attendance_queue
+
     @bp.route('/workspace/general/sms/release/<int:wid>',methods=['GET','POST'])
     def release(wid):
         owner();row=Workflow.query.filter_by(id=wid,kind='message').first_or_404();items=[]
@@ -272,9 +311,8 @@ def configure_sms_gateway(app,db,Student):
             if not device.active:raise ValueError('This SMS phone was suspended. Reload before releasing messages.')
             # Re-evaluate only under the tenant write gate. Source is unique, so
             # a repeated release does not send the same request a second time.
-            for item in candidates(row,device):
-                if not Job.query.filter_by(source=item['source']).first():db.session.add(Job(device_id=device.id,generation=device.generation,**{k:item[k] for k in ('source','phone','text')}))
-            audit('Release school SIM SMS',request_id=wid,device_id=device.id,count=len(items));db.session.commit()
+            created=enqueue_items(row,device,candidates(row,device))
+            audit('Release school SIM SMS',request_id=wid,device_id=device.id,count=created);db.session.commit()
             flash('Queued for the SMS App. Start sending on the registered phone; nothing has been sent yet.','success');return redirect(url_for('sms_gateway.index'))
         return render_template('sms_release.html',title='Review school SIM SMS',row=row,devices=devices,device=device,items=items)
     def scope(device,school):return hashlib.sha256(f'{school.storage_key}:{device.id}:{device.generation}:sms-v1'.encode()).hexdigest()
@@ -328,6 +366,14 @@ def configure_sms_gateway(app,db,Student):
     def start(did):
         device,_=auth(did);payload=data();job=owned(device,payload)
         if job.state!='claimed' or job.expires<=time.time():abort(409)
+        if job.source.startswith('attendance:'):
+            from datetime import date
+            _,day,sid,status,recipient=job.source.split(':',4)
+            current=app.extensions['ops_models']['daily'].query.filter_by(kind='student',person_id=int(sid),day=date.fromisoformat(day)).first()
+            detail=rm['student'].query.filter_by(student_id=int(sid)).first()
+            if not current or current.status!=status or not detail or detail.data.get('campus')!=device.campus:
+                job.state='cancelled';job.updated=time.time();job.detail='Attendance or campus changed before sending.'
+                db.session.commit();return jsonify(error='Attendance changed; this SMS was cancelled.'),409
         batches['before_start'](device,job,payload)
         job.state='started';job.updated=time.time();db.session.commit();return jsonify(state='started')
     @bp.post('/api/sms/devices/<int:did>/result')
