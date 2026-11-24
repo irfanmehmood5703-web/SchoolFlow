@@ -1,0 +1,63 @@
+/* SchoolFlow shared adaptive print policy.
+   Print only. Density is based on document content, never on a student's marks.
+   No fixed height, clipping, transforms, or forced one-page limit. 
+   Preserve specialized ID cards, labels, QR sizes, and result-card layouts. */
+@media print {
+  /* Shared workspace reports: prevent scroll containers clipping rows. */
+  .page-content :is(.table,.report-table-output,.date-sheet-table-wrap){overflow:visible!important;max-height:none!important}
+  .page-content :is(.table,.report-table-output)>table{min-width:0!important;max-width:100%;table-layout:auto}
+  .page-content :is(.table,.report-table-output)>table :is(td,th){overflow-wrap:anywhere}
+  .page-content table thead{display:table-header-group}
+  .page-content table tr{break-inside:avoid}
+  .page-content :is(.table-toolbar,.report-controls,.table-search,.ledger-no-print){display:none!important}
+  /* Dense register/report tables: readable rows, repeating headers and natural pagination.
+     Excludes special-purpose result, date-sheet, and QR tables. */
+  .page-content :is(.table,.report-table-output,.finance-chart)>table:has(>tbody>tr:nth-child(9)):not(:has(img)):not(.date-sheet-table):not(.exam-preview-table) :is(th,td){padding:3pt 4pt!important;line-height:1.28}
+  .page-content :is(.table,.report-table-output,.finance-chart)>table:has(>tbody>tr:nth-child(9)):not(:has(img)):not(.date-sheet-table):not(.exam-preview-table){font-size:9pt;margin-top:4pt;margin-bottom:4pt}
+  /* Existing result card owns its own typography and page breaks. */
+  .result-marks-table>table{table-layout:auto!important}
+  /* Individual documents: remove excess gaps, not content. */
+  .sf-print-unit{box-sizing:border-box;max-width:100%!important;min-height:0!important;height:auto!important;overflow:visible!important;break-inside:auto!important;padding:5mm!important;margin:0 0 4mm!important}
+  .sf-print-unit h1{font-size:17pt;margin:4pt 0 6pt}
+  .sf-print-unit h2{font-size:13pt;margin:5pt 0}
+  .sf-print-unit h3{font-size:11pt;margin:5pt 0}
+  .sf-print-unit p{margin:4pt 0;line-height:1.35}
+  .sf-print-unit ul{margin:4pt 0;padding-left:16pt}
+  .sf-print-unit table{font-size:9pt;line-height:1.3;margin:5pt 0}
+  .sf-print-unit table :is(th,td){padding:3pt 4pt!important;overflow-wrap:anywhere;white-space:normal}
+  .sf-print-unit .detail-grid{gap:4pt 10pt}
+  .sf-print-unit .detail-grid>div{padding:3pt 4pt;break-inside:avoid}
+  .sf-print-unit .detail-grid dd{overflow-wrap:anywhere}
+  .sf-print-unit button,.sf-print-unit+.no-print{display:none!important}
+  .sf-roll-slip+.sf-roll-slip,.sf-salary-slip+.sf-salary-slip{break-before:page;page-break-before:always}
+  body:has(.sf-roll-slip) .school-print-header,body:has(.sf-salary-slip) .school-print-header{display:none!important}
+  body:has(.sf-roll-slip) .page-content>h1,body:has(.sf-roll-slip) .page-content>button,body:has(.sf-salary-slip) .salary-slip-document>h1,body:has(.sf-salary-slip) .salary-slip-document>button{display:none!important}
+  /* Saved student/employee details: compact multiple sections, keep all record fields. */
+  .sf-record-print .form-card{padding:4mm!important;margin:0 0 3mm!important;break-inside:auto!important}
+  .sf-record-print .form-card h2{font-size:12pt;margin:0 0 4pt}
+  .sf-record-print .detail-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:3pt 7pt}
+  .sf-record-print .detail-grid>div{padding:3pt;break-inside:avoid;min-width:0}
+  .sf-record-print .detail-grid dt{font-size:8pt}
+  .sf-record-print .detail-grid dd{font-size:9pt;overflow-wrap:anywhere;white-space:normal}
+  .sf-record-print .profile-placeholder{min-height:0!important;height:auto!important}
+  .sf-record-print .profile-placeholder img{max-width:22mm;max-height:28mm;object-fit:contain}
+  /* Datesheet: tighter paper spacing for 7+ subjects, preserve full syllabus. */
+  .date-sheet-paper:has(.date-sheet-table tbody>tr:nth-child(7)) .date-sheet-title{margin:5pt 0;font-size:14pt}
+  .date-sheet-paper:has(.date-sheet-table tbody>tr:nth-child(7)) .date-sheet-meta{padding:4pt;margin:5pt 0;gap:3pt 9pt}
+  .date-sheet-paper:has(.date-sheet-table tbody>tr:nth-child(7)) .date-sheet-student{padding:5pt;margin:4pt 0}
+  .date-sheet-paper:has(.date-sheet-table tbody>tr:nth-child(7)) .date-sheet-table{line-height:1.3}
+  .date-sheet-paper:has(.date-sheet-table tbody>tr:nth-child(7)) .date-sheet-table :is(th,td){padding:3pt 3pt!important}
+  /* Challans use their existing portrait/landscape copy arrangements. 
+     Compact only spacing on content-heavy sheets; QR/photo dimensions stay unchanged. */
+  .sf-fee-sheet:has(.sf-fee-copy>table>tbody>tr:nth-child(6)) .sf-fee-copy>table :is(th,td){padding-top:2px!important;padding-bottom:2px!important}
+  .sf-fee-sheet:has(.sf-fee-copy>table>tbody>tr:nth-child(6)) .sf-fee-copy>table{margin:3px 0!important}
+  .sf-fee-sheet:has(.sf-fee-copy>table>tbody>tr:nth-child(6)) .sf-fee-copy h3{margin:3px 0!important;padding-bottom:2px}
+  .sf-fee-sheet:has(.sf-fee-copy>table>tbody>tr:nth-child(6)) .sf-fee-copy .sf-fee-text{margin-top:3px!important;margin-bottom:3px!important}
+  /* Issued certificates are immutable HTML snapshots. Allow ordinary documents
+     to flow if genuinely too long. Do not change ID-card or label geometry. */
+  .issued-document:not(:has(.certificate-sheet.card,.certificate-sheet.label)){contain:none!important;overflow:visible!important}
+  .issued-document .certificate-sheet:not(.card):not(.label){contain:none!important;overflow:visible!important;max-height:none!important;height:auto!important;break-inside:auto!important}
+  .issued-document .certificate-sheet:not(.card):not(.label):has(article>table>tbody>tr:nth-child(7)){padding:4mm!important;line-height:1.35}
+  .issued-document .certificate-sheet:not(.card):not(.label):has(article>table>tbody>tr:nth-child(7)) :is(td,th){padding:4pt!important}
+  .issued-document .certificate-sheet:not(.card):not(.label):has(article>table>tbody>tr:nth-child(7)) p{margin:5pt 0}
+}

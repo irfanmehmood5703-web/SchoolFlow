@@ -2,7 +2,7 @@ name: Result card print pagination
 on:
   push:
     branches: [main]
-    paths: ['templates/exam_results.html','static/style.css','school_settings.py','scripts/test_result_print.py','.github/workflows/result-print.yml']
+    paths: ['templates/exam_results.html','static/style.css','school_settings.py','scripts/test_result_print.py','scripts/test_shared_print.py','static/compact_print.css','templates/base.html','templates/challan_print.html','templates/certificate_print.html','.github/workflows/result-print.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,3 +18,4 @@ jobs:
       - run: python -m pip install -r requirements.txt playwright pypdf
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/test_result_print.py
+      - run: python scripts/test_shared_print.py
