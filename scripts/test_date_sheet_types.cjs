@@ -51,6 +51,12 @@ function verifyCampusControls(source,names=['North','South']){
  callbacks[1]();
  const change=t=>panel.handlers.change({target:t});
  assert(campuses.every(c=>c.hidden),'Initial campus panels hidden');
+ // Simulate a mobile browser restoring the checkbox without a change event.
+ choices[0].checked=true;
+ form.handlers.focusin();
+ assert(!campuses[0].hidden&&count.textContent.startsWith('1 campus'),'Restored checked campus reconciles on focus');
+ assert(!master.checked&&!leaves[0].checked,'Restoration does not select bulk controls or sections');
+ choices[0].checked=false;change(choices[0]);
  choices[0].checked=true;change(choices[0]);
  if(names.length===1){
   assert(choices[0].checked&&!master.checked&&!master.indeterminate,'Selecting RazaAbad alone must not tick All Campuses');
@@ -75,7 +81,7 @@ function verifyCampusControls(source,names=['North','South']){
   assert(!choices[0].checked&&!leaves[0].checked&&campuses[0].hidden,'Explicit All Campuses deselection clears its campus and classes');
   choices[0].checked=true;change(choices[0]);
   assert(!master.checked,'Reselecting the sole campus is still independent');
-  return 13;
+  return 15;
  }
  assert(!campuses[0].hidden&&campuses[1].hidden,'Only selected campus shown');
  assert(!leaves[0].checked&&!leaves[1].checked,'Campus selection does not select classes');
@@ -92,7 +98,7 @@ function verifyCampusControls(source,names=['North','South']){
  assert(choices.every(c=>c.checked)&&!master.checked,'Individually selecting all campuses does not tick the explicit bulk control');
  master.checked=true;change(master);
  assert(master.checked,'Explicit bulk control remains ticked until changed');
- return 10;
+ return 12;
 }
 
 console.log('PASS '+verifyCampusControls(fs.readFileSync(path.join(__dirname,'../static/exam_grading.js'),'utf8'))+' independent campus selection interaction checks');

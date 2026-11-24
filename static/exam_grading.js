@@ -27,7 +27,10 @@ document.addEventListener('DOMContentLoaded',()=>{
  const available=scope=>[...scope.querySelectorAll('[data-date-leaf]')].filter(l=>!l.disabled);
  const subjectStatus=form.querySelector('[data-date-subject-status]');
  const table=form.querySelector('.repeat-table');
- let currentSubjects=[];
+ let currentSubjects=[],lastScopeState='';
+ // Mobile browsers can restore checked controls without emitting change.
+ const scopeState=()=>JSON.stringify([session.value,campusChoices.map(c=>c.checked),leaves.map(l=>l.checked)]);
+ const reconcile=()=>{if(lastScopeState!==scopeState())sync();};
  function fillSubject(input,names){
   const prev=input.value;
   input.replaceChildren(new Option('Select Subject',''),...names.map(v=>new Option(v,v)));
@@ -72,6 +75,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   subjects.replaceChildren(...subjectNames.map(v=>new Option(v,v)));
   form.querySelectorAll('select[name=subject]').forEach(input=>fillSubject(input,subjectNames));
   if(subjectStatus)subjectStatus.textContent=subjectNames.length?subjectNames.length+' configured subject(s) available. Each selected class receives only its assigned papers.':'No configured subjects for this selection. Check Subjects in Classes.';
+  lastScopeState=scopeState();
   return subjectNames;
  }
  panel.addEventListener('change',e=>{
@@ -105,6 +109,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   const input=node.querySelector('select[name=subject]');
   if(input){input.value='';fillSubject(input,currentSubjects);input.dispatchEvent(new Event('change',{bubbles:true}));}
  }))).observe(table.querySelector('tbody'),{childList:true});
- form.addEventListener('submit',e=>{const chosen=campusChoices.filter(c=>c.checked&&!c.disabled);const used=new Set(selected().map(l=>l.closest('[data-date-campus]').dataset.campusName));if(!chosen.length||!selected().length||chosen.some(c=>!used.has(c.value))){e.preventDefault();if(count){count.textContent='Select a campus and at least one class/section in every selected campus.';count.scrollIntoView({block:'nearest'});}else session.focus();}});
+ // Reconcile restored form state before interacting with other fields or saving.
+ form.addEventListener('focusin',reconcile);
+ form.addEventListener('input',e=>{if(!panel.contains(e.target))reconcile();});
+ document.defaultView?.addEventListener('pageshow',()=>{reconcile();document.defaultView.requestAnimationFrame(reconcile);});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)reconcile();});
+ form.addEventListener('submit',e=>{reconcile();const chosen=campusChoices.filter(c=>c.checked&&!c.disabled);const used=new Set(selected().map(l=>l.closest('[data-date-campus]').dataset.campusName));if(!chosen.length||!selected().length||chosen.some(c=>!used.has(c.value))){e.preventDefault();if(count){count.textContent='Select a campus and at least one class/section in every selected campus.';count.scrollIntoView({block:'nearest'});}else session.focus();}});
  sync();
 });
