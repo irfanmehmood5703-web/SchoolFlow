@@ -152,6 +152,17 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertEqual(self.event(direction='out',event_id='student_out_after_manual_save').json['outcome'],'Marked')
         self.assertTrue(next(r for r in self.daily() if r['pid']==1)['time_out'])
 
+    def test_student_attendance_inline_column_filters(self):
+        self.login()
+        page=self.c.get('/workspace/attendance/student?day=2026-11-05&campus=Campus+A')
+        self.assertEqual(page.status_code,200,page.data)
+        self.assertIn(b'class="attendance-column-filters no-print"',page.data)
+        for key in ('campus','class_name','section','academic_session','gender'):
+            self.assertIn(('form="attendance-filters" name="'+key+'"').encode(),page.data)
+        self.assertIn(b'Fictional pupil Campus A',page.data)
+        self.assertNotIn(b'Fictional pupil Campus B',page.data)
+        self.assertIn(b'<option value="Campus A" selected>',page.data)
+
     def test_student_attendance_grid_selected_bulk_update_and_delete(self):
         self.login()
         url='/workspace/attendance/student'
