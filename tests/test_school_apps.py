@@ -43,7 +43,7 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':12},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':13},headers=headers or self.headers)
     def key(self,job,other=False):
         if job['signing'].get('keystore') and not other:return self.worker.put('/api/app-builder/'+job['id']+'/signing',json={'keystore':job['signing']['keystore']},headers=self.headers)
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
@@ -56,7 +56,7 @@ class SchoolAppTests(unittest.TestCase):
         response=self.key(job);self.assertEqual(response.status_code,200);fingerprint=response.json['fingerprint'];blob=io.BytesIO()
         with zipfile.ZipFile(blob,'w') as archive:archive.writestr('AndroidManifest.xml','Synthetic unit-test fixture, not an installable Android build');archive.writestr('classes.dex','fictional-dex')
         content=blob.getvalue();files=[]
-        for role,title in {'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}.items():files.append(dict(role=role,label=job['branding']['name']+' '+title,package='com.schoolflow.schools.s'+job['branding']['school_key']+'.'+role+'.test',version_code=job['sequence'],signing_sha256=fingerprint,sha256=hashlib.sha256(content).hexdigest(),content=base64.b64encode(content).decode()))
+        for role,title in {'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}.items():files.append(dict(role=role,label=job['branding']['name']+' '+title,package='com.schoolflow.schools.s'+job['branding']['school_key']+'.'+role+'.test',version_code=job['sequence'],signing_sha256=fingerprint,sha256=hashlib.sha256(content).hexdigest(),content=base64.b64encode(content).decode()))
         body=dict(source_sha='a'*40,artifacts=files)
         self.assertEqual(self.worker.post('/api/app-builder/'+job['id']+'/complete',json=body,headers=self.headers).status_code,200)
         return body
@@ -124,7 +124,7 @@ class SchoolAppTests(unittest.TestCase):
         scope=self.schools[0][1]
         signing=db.session.get(self.M['signing'],scope)
         phone=app.test_client()
-        for role in ('parents','teacher','owner','sms'):
+        for role in ('parents','teacher','owner','sms','qr'):
             info=phone.get('/api/mobile-app/update/'+scope+'/'+role)
             self.assertEqual(info.status_code,200)
             self.assertIn('no-store',info.headers['Cache-Control'])
@@ -189,7 +189,7 @@ class SchoolAppTests(unittest.TestCase):
         old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
         update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
-        self.assertEqual(update['branding']['source_version'],12)
+        self.assertEqual(update['branding']['source_version'],13)
         self.assertEqual(self.claim().json['job']['id'],update['id'])
         self.assertEqual(self.M['build'].query.count(),2)
 

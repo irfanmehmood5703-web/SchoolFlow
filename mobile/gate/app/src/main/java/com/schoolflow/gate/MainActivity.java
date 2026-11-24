@@ -53,7 +53,6 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private boolean contactValid(){return connected&&clockOK&&SystemClock.elapsedRealtime()-lastContact<80000;}
  @Override public void onCreate(Bundle saved){
   super.onCreate(saved);
-  if(!BuildConfig.DEBUG)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   getWindow().setStatusBarColor(Color.rgb(23,107,74));
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.rgb(250,250,250));root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
   TextView title=text(getString(R.string.app_name),23);title.setTextColor(Color.WHITE);title.setBackgroundColor(Color.rgb(23,107,74));root.addView(title);
@@ -65,16 +64,19 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   start=button("Start camera",()->{if(running)stopCamera();else startCamera();});toolbar.addView(start);
   direction=new Spinner(this);direction.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"IN","OUT"}));toolbar.addView(direction);direction.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int n,long id){qrCaptureSession++;resetFace();}public void onNothingSelected(android.widget.AdapterView<?> p){}});
   HorizontalScrollView toolbarScroll=new HorizontalScrollView(this);toolbarScroll.addView(toolbar);root.addView(toolbarScroll);
+  boolean portrait=getResources().getConfiguration().orientation!=android.content.res.Configuration.ORIENTATION_LANDSCAPE;
   LinearLayout body=new LinearLayout(this);
+  body.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
   camera=new JavaCameraView(this,CameraBridgeViewBase.CAMERA_ID_FRONT);camera.setVisibility(View.VISIBLE);camera.setMaxFrameSize(640,480);camera.setCvCameraViewListener(this);
-  body.addView(camera,new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,2));
+  body.addView(camera,portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,2));
   LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
   status=text("Opening protected device storage…",16);personText=text("One clear face at a time.",21);detail=text("Verify the person, then confirm the selected IN or OUT. No certified liveness detection is included. Use fictional identities until physical testing is complete.",14);
   panel.addView(personText);panel.addView(status);panel.addView(detail);
   confirm=button("Confirm identity & mark",this::confirmIdentity);confirm.setEnabled(false);panel.addView(confirm);
   panel.addView(button("Retry connection / pending mark",()->{try{if(vault!=null&&vault.pending()!=null)deliver();else heartbeat();}catch(Exception e){show("Cannot read protected storage.");}}));
   panel.addView(button("Cancel pending submission",()->protect(this::cancelPending)));
-  body.addView(scroll(panel),new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+  body.addView(scroll(panel),portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+  switchAttendanceMode(true);
   if(BuildConfig.CHECK_FOR_UPDATES)AppUpdates.check(this);
   try{vault=new Vault(this);known=vault.people();status.setText(vault.lastResult());}catch(Exception e){status.setText("Protected storage cannot be opened. Attendance is disabled; do not replace it with plaintext.");start.setEnabled(false);return;}
   initializer.execute(()->{
@@ -89,6 +91,8 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private void switchAttendanceMode(boolean useQr){
   stopCamera();
   qrAttendance=useQr;
+  if(useQr)getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+  else if(!BuildConfig.DEBUG)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   boolean hasRearCamera=getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA);
   camera.setCameraIndex(useQr&&hasRearCamera?CameraBridgeViewBase.CAMERA_ID_BACK:CameraBridgeViewBase.CAMERA_ID_FRONT);
   qrModeButton.setText(useQr?"Face Attendance":"QR Attendance");

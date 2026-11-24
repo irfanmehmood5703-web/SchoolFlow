@@ -13,8 +13,8 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder,QR_WORKFLOW,REPOSITORY
 from itsdangerous import BadData, URLSafeTimedSerializer
 
-SOURCE_VERSION=12
-ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS'}
+SOURCE_VERSION=13
+ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
 UPDATE_TICKET_MAX_AGE=30*60
@@ -158,6 +158,7 @@ def configure_school_apps(app,db):
         for row in rows:
             if row['key'] not in ROLES:continue
             role=row['key'];file=files.get(role)
+            row.pop('official_qr',None)
             row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school name and icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
         return rows
     def owner():
@@ -271,7 +272,7 @@ def configure_school_apps(app,db):
         response.headers['Cache-Control']='private, no-store'
         return response
     def payload():
-        if len(request.get_data(cache=True))>12*1024*1024:abort(413)
+        if len(request.get_data(cache=True))>14*1024*1024:abort(413)
         data=request.get_json(silent=True)
         if not isinstance(data,dict):raise ValueError('Use a JSON object.')
         return data
@@ -346,7 +347,7 @@ def configure_school_apps(app,db):
         claims=authenticate_builder();data=payload();lock();row=leased(bid,claims);key=db.session.get(Signing,row.school_key)
         if not key or not key.fingerprint:raise ValueError('Store the school signing identity before publishing apps.')
         files=data.get('artifacts')
-        if not isinstance(files,list) or len(files)!=4 or {f.get('role') for f in files if isinstance(f,dict)}!=set(ROLES):raise ValueError('Provide exactly four school apps.')
+        if not isinstance(files,list) or len(files)!=len(ROLES) or {f.get('role') for f in files if isinstance(f,dict)}!=set(ROLES):raise ValueError('Provide exactly one APK for each school app.')
         if data.get('source_sha')!=claims['sha']:raise ValueError('Build provenance does not match this workflow.')
         for f in files:
             role=f['role'];expected='com.schoolflow.schools.s'+row.school_key+'.'+role+'.test'
