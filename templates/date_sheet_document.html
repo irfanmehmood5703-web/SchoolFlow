@@ -1,0 +1,11 @@
+{% set d=row.data %}{% set papers=d.papers %}{% set show_time=d.get('include_time',papers|selectattr('time')|list|length>0) %}{% set show_syllabus=d.get('include_syllabus',papers|selectattr('syllabus')|list|length>0) %}
+<article class="date-sheet-paper">
+{{settings_branding('exam','Date Sheet','header',d.get('campus',''),{'examName':d.name})}}
+<h2 class="date-sheet-title">{{d.print_heading or 'Examination Date Sheet'}}</h2>
+<div class="date-sheet-meta"><span><strong>Campus:</strong> {{d.campus or '—'}}</span><span><strong>Class:</strong> {{d.class_name or '—'}}</span><span><strong>Section:</strong> {{d.section or 'All sections'}}</span><span><strong>Session:</strong> {{d.academic_session or '—'}}</span><span><strong>Exam:</strong> {{d.exam_test_type or d.name}}</span>{% if office %}<span><strong>Internal Office Copy</strong></span>{% endif %}</div>
+{{settings_branding('exam','Date Sheet','body',d.get('campus',''),{'examName':d.name})}}
+<div class="date-sheet-table-wrap"><table class="date-sheet-table"><thead><tr><th>Date</th><th>Day</th><th>Subject</th><th>Paper Type</th><th>Total Marks</th>{% if show_time %}<th>Time</th>{% endif %}{% if show_syllabus %}<th>Syllabus</th>{% endif %}{% if office and d.recheck %}<th>Recheck / Initials</th>{% endif %}</tr></thead><tbody>
+{% for p in papers|sort(attribute='date') %}<tr><td>{{p.date|sheet_date('%d-%m-%Y')}}</td><td>{{p.date|sheet_date('%A')}}</td><td>{{p.subject}}</td><td>{{mark_display(p.type)}}</td><td>{{'%g'|format(p.total) if p.get('grading','Marks')=='Marks' and p.total is defined else '—'}}</td>{% if show_time %}<td>{{p.time or '—'}}</td>{% endif %}{% if show_syllabus %}<td class="date-sheet-syllabus" dir="auto">{{p.syllabus or '—'}}</td>{% endif %}{% if office and d.recheck %}<td class="date-sheet-recheck">&#9744; __________</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div>
+{{settings_branding('exam','Date Sheet','footer',d.get('campus',''),{'examName':d.name})}}
+</article>

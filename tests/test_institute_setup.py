@@ -79,6 +79,32 @@ class InstituteSetupTests(unittest.TestCase):
         db.session.expire_all()
         self.assertEqual({r.data['class_name']:[p['subject'] for p in r.data['papers']] for r in W.query.filter_by(kind='date-sheets').all()},{'Class A':['Math'],'Class B':['Physics']})
 
+    def test_date_sheet_print_edit_delete_and_stale_guard(self):
+        self.assertEqual(self.mapping().status_code,302)
+        db.session.add(self.rm['settings'](category='subject',value='Math',class_name=''));db.session.commit()
+        path='/workspace/examination/date-sheets'
+        W=app.extensions['ops_models']['workflow']
+        token=json.dumps(['Campus A','Class A','A','2026-27'],separators=(',',':'))
+        args=dict(_csrf=self.csrf,name='Proof test',date_scope='mapped',academic_session='2026-27',date_cohort=token,subject='Math',exam_date='2026-11-25',test_type='Written',total='50',include_time='on',exam_time='09:00',include_syllabus='on',syllabus='Chapter 1',recheck='on')
+        self.assertEqual(self.c.post(path,data=args).status_code,302)
+        row=W.query.filter_by(kind='date-sheets').one();rid=row.id
+        import hashlib
+        rev=hashlib.sha256(json.dumps(row.data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        for copy in ['parent','office']:
+            page=self.c.get('/workspace/date-sheet/'+str(rid)+'/print?copy='+copy)
+            self.assertEqual(page.status_code,200)
+            for v in [b'25-11-2026',b'Wednesday',b'Total Marks',b'Chapter 1']:self.assertIn(v,page.data)
+            self.assertEqual(b'Recheck / Initials' in page.data,copy=='office')
+        self.assertEqual(self.c.get('/workspace/date-sheet/'+str(rid)+'/edit').status_code,200)
+        edit={**args,'action':'edit','sheet_id':rid,'revision':rev,'total':'60'}
+        self.assertEqual(self.c.post(path,data=edit).status_code,302)
+        db.session.expire_all();self.assertEqual(db.session.get(W,rid).data['papers'][0]['total'],60)
+        self.assertEqual(self.c.post(path,data=edit).status_code,422)
+        current=db.session.get(W,rid)
+        rev=hashlib.sha256(json.dumps(current.data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        self.assertEqual(self.c.post(path,data=dict(_csrf=self.csrf,action='delete',sheet_id=rid,revision=rev)).status_code,302)
+        self.assertIsNone(db.session.get(W,rid))
+
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
         page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
         ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))

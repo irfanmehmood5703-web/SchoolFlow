@@ -860,6 +860,44 @@ def configure_operations(app, db, Student, Employee):
             if classes:groups.append(dict(name=campus,classes=classes,test_types=helpers['exam_types'](campus)))
         return bool(mapping['maps']),groups,tokens
 
+    def saved_date_sheet(sheet_id):
+        row=db.get_or_404(Workflow,sheet_id)
+        if row.kind!='date-sheets':abort(404)
+        allowed=getattr(g,'access_campuses',None)
+        if allowed is not None and row.data.get('campus') not in allowed:abort(403)
+        return row
+
+    def date_sheet_revision(row):
+        return hashlib.sha256(json.dumps(row.data,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
+    def date_sheet_has_publication(row):
+        Item=app.extensions.get('parent_study_models',{}).get('item')
+        return bool(Item is not None and Item.query.filter(Item.kind=='dates',Item.data['workflow_id'].as_integer()==row.id).first())
+
+    def date_sheet_mutable(row):
+        if date_sheet_has_publication(row):raise ValueError('This date sheet has a parent publication record. Keep it for audit history and create a revised date sheet instead.')
+
+    def date_sheet_format(value,pattern):
+        try:return date.fromisoformat(value).strftime(pattern)
+        except (ValueError,TypeError):return value or '—'
+
+    app.jinja_env.filters['sheet_date']=date_sheet_format
+
+    @bp.get('/date-sheet/<int:sheet_id>/print')
+    def date_sheet_print(sheet_id):
+        row=saved_date_sheet(sheet_id)
+        copy=request.args.get('copy','parent')
+        if copy not in ('parent','office'):abort(404)
+        return render('date_sheet_print.html',title='Date Sheet',row=row,office=copy=='office')
+
+    @bp.get('/date-sheet/<int:sheet_id>/edit')
+    def date_sheet_edit(sheet_id):
+        row=saved_date_sheet(sheet_id);date_sheet_mutable(row)
+        helpers=app.extensions['school_settings_helpers']
+        subjects=list(dict.fromkeys([v for v,_ in choices('subject')]+[r.name for r in helpers['items']('subject')]))
+        subjects=[s for s in subjects if helpers['subject_allowed'](row.data.get('campus',''),row.data.get('class_name',''),s)]
+        return render('date_sheet_edit.html',title='Edit Date Sheet',row=row,revision=date_sheet_revision(row),subjects=subjects,exam_types=helpers['exam_types'](row.data.get('campus','')),subject_grading={r.name:r.data.get('grading','Marks') for r in helpers['items']('subject')})
+
     @bp.route('/examination/<kind>',methods=['GET','POST'])
     def examination(kind):
         if kind not in ('date-sheets','awards'): abort(404)
@@ -868,12 +906,22 @@ def configure_operations(app, db, Student, Employee):
             app.extensions['admission_capacity']['lock']()
         mapped,date_groups,date_tokens=date_sheet_scopes() if kind=='date-sheets' else (False,[],{})
         if request.method=='POST':
+            editing=None
+            if kind=='date-sheets' and request.form.get('action') in ('edit','delete'):
+                sheet_id=request.form.get('sheet_id',type=int)
+                if not sheet_id:abort(422)
+                editing=saved_date_sheet(sheet_id);date_sheet_mutable(editing)
+                if request.form.get('revision')!=date_sheet_revision(editing):raise ValueError('This date sheet changed. Reload before editing or deleting.')
+                if request.form['action']=='delete':
+                    audit('Delete date sheet',sheet_id=editing.id,campus=editing.data.get('campus',''),before=editing.data)
+                    db.session.delete(editing);commit();flash('Date sheet deleted.','success')
+                    return redirect(url_for('ops.examination',kind=kind))
             name=request.form.get('name','').strip()
-            if not name or len(name)>500: raise ValueError('Enter a name of 1–500 characters.')
+            if not name or len(name)>(1000 if editing else 500): raise ValueError('Enter a valid date sheet or award list name.')
             existing=Workflow.query.filter_by(kind=kind).all()
-            if any(name in (x.data.get('name'),x.data.get('batch_name')) for x in existing): raise ValueError('Name must be unique.')
-            scopes=[{k:request.form.get(k,'').strip() for k in ('campus','class_name','section','academic_session')}]
-            if kind=='date-sheets' and (mapped or request.form.get('date_scope')):
+            if any(x is not editing and (name==x.data.get('name') or (name==x.data.get('batch_name') and (not editing or name!=editing.data.get('name')))) for x in existing): raise ValueError('Name must be unique.')
+            scopes=[{k:(editing.data.get(k,'') if editing else request.form.get(k,'').strip()) for k in ('campus','class_name','section','academic_session')}]
+            if kind=='date-sheets' and not editing and (mapped or request.form.get('date_scope')):
                 chosen=request.form.getlist('date_cohort');academic=request.form.get('academic_session','')
                 if request.form.get('date_scope')!='mapped' or not 1<=len(chosen)<=500 or len(chosen)!=len(set(chosen)) or any(t not in date_tokens for t in chosen):
                     raise ValueError('Select at least one active campus, class and section from Institute Setup.')
@@ -905,7 +953,10 @@ def configure_operations(app, db, Student, Employee):
                     if not 0<total<=10000: raise ValueError('Total marks must be positive and at most 10,000.')
                 teacher=teachers[i] if i<len(teachers) else ''
                 if teacher and teacher not in dict(choices('teacher')): raise ValueError('Only designations containing Teacher can receive award lists.')
-                papers.append(dict(subject=subject,grading=grading,subject_group=subject_config.get('group',''),date=d.isoformat(),type=typ,total=total,teacher=teacher,time=(request.form.getlist('exam_time')+['']*len(subjects))[i] if request.form.get('include_time') else '',syllabus=(request.form.getlist('syllabus')+['']*len(subjects))[i] if request.form.get('include_syllabus') else ''))
+                exam_time=(request.form.getlist('exam_time')+['']*len(subjects))[i] if request.form.get('include_time') else ''
+                syllabus=(request.form.getlist('syllabus')+['']*len(subjects))[i] if request.form.get('include_syllabus') else ''
+                if kind=='date-sheets' and (exam_time and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',exam_time) or len(syllabus)>10000):raise ValueError('Enter a valid exam time and syllabus of at most 10,000 characters.')
+                papers.append(dict(subject=subject,grading=grading,subject_group=subject_config.get('group',''),date=d.isoformat(),type=typ,total=total,teacher=teacher,time=exam_time,syllabus=syllabus))
             if not papers: raise ValueError('Add at least one subject.')
             data={k:request.form.get(k,'').strip()[:1000] for k in ('name','print_heading','campus','class_name','section','gender','group_name','academic_session','return_date','sort_order','student_filter')}
             if data['student_filter'] not in ('','class','subject'):raise ValueError('Choose Class Wise or Subject Wise student filtering.')
@@ -914,6 +965,14 @@ def configure_operations(app, db, Student, Employee):
             if category and category not in PERFORMANCE_CATEGORIES: raise ValueError('Choose a valid assessment category.')
             data.update(papers=papers,recheck=bool(request.form.get('recheck')),assessment_category=category,exam_test_type=exam_type)
             if data.get('return_date'): day(data['return_date'])
+            if kind=='date-sheets':
+                data.update(include_time=bool(request.form.get('include_time')),include_syllabus=bool(request.form.get('include_syllabus')))
+            if editing:
+                before=editing.data
+                editing.data={**before,**{k:data[k] for k in ('name','print_heading','papers','recheck','exam_test_type','include_time','include_syllabus')}}
+                audit('Edit date sheet',sheet_id=editing.id,campus=before.get('campus',''),before=before,after=editing.data);commit()
+                flash('Date sheet updated.','success')
+                return redirect(url_for('ops.examination',kind=kind))
             if kind=='date-sheets' and mapped:
                 names=[name if len(scopes)==1 else name+' — '+' / '.join((s['campus'],s['class_name'],s['section'] or 'All sections',s['academic_session'])) for s in scopes]
                 used={x.data.get('name') for x in existing}|{x.data.get('batch_name') for x in existing}
@@ -929,7 +988,7 @@ def configure_operations(app, db, Student, Employee):
                 return redirect(url_for('ops.examination',kind=kind))
             obj=Workflow(kind=kind,data=data,status='Active');db.session.add(obj);audit('Create '+kind);commit()
             return redirect(url_for('ops.marks',award_id=obj.id)) if kind=='awards' else redirect(url_for('ops.examination',kind=kind))
-        return render('examination.html',date_mapped=mapped,date_groups=date_groups,date_sessions=sorted({s['academic_session'] for s in date_tokens.values()}),subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
+        return render('examination.html',date_revision=date_sheet_revision,date_has_publication=date_sheet_has_publication,date_mapped=mapped,date_groups=date_groups,date_sessions=sorted({s['academic_session'] for s in date_tokens.values()}),subject_grading={r.name:r.data.get('grading','Marks') for r in app.extensions['school_settings_helpers']['items']('subject')},configured_tests=app.extensions['school_settings_helpers']['items']('test-type'),title='Create Award List' if kind=='awards' else 'Create Date Sheet',kind=kind,rows=Workflow.query.filter_by(kind=kind).order_by(Workflow.id.desc()).all())
 
     def award_students(award):
         Details=rm['student']

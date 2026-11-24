@@ -135,6 +135,8 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
                 if len(resource)>2000 or parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or any(c.isspace() for c in resource):raise ValueError('Use a public HTTPS study link without credentials.')
             data={}
             if kind in ('dates','rollslip'):
+                # Serialize publication against date sheet edits/deletions.
+                app.extensions['admission_capacity']['lock']()
                 wid=request.form.get('workflow','')
                 if not wid.isdigit():raise ValueError('Review a saved examination document first.')
                 source,data,digest=document(int(wid))

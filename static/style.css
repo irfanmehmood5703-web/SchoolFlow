@@ -362,3 +362,11 @@ html,body{max-width:100%}
 .date-campus-picker{margin-bottom:16px!important}
 .date-campus-options{display:flex;flex-wrap:wrap;gap:4px 24px}
 .date-scope-panel .date-campus-picker legend{font-size:1rem}
+
+.date-sheet-actions,.date-sheet-print-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.date-delete-confirm{border:1px solid #e4b8b8;border-radius:6px;padding:8px;color:#94352f}.date-delete-confirm summary{cursor:pointer;font-weight:650}
+.date-sheet-paper{background:white;color:#23352c;border:1px solid #c5d8cc;border-radius:8px;padding:20px;margin:12px 0}
+.date-sheet-title{text-align:center;color:#176b51;font-size:20px;margin:12px 0}
+.date-sheet-meta{display:flex;flex-wrap:wrap;gap:8px 18px;border:1px solid #c5d8cc;padding:10px;background:#f3f8f4;font-size:12px;margin:10px 0}
+.date-sheet-table-wrap{overflow:auto}.date-sheet-table{width:100%;border-collapse:collapse;font-size:12px}.date-sheet-table th,.date-sheet-table td{border:1px solid #a9c2b1;padding:9px;vertical-align:top;white-space:normal}.date-sheet-table th{background:#e6f2ea;color:#194f39;font-weight:700}.date-sheet-syllabus{white-space:pre-wrap!important;overflow-wrap:anywhere;text-align:start}.date-sheet-recheck{min-width:80px}
+@media print{.date-sheet-actions,.date-sheet-print-actions{display:none!important}.date-sheet-table th{print-color-adjust:exact}.date-sheet-meta{print-color-adjust:exact}.date-sheet-paper{box-shadow:none}}
