@@ -110,6 +110,30 @@ class InstituteSetupTests(unittest.TestCase):
         self.assertEqual(self.c.post(path,data=dict(_csrf=self.csrf,action='delete',sheet_id=rid,revision=rev)).status_code,302)
         self.assertIsNone(db.session.get(W,rid))
 
+    def test_student_date_sheet_uses_admission_photo_and_matching_roster(self):
+        W=app.extensions['ops_models']['workflow']
+        row=W(kind='date-sheets',data=dict(name='Personal test',campus='Campus A',class_name='Class A',section='A',academic_session='2026-27',papers=[dict(subject='Math',date='2026-11-25',type='Written',total=20,time='',syllabus='')]),status='Active')
+        pupil=Student(admission_no='PHOTO-1',name='Matching Student',father='Matching Guardian',class_name='Class A',status='Active')
+        other=Student(admission_no='PHOTO-2',name='Wrong Section Student',class_name='Class A',status='Active')
+        db.session.add_all([row,pupil,other]);db.session.flush()
+        rid,sid,oid=row.id,pupil.id,other.id
+        for s,sec in [(pupil,'A'),(other,'B')]:db.session.add(self.rm['student'](student_id=s.id,data=dict(campus='Campus A',section=sec,academic_session='2026-27',roll_no='7')))
+        buf=io.BytesIO();Image.new('RGB',(20,20),'green').save(buf,format='PNG')
+        db.session.add(self.rm['file'](owner_kind='student',owner_id=sid,title='Photo',filename='photo.png',mime='image/png',photo=True,content=buf.getvalue()))
+        db.session.commit()
+        path='/workspace/date-sheet/'+str(rid)
+        select=self.c.get(path+'/print?copy=student')
+        self.assertEqual(select.status_code,200);self.assertIn(b'Matching Student',select.data);self.assertNotIn(b'Wrong Section Student',select.data)
+        page=self.c.get(path+'/print?copy=student&student_id='+str(sid))
+        self.assertEqual(page.status_code,200);self.assertIn(b'Matching Student',page.data);self.assertIn(b'Student admission photo',page.data);self.assertIn(b'PHOTO-1',page.data)
+        self.assertIn('no-store',page.headers['Cache-Control'])
+        photo=self.c.get(path+'/student-photo/'+str(sid))
+        self.assertEqual(photo.status_code,200);self.assertEqual(photo.data,buf.getvalue())
+        self.assertEqual(self.c.get(path+'/student-photo/'+str(oid)).status_code,404)
+        self.assertEqual(self.c.get(path+'/print?copy=student&student_id='+str(oid)).status_code,404)
+        self.assertNotIn(b'Student admission photo',self.c.get(path+'/print?copy=student&photo=0&student_id='+str(sid)).data)
+        self.assertNotIn(b'Matching Student',self.c.get(path+'/print?copy=parent').data)
+
     def test_read_only_page_no_setup_writes_and_legacy_catalog_still_works(self):
         page=self.c.get('/workspace/core/institute');self.assertEqual(page.status_code,200)
         ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)))

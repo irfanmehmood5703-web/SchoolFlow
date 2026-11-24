@@ -3,6 +3,11 @@
 {{settings_branding('exam','Date Sheet','header',d.get('campus',''),{'examName':d.name})}}
 <h2 class="date-sheet-title">{{d.print_heading or 'Examination Date Sheet'}}</h2>
 <div class="date-sheet-meta"><span><strong>Campus:</strong> {{d.campus or '—'}}</span><span><strong>Class:</strong> {{d.class_name or '—'}}</span><span><strong>Section:</strong> {{d.section or 'All sections'}}</span><span><strong>Session:</strong> {{d.academic_session or '—'}}</span><span><strong>Exam:</strong> {{d.exam_test_type or d.name}}</span>{% if office %}<span><strong>Internal Office Copy</strong></span>{% endif %}</div>
+{% if student is defined and student %}
+<section class="date-sheet-student" aria-label="Student details">
+<div class="date-sheet-student-details"><div><strong>Student Name:</strong> {{student.name}}</div><div><strong>Father Name:</strong> {{student.father or '—'}}</div><div><strong>Admission No:</strong> {{student.admission_no}}</div><div><strong>Roll No:</strong> {{student_data.get('roll_no') or 'Not assigned'}}</div><div><strong>Class / Section:</strong> {{student.class_name}} / {{student_data.get('section') or '—'}}</div></div>
+{% if show_photo %}{% if student_photo %}<img class="date-sheet-student-photo" src="{{url_for('ops.date_sheet_photo',sheet_id=row.id,sid=student.id)}}" alt="Student admission photo">{% else %}<div class="date-sheet-student-photo date-sheet-photo-empty">Photo not available</div>{% endif %}{% endif %}
+</section>{% endif %}
 {{settings_branding('exam','Date Sheet','body',d.get('campus',''),{'examName':d.name})}}
 {% set show_recheck=office and d.recheck %}
 {% set weights=[('date',14),('day',12),('subject',14),('type',10),('marks',9)] + ([('time',9)] if show_time else []) + ([('syllabus',36)] if show_syllabus else []) + ([('recheck',15)] if show_recheck else []) %}

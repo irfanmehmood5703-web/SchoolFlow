@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from school_clock import school_today
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for, has_request_context
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for, has_request_context, send_file, make_response
 from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -883,11 +883,55 @@ def configure_operations(app, db, Student, Employee):
 
     app.jinja_env.filters['sheet_date']=date_sheet_format
 
+    def date_sheet_pupils(row, sid=None):
+        # Require a specific campus and class; never expose an institute-wide roster.
+        if not row.data.get('campus') or not row.data.get('class_name'):
+            raise ValueError('A student copy requires a saved campus and class.')
+        D=rm['student']
+        query=Student.query.join(D,D.student_id==Student.id).filter(Student.status=='Active',Student.class_name==row.data['class_name'])
+        for key in ('campus','section','academic_session'):
+            if row.data.get(key):query=query.filter(D.data[key].as_string()==row.data[key])
+        if sid is not None:query=query.filter(Student.id==sid)
+        return query.order_by(Student.name,Student.id).all()
+
+    def date_sheet_student(row,sid):
+        pupils=date_sheet_pupils(row,sid)
+        if not pupils:abort(404)
+        return pupils[0]
+
+    def date_sheet_student_photo(student):
+        return rm['file'].query.filter_by(owner_kind='student',owner_id=student.id,photo=True).order_by(rm['file'].id.desc()).first()
+
+    @bp.get('/date-sheet/<int:sheet_id>/student-photo/<int:sid>')
+    def date_sheet_photo(sheet_id,sid):
+        row=saved_date_sheet(sheet_id)
+        student=date_sheet_student(row,sid);photo=date_sheet_student_photo(student)
+        if not photo or photo.mime not in ('image/jpeg','image/png','image/webp'):abort(404)
+        response=send_file(io.BytesIO(photo.content),mimetype=photo.mime,max_age=0)
+        response.headers['Cache-Control']='private, no-store'
+        response.headers['X-Content-Type-Options']='nosniff'
+        return response
+
     @bp.get('/date-sheet/<int:sheet_id>/print')
     def date_sheet_print(sheet_id):
         row=saved_date_sheet(sheet_id)
         copy=request.args.get('copy','parent')
-        if copy not in ('parent','office'):abort(404)
+        if copy not in ('parent','office','student'):abort(404)
+        if copy=='student':
+            raw=request.args.get('student_id','')
+            if not raw:
+                pupils=date_sheet_pupils(row)
+                data=app.extensions['record_helpers']['raw_many']('student',pupils)
+                response=make_response(render('date_sheet_students.html',title='Student-wise Date Sheet',row=row,pupils=pupils,pupil_data=data))
+            else:
+                if not raw.isascii() or not raw.isdigit() or len(raw)>10:abort(404)
+                pupil=date_sheet_student(row,int(raw))
+                data=app.extensions['record_helpers']['raw_many']('student',[pupil]).get(pupil.id,{})
+                show_photo=request.args.get('photo','1')=='1'
+                photo=date_sheet_student_photo(pupil) if show_photo else None
+                response=make_response(render('date_sheet_print.html',title='Student-wise Date Sheet',row=row,office=False,student=pupil,student_data=data,show_photo=show_photo,student_photo=bool(photo and photo.mime in ('image/jpeg','image/png','image/webp'))))
+            response.headers['Cache-Control']='private, no-store'
+            return response
         return render('date_sheet_print.html',title='Date Sheet',row=row,office=copy=='office')
 
     @bp.get('/date-sheet/<int:sheet_id>/edit')
