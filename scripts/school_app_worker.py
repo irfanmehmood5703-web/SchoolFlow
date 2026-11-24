@@ -53,6 +53,21 @@ def verify_school_icon(archive,expected_path):
             if actual.size==size and visible(actual)==pixels:matches+=1
     if matches!=1:raise RuntimeError('APK icon does not match its school logo')
 
+def verify_qr_camera_runtime(archive, dexdump):
+    required = {b'Landroidx/core/app/ActivityCompat;', b'Landroidx/core/content/ContextCompat;'}
+    with tempfile.TemporaryDirectory(prefix='schoolflow-qr-dex-') as directory:
+        for name in archive.namelist():
+            if not re.fullmatch(r'classes(?:[0-9]+)?[.]dex', name):
+                continue
+            dex = Path(archive.extract(name, directory))
+            listing = subprocess.check_output([str(dexdump), str(dex)])
+            definitions = re.findall(rb"(?m)^\s*Class descriptor\s*:\s*'([^']+)'", listing)
+            required.difference_update(definitions)
+            if not required:
+                return
+    raise RuntimeError('QR APK is missing its AndroidX camera permission runtime')
+
+
 def inspect_apks(branding,source_sha,upload_face=None):
     aapt,signer=tools();artifacts=[]
     roles={**ROLES,'face':'Face Attendance'} if branding.get('face_storage') else ROLES
@@ -74,6 +89,8 @@ def inspect_apks(branding,source_sha,upload_face=None):
         if not fingerprint:raise RuntimeError('APK signing certificate could not be verified')
         with zipfile.ZipFile(path) as archive:
             verify_school_icon(archive,CLIENTS/'generated-school-res'/'drawable'/'school_icon_foreground.png')
+            if role == 'qr':
+                verify_qr_camera_runtime(archive, aapt.with_name('dexdump'))
         with path.open('rb') as stream:
             digest=hashlib.file_digest(stream,'sha256').hexdigest()
         metadata=dict(role=role,package=package[1],label=label_text,version_code=int(package[2]),signing_sha256=fingerprint,sha256=digest)
@@ -116,7 +133,7 @@ def run_gradle(args,directory,password):
         time.sleep(delay)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{'source_version':15},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':16},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:
