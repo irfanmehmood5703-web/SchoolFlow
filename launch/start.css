@@ -1,0 +1,106 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #f6fffb;
+  background: #0b3d33;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100svh;
+  margin: 0;
+  padding: 24px;
+  place-items: center;
+  background: radial-gradient(ellipse at 15% 0%, #236451, transparent 65%),
+    linear-gradient(145deg, #103f35, #082e26);
+}
+
+.panel {
+  width: min(100%, 490px);
+  padding: clamp(30px, 8vw, 56px);
+  border: 1px solid #427166;
+  border-radius: 28px;
+  background: #0d392f;
+  box-shadow: 0 24px 80px #041d1680;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+  font-size: 1.125rem;
+  font-weight: 750;
+}
+
+.mark {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  width: 38px;
+  height: 38px;
+  padding: 8px;
+  border-radius: 11px;
+  background: #bbf1d5;
+}
+
+.mark i { width: 4px; height: 8px; border-radius: 3px; background: #14523e; }
+.mark i:nth-child(2) { height: 14px; }
+.mark i:nth-child(3) { height: 21px; }
+
+h1 {
+  margin: 0 0 10px;
+  font-size: clamp(1.8rem, 5vw, 2.45rem);
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+p { color: #c3ded2; line-height: 1.55; margin: 0 0 24px; }
+.status { min-height: 3.1em; }
+
+.progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #28574b;
+}
+
+.progress span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: #99e8c1;
+  animation: slide 1.9s ease-in-out infinite alternate;
+}
+
+@keyframes slide {
+  from { transform: translateX(-55%); }
+  to { transform: translateX(215%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress span { animation: none; }
+}
+
+button, .button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  color: #0b3d33;
+  background: #bbf1d5;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+:focus-visible { outline: 2px solid white; outline-offset: 4px; }
+[hidden] { display: none; }
