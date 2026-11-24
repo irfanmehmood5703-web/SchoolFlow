@@ -1033,6 +1033,7 @@ def configure_operations(app, db, Student, Employee):
                 editing=saved_date_sheet(sheet_id);date_sheet_mutable(editing)
                 if request.form.get('revision')!=date_sheet_revision(editing):raise ValueError('This date sheet changed. Reload before editing or deleting.')
                 if request.form['action']=='delete':
+                    if Workflow.query.filter(Workflow.kind=='roll-slips',Workflow.data['source_date_sheet_id'].as_integer()==editing.id).first():raise ValueError('This date sheet has saved roll slips. Delete the unreviewed slips first or retain both for examination history.')
                     audit('Delete date sheet',sheet_id=editing.id,campus=editing.data.get('campus',''),before=editing.data)
                     db.session.delete(editing);commit();flash('Date sheet deleted.','success')
                     return redirect(url_for('ops.examination',kind=kind))
@@ -1231,6 +1232,7 @@ def configure_operations(app, db, Student, Employee):
         pupils,data=linked_roll_pupils(row)
         assigned=row.data['students']
         pupils=[p for p in pupils if str(p.id) in assigned]
+        print_roster=[(str(p.id),p.name,assigned[str(p.id)]['roll']) for p in pupils]
         raw=request.args.get('student_id','')
         if raw:
             if not raw.isascii() or not raw.isdigit() or len(raw)>10:abort(404)
@@ -1245,7 +1247,7 @@ def configure_operations(app, db, Student, Employee):
                 if f.owner_id in seen:continue
                 seen.add(f.owner_id)
                 if f.mime in ('image/jpeg','image/png','image/webp'):photos.add(f.owner_id)
-        response=make_response(render('roll_linked_print.html',title='Examination Roll Number Slip',row=row,pupils=pupils,pupil_data=data,show_photo=show_photo,photo_ids=photos))
+        response=make_response(render('roll_linked_print.html',title='Examination Roll Number Slip',row=row,pupils=pupils,pupil_data=data,show_photo=show_photo,photo_ids=photos,print_roster=print_roster))
         response.headers['Cache-Control']='private, no-store'
         return response
 
@@ -1296,6 +1298,15 @@ def configure_operations(app, db, Student, Employee):
             exam_key=[d.get('campus',''),d.get('academic_session',''),d.get('exam_test_type',''),str(d.get('batch_name') or d.get('name','')).strip().casefold()]
             used={str(v['roll']) for b in batches if (not existing or b.id!=existing.id) and b.data.get('exam_key')==exam_key for v in b.data.get('students',{}).values()}
             roster={};next_roll=int(start);old_roster=existing.data['students'] if existing else {}
+            # Reserve explicitly entered and retained numbers before auto allocation.
+            reserved=set()
+            for sid in map(str,ids):
+                raw=request.form.get('roll_'+sid,'').strip() or str(old_roster.get(sid,{}).get('roll',''))
+                if raw:
+                    if not raw.isascii() or not raw.isdigit() or len(raw)>9 or int(raw)<1:raise ValueError('Exam roll numbers must be positive integers.')
+                    number=str(int(raw))
+                    if number in used or number in reserved:raise ValueError('Duplicate exam roll number: '+number)
+                    reserved.add(number)
             for p in pupils:
                 if p.id not in ids:continue
                 sid=str(p.id);raw=request.form.get('roll_'+sid,'').strip()
@@ -1304,7 +1315,8 @@ def configure_operations(app, db, Student, Employee):
                     if not raw.isascii() or not raw.isdigit() or len(raw)>9 or int(raw)<1:raise ValueError('Exam roll numbers must be positive integers.')
                     roll=str(int(raw))
                 else:
-                    while str(next_roll) in used:next_roll+=1
+                    while str(next_roll) in used or str(next_roll) in reserved:next_roll+=1
+                    if next_roll>999999999:raise ValueError('The available roll number range is exhausted.')
                     roll=str(next_roll);next_roll+=1
                 if roll in used:raise ValueError('Duplicate exam roll number: '+roll)
                 used.add(roll);roster[sid]=dict(roll=roll,hall=hall)
@@ -1324,6 +1336,8 @@ def configure_operations(app, db, Student, Employee):
             if edit:source_id=edit.data['source_date_sheet_id']
             source=saved_date_sheet(source_id) if source_id else None
             if source:
+                if not edit:
+                    edit=Workflow.query.filter(Workflow.kind=='roll-slips',Workflow.data['source_date_sheet_id'].as_integer()==source.id).first()
                 scope={k:source.data.get('exam_test_type' if k=='exam_type' else k,'') for k in scope}
             filtered=[s for s in sources if all(not v or s.get('session' if k=='academic_session' else k)==v for k,v in scope.items())]
             pupils,pupil_data=linked_roll_pupils(source) if source else ([],{})
