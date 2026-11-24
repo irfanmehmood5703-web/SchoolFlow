@@ -26,15 +26,21 @@ final class AppUpdates {
                 int version = info.optInt("version_code");
                 String link = info.optString("url");
                 String label = info.optString("version_name");
+                boolean branded = !BuildConfig.GATE_SCHOOL_SCOPE.isEmpty();
+                String labelPattern = branded ? "0\\.3-school-test\\.[0-9]+" : "[0-9]+(?:\\.[0-9]+){1,3}";
+                String schoolPrefix = EndpointPolicy.BASE + "/apps/school/update/";
+                boolean trusted = branded
+                        ? link.startsWith(schoolPrefix) && link.substring(schoolPrefix.length()).matches("[A-Za-z0-9_.-]+/face\\.apk")
+                        : validLink(link, version);
                 if (!info.optBoolean("available") || version <= BuildConfig.VERSION_CODE
-                        || !validLink(link, version) || !label.matches("[0-9]+(?:\\.[0-9]+){1,3}")) {
+                        || !trusted || !label.matches(labelPattern)) {
                     return;
                 }
                 activity.runOnUiThread(() -> {
                     if (activity.isFinishing() || activity.isDestroyed()) return;
                     new AlertDialog.Builder(activity)
                             .setTitle("Update available")
-                            .setMessage("QR Attendance " + label + " is ready to install.")
+                            .setMessage(activity.getString(R.string.app_name) + " " + label + " is ready to install.")
                             .setNegativeButton("Later", null)
                             .setPositiveButton("Update", (dialog, button) -> openDownload(activity, link))
                             .show();
@@ -52,7 +58,8 @@ final class AppUpdates {
     }
 
     private static JSONObject readManifest() throws IOException, JSONException {
-        URL url = new URL(EndpointPolicy.BASE + "/api/mobile-app/update/qr-attendance");
+        String scope = BuildConfig.GATE_SCHOOL_SCOPE;
+        URL url = new URL(EndpointPolicy.BASE + "/api/mobile-app/update/" + (scope.isEmpty() ? "qr-attendance" : scope + "/face"));
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         try {
             connection.setInstanceFollowRedirects(false);

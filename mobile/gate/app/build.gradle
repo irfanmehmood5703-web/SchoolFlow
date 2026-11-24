@@ -1,4 +1,13 @@
 plugins { id 'com.android.application' }
+import groovy.json.JsonSlurper
+
+def brandingFile = providers.gradleProperty('schoolBrandingFile').orNull
+def school = brandingFile ? new JsonSlurper().parse(new File(brandingFile), 'UTF-8') : null
+if (school && (!(school.school_key ==~ /[0-9a-f]{32}/) || !(school.code ==~ /[A-Z0-9][A-Z0-9-]{2,39}/) || school.name.size()<1 || school.name.size()>80)) {
+    throw new GradleException('Invalid school branding')
+}
+def resourceText = { value -> '"' + value.replace('\\','\\\\').replace('"','\\"').replace("'","\\'") + '"' }
+
 android {
     namespace 'com.schoolflow.gate'
     compileSdk 35
@@ -14,8 +23,26 @@ android {
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-phase1.onrender.com"'
+        buildConfigField 'String', 'GATE_SCHOOL_CODE', school ? '"' + school.code + '"' : '""'
+        buildConfigField 'String', 'GATE_SCHOOL_SCOPE', school ? '"' + school.school_key + '"' : '""'
         buildConfigField 'boolean', 'CHECK_FOR_UPDATES', 'false'
         resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
+        manifestPlaceholders=[launcherIcon: school ? '@mipmap/school_launcher' : '@drawable/gate_icon']
+        if (school) {
+            applicationId 'com.schoolflow.schools.s' + school.school_key + '.face.test'
+            versionCode (school.sequence as int)
+            versionName '0.3-school-test.' + school.sequence
+        }
+    }
+    if (school) {
+        sourceSets.main.res.srcDir rootProject.file('../clients/generated-school-res')
+        signingConfigs { schoolKey {
+            storeFile file(providers.gradleProperty('schoolSigningFile').get())
+            storeType 'PKCS12'
+            storePassword System.getenv('SCHOOLFLOW_KEYSTORE_PASSWORD')
+            keyAlias 'schoolflow'
+            keyPassword System.getenv('SCHOOLFLOW_KEYSTORE_PASSWORD')
+        } }
     }
     buildTypes {
         debug {
@@ -33,6 +60,10 @@ android {
         release {
             minifyEnabled false
             buildConfigField 'boolean', 'CHECK_FOR_UPDATES', 'true'
+            if (school) {
+                signingConfig signingConfigs.schoolKey
+                resValue 'string', 'app_name', resourceText(school.name + ' Face Attendance')
+            }
         }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

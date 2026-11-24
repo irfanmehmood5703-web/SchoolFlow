@@ -214,7 +214,7 @@ def configure_identity(app, db):
         db.session.remove()
         if request.url_rule is None:
             return
-        if request.endpoint in ('school_apps.qr_update','school_apps.qr_signing','school_apps.qr_publish'):
+        if request.endpoint in ('school_apps.qr_update','school_apps.qr_signing','school_apps.qr_publish','school_apps.face_upload'):
             return
         if request.endpoint in ('home', 'favicon', 'health', 'static','attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card','sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','sms_gateway.batch','sms_gateway.batch_status','sms_gateway.batch_stop','school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail','school_apps.public_download','school_apps.mobile_update','school_apps.mobile_update_download') or request.blueprint in ('teacher_login','identity','parent_portal','parent_messages','mobile_clients','vendor','vendor_support','vendor_ai'):
             return

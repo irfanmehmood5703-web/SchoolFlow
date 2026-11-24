@@ -76,7 +76,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   panel.addView(button("Retry connection / pending mark",()->{try{if(vault!=null&&vault.pending()!=null)deliver();else heartbeat();}catch(Exception e){show("Cannot read protected storage.");}}));
   panel.addView(button("Cancel pending submission",()->protect(this::cancelPending)));
   body.addView(scroll(panel),portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
-  switchAttendanceMode(true);
+  switchAttendanceMode(BuildConfig.GATE_SCHOOL_SCOPE.isEmpty());
   if(BuildConfig.CHECK_FOR_UPDATES)AppUpdates.check(this);
   try{vault=new Vault(this);known=vault.people();status.setText(vault.lastResult());}catch(Exception e){status.setText("Protected storage cannot be opened. Attendance is disabled; do not replace it with plaintext.");start.setEnabled(false);return;}
   initializer.execute(()->{
@@ -197,7 +197,9 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   if(busy.get()){show("Wait for the current request to finish.");return;}
   try{
    JSONObject old=vault.config();LinearLayout box=form();box.addView(text("SchoolFlow server: "+EndpointPolicy.BASE,14));
-   EditText code=input(box,"Private institute code",old==null?"":old.getString("code"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+   String schoolCode=BuildConfig.GATE_SCHOOL_CODE;
+   EditText code=input(box,"Private institute code",schoolCode.isEmpty()?(old==null?"":old.getString("code")):schoolCode,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+   if(!schoolCode.isEmpty())code.setEnabled(false);
    EditText device=input(box,"Registered face gate ID",old==null?"":String.valueOf(old.getInt("device")),InputType.TYPE_CLASS_NUMBER);
    EditText token=input(box,"Device connection key",old==null?"":old.getString("token"),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
    box.addView(text("Use the key from Face Attendance Gates → Connect. Changing institute or gate clears this device’s local face enrollment and pending mark after confirmation.",14));
