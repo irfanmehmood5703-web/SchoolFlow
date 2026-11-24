@@ -813,8 +813,10 @@ def configure_operations(app, db, Student, Employee):
         existing=query.order_by(Daily.day.desc(),Daily.person_id).all()
         mark_model=app.extensions['attendance_device_models']['mark']
         marks={m.daily_id:m for m in mark_model.query.filter(mark_model.daily_id.in_([r.id for r in existing])).all()}
-        status_filter=request.values.get('status_filter','')
-        origin_filter=request.values.get('origin_filter','')
+        status_filter=request.values.get('status_filter','') if mode=='update' else ''
+        origin_filter=request.values.get('origin_filter','') if mode=='update' else ''
+        scope_filters={k:request.values[k] for k in ('campus','class_name','section','academic_session','gender','search') if request.values.get(k)}
+        saved_count=len(existing)
         rows=[]
         def append_row(p,record,d):
             detail=info.get(p.id,{})
@@ -831,13 +833,16 @@ def configure_operations(app, db, Student, Employee):
         else:
             if len(pupils)>5000:raise ValueError('Select a class or campus to load fewer students.')
             lookup={r.person_id:r for r in existing}
-            for p in pupils:append_row(p,lookup.get(p.id),start)
+            # Take/Bulk are pending rosters, never a second editor for saved attendance.
+            # QR and automatic records count as saved too; updates belong in View / Update.
+            for p in pupils:
+                if p.id not in lookup:append_row(p,None,start)
         if request.method=='POST':
             action=request.form.get('action','save')
             if action not in ('save','send','delete'):raise ValueError('Choose a valid attendance action.')
             picked=set(request.form.getlist('attendance_keys'))
             available={r['key']:r for r in rows}
-            if not picked or not picked<=available.keys():raise ValueError('Select valid attendance rows from the loaded roster.')
+            if not picked or not picked<=available.keys():raise ValueError('Select valid attendance rows from the loaded roster. Attendance already saved must be edited in View / Update Attendance; reload the list.')
             if action=='delete' and (mode!='update' or request.form.get('confirm_delete')!='1'):raise ValueError('Confirm deletion in View / Update Attendance.')
             count=0;notify=defaultdict(list);parent_policy=defaultdict(dict)
             sms_selected=any(request.form.get(k)=='on' for k in ('app_sms','branded_sms','whatsapp_sms'))
@@ -882,7 +887,7 @@ def configure_operations(app, db, Student, Employee):
         if request.args.get('export'):
             return csv_response(['Date','Attendance Type','SID','Roll No','Student','Father Name','Attendance','Campus','Class','Section','Session','Gender','Shift In','Mark In','Shift Out','Mark Out'],[[r['day'],r['origin'],r['p'].id,r['detail'].get('roll_no',''),r['p'].name,r['p'].father,r['status'] or 'Unmarked',r['detail'].get('campus',''),r['p'].class_name,r['detail'].get('section',''),r['detail'].get('academic_session',''),r['detail'].get('gender',''),r['schedule'].get('in',''),r['record'].time_in if r['record'] else '',r['schedule'].get('out',''),r['record'].time_out if r['record'] else ''] for r in rows],'student-attendance')
         codes={'Present':'P','Absent':'A','Late':'L','Leave':'LV','Short Leave':'SL','Off Day':'OD','Death Leave':'DL','Paper Leave':'PL'}
-        return render('student_attendance_grid.html',title='Student Attendance',kind='student',mode=mode,start=start,end=end,rows=rows,codes=codes,summary=Counter(r['status'] or 'Unmarked' for r in rows))
+        return render('student_attendance_grid.html',title='Student Attendance',kind='student',mode=mode,start=start,end=end,rows=rows,codes=codes,summary=Counter(r['status'] or 'Unmarked' for r in rows),saved_count=saved_count,scope_filters=scope_filters,roster_count=len(pupils))
     
     @bp.route('/attendance/<kind>',methods=['GET','POST'])
     def take_attendance(kind):

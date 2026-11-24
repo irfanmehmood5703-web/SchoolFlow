@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  const filters=document.getElementById('attendance-filters');
  const dirty=()=>rows.some(r=>{const checked=r.querySelector('input[type=radio]:checked'),original=r.querySelector('input[name^=original_]');return checked&&original&&checked.value!==original.value;});
  const warn=()=>!dirty()||window.confirm('Unsaved attendance changes will be lost. Continue without saving?');
+ document.querySelectorAll('[data-att-mode-link]').forEach(el=>el.addEventListener('click',e=>{if(!warn())e.preventDefault();}));
  if(filters){
    const dropdowns=[...document.querySelectorAll('[data-att-filter]')];
    dropdowns.forEach(el=>{el.dataset.previous=el.value;el.addEventListener('change',()=>{if(!warn()){el.value=el.dataset.previous;return;}if(filters.reportValidity())filters.submit();else el.value=el.dataset.previous;});});

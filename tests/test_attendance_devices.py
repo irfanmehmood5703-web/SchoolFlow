@@ -178,6 +178,33 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertTrue(policy['students']['2']['enabled'])
         self.assertEqual({r['pid']:r['status'] for r in self.daily()},{1:'Present',2:'Absent'})
 
+    def test_saved_attendance_moves_to_update_and_pending_roster_excludes_it(self):
+        self.login()
+        url='/workspace/attendance/student'
+        a='2026-11-05_1';b='2026-11-05_2'
+        form={'_csrf':self.token(),'grid_mode':'1','mode':'take','from':'2026-11-05','attendance_keys':a,'original_'+a:'','status_'+a:'Present'}
+        response=self.c.post(url,data=form)
+        self.assertEqual(response.status_code,302,response.data)
+        for mode in ('take','bulk'):
+            page=self.c.get(url+'?mode='+mode+'&day=2026-11-05')
+            self.assertEqual(page.status_code,200,page.data)
+            self.assertNotIn(('name="attendance_keys" value="'+a+'"').encode(),page.data)
+            self.assertIn(('name="attendance_keys" value="'+b+'"').encode(),page.data)
+        page=self.c.get(url+'?mode=update&day=2026-11-05')
+        self.assertIn(('name="attendance_keys" value="'+a+'"').encode(),page.data)
+        self.assertNotIn(('name="attendance_keys" value="'+b+'"').encode(),page.data)
+        form['status_'+a]='Absent'
+        self.assertEqual(self.c.post(url,data=form).status_code,422)
+        self.assertEqual(self.daily()[0]['status'],'Present')
+        form={'_csrf':self.token(),'grid_mode':'1','mode':'bulk','from':'2026-11-05','attendance_keys':b,'original_'+b:'','status_'+b:'Absent'}
+        self.assertEqual(self.c.post(url,data=form).status_code,302)
+        page=self.c.get(url+'?day=2026-11-05')
+        self.assertIn(b'All attendance completed for this roster.',page.data)
+        self.assertNotIn(b'name="attendance_keys"',page.data)
+        page=self.c.get(url+'?mode=update&day=2026-11-05')
+        self.assertIn(('name="attendance_keys" value="'+b+'"').encode(),page.data)
+        self.assertEqual(len(self.daily()),2)
+
     def test_student_attendance_grid_selected_bulk_update_and_delete(self):
         self.login()
         url='/workspace/attendance/student'
