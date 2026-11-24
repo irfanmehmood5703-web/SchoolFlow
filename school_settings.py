@@ -783,6 +783,9 @@ def configure_school_settings(app,db,Student,Employee):
     def results(award_id):
         award=db.get_or_404(W,award_id)
         if award.kind!='awards':abort(404)
+        result_mode=request.args.get('mode','legacy')
+        if result_mode not in ('legacy','view','print','publish'):abort(404)
+        if result_mode=='publish' and (not session.get('owner_id') or session.get('staff_id') or session.get('demo')):abort(403)
         group_view=request.args.get('view')=='groups'
         display_options=(
             ('grade','Grade (subject and overall)'),('percentage','Percentage (subject and overall)'),
@@ -823,7 +826,7 @@ def configure_school_settings(app,db,Student,Employee):
         exam_name=award.data['name']
         if award.data.get('source_date_sheet_id') and exam_name.startswith('Award — '):exam_name=exam_name[len('Award — '):]
         from flask import make_response
-        response=make_response(render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+exam_name,award=award,rows=rows,group_view=group_view,parent_release=release,roster=roster,selected_student=selected,ranks=ranks,photo_ids=photo_ids,custom_body=custom_body,exam_name=exam_name,display_options=display_options,shown=shown,hidden_tags=hidden_tags))
+        response=make_response(render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+exam_name,award=award,rows=rows,group_view=group_view,parent_release=release,roster=roster,selected_student=selected,ranks=ranks,photo_ids=photo_ids,custom_body=custom_body,exam_name=exam_name,display_options=display_options,shown=shown,hidden_tags=hidden_tags,result_mode=result_mode))
         response.headers['Cache-Control']='private, no-store'
         return response
 

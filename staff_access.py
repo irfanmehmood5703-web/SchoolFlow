@@ -411,8 +411,9 @@ def configure_staff_access(app,db,Student,Employee):
         else:
             prefix=ep.split('.')[0]
             area={'dashboard':'dashboard','student_plans':'fees','student_overview':'admissions','admission_limits':'admissions','student_import':'admissions','fee_setup':'core','fee_increments':'fees','yearly_fees':'core','roll_numbers':'core','holiday_calendar':'core','fine_automation':'core','late_fees':'core','attendance_fines':'core','fine_queue':'fees','challan_branding':'core','institute_setup':'core','school_settings':'core','certificates':'certificates','certificate_manager':'certificates','staff_access':'access','user_logging':'logs','payroll_calendar':'payroll','hrm_reports':'hrm','reports':'fees' if args.get('view') and ep.endswith('.fees') else 'attendance' if 'attendance' in ep else 'exam'}.get(prefix)
+        if ep=='school_settings.results':area='exam'
         if not area:return None
-        action='print' if ep in ('ops.date_sheet_print','ops.date_sheet_photo') else 'update' if ep=='ops.date_sheet_edit' else 'view'
+        action='print' if ep in ('ops.date_sheet_print','ops.date_sheet_photo') or (ep=='school_settings.results' and request.args.get('mode')=='print') else 'update' if ep=='ops.date_sheet_edit' else 'view'
         if request.args.get('export') or ep=='records.export':action='export'
         if request.method=='POST':
             value=request.form.get('action','').split(':')[0]

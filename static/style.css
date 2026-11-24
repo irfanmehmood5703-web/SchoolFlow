@@ -455,3 +455,5 @@ body:has(.exam-result-page) .school-print-header,body:has(.exam-result-page) .ex
 .professional-result-card[data-compact-print="true"] .result-outcome{margin:5pt 0;padding:5pt 6pt;gap:5pt}
 .professional-result-card[data-compact-print="true"] .result-outcome strong{margin-top:2pt}
 }
+
+.award-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0}.award-actions .button{white-space:normal}.award-actions a:focus-visible{outline:2px solid #176b51;outline-offset:3px}@media print{.award-actions{display:none!important}}

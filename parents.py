@@ -188,6 +188,7 @@ def configure_parents(app,db,Student):
     @bp.post('/exams/<int:award_id>/publish')
     def publish_result(award_id):
         if not session.get('owner_id') or session.get('staff_id'):abort(403,'Only the school owner can publish parent results.')
+        app.extensions['admission_capacity']['lock']()
         award=db.get_or_404(app.extensions['ops_models']['workflow'],award_id)
         if award.kind!='awards':abort(404)
         release=db.session.get(ExamRelease,award_id)

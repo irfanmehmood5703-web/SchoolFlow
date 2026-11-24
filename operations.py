@@ -1141,13 +1141,21 @@ def configure_operations(app, db, Student, Employee):
         award=db.get_or_404(Workflow,award_id)
         if award.kind!='awards': abort(404)
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
+        release_model=app.extensions.get('parent_exam_release_model')
+        release=db.session.get(release_model,award_id) if release_model is not None else None
+        published=bool(release and release.published)
+        owner_can_correct=bool(session.get('owner_id') and not session.get('staff_id') and not session.get('demo'))
+        if request.method=='POST' and published:
+            if not owner_can_correct:abort(403,'Published results are locked. Ask the school owner to correct them.')
+            if request.form.get('action')=='send':raise ValueError('Save corrections first, then review and publish the updated result.')
+            if request.form.get('confirm_published_correction')!='1':raise ValueError('Confirm this correction to a published result before saving.')
         students=award_students(award);papers=award.data['papers']
         scores={(x.student_id,x.paper):x for x in Score.query.filter_by(award_id=award.id).all()}
         qlookup={(x.student_id,x.paper):x for x in QualitativeScore.query.filter_by(award_id=award.id).all()}
         pupil_details=app.extensions['record_helpers']['raw_many']('student',students)
         direct={s.id:app.extensions['school_settings_helpers']['direct_choices'](award.data.get('campus') or pupil_details.get(s.id,{}).get('campus',''),award.data.get('class_name') or s.class_name) for s in students}
         allowed={(s.id,i):enrolled(award,p,pupil_details.get(s.id,{})) for s in students for i,p in enumerate(papers)}
-        source=dict(award=award.data,roster=[[s.id,s.name,s.class_name,s.status,pupil_details.get(s.id,{})] for s in students],scores=sorted([[x.id,x.student_id,x.paper,x.obtained,x.state] for x in scores.values()]),qualitative=sorted([[x.id,x.student_id,x.paper,x.value,x.state,x.remarks,x.version] for x in qlookup.values()]),direct=direct)
+        source=dict(publication_version=release.version if release else 0,published=published,award=award.data,roster=[[s.id,s.name,s.class_name,s.status,pupil_details.get(s.id,{})] for s in students],scores=sorted([[x.id,x.student_id,x.paper,x.obtained,x.state] for x in scores.values()]),qualitative=sorted([[x.id,x.student_id,x.paper,x.value,x.state,x.remarks,x.version] for x in qlookup.values()]),direct=direct)
         stamp=hashlib.sha256(json.dumps(source,sort_keys=True,separators=(',',':')).encode()).hexdigest()
         actor=dict(scope=(getattr(g,'school_identity',None) or {}).get('scope'),owner=session.get('owner_id'),csrf=session.get('record_csrf'))
         signer=URLSafeTimedSerializer(app.config['SECRET_KEY'],salt='schoolflow-marks-review-v1')
@@ -1198,7 +1206,7 @@ def configure_operations(app, db, Student, Employee):
         counts=Counter(('Absent' if x.state=='A' else 'Leave' if x.state=='L' else 'Present') for x in scores.values() if x.state or x.obtained is not None)
         counts.update(('Absent' if x.state=='A' else 'Leave' if x.state=='L' else 'Present') for x in qlookup.values() if x.state or x.value is not None)
         review_token=signer.dumps(dict(actor=actor,award_id=award.id,stamp=stamp,nonce=secrets.token_hex(16)))
-        return render('marks.html',allowed=allowed,marks_review_token=review_token,qualitative=qlookup,direct=direct,title='Update Marks',award=award,students=students,papers=papers,scores=scores,counts=counts)
+        return render('marks.html',allowed=allowed,marks_review_token=review_token,qualitative=qlookup,direct=direct,title='Enter / Edit Marks',award=award,students=students,papers=papers,scores=scores,counts=counts,published=published,owner_can_correct=owner_can_correct)
 
     @bp.route('/rolls',methods=['GET','POST'])
     def rolls():

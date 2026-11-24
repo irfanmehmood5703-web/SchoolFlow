@@ -213,8 +213,14 @@ def configure_teacher_app(app,db,Student,Employee):
     def marks(cid,aid,paper):
         c=cohort(cid,'exam.update' if request.method=='POST' else 'exam.view');selected=next(((a,i,p) for a,i,p in exams(c) if a.id==aid and i==paper),None)
         if not selected:abort(403,'This exam subject is not assigned to you.')
-        a,i,p=selected;rows=[(s,d) for s,d in exam_rows(c,a) if enrolled(a,p,d)];ids=[s.id for s,d in rows];numeric=p.get('grading','Marks')=='Marks';Model=ops['score'] if numeric else ops['qualitative'];saved={r.student_id:r for r in Model.query.filter_by(award_id=aid,paper=i).filter(Model.student_id.in_(ids)).all()};direct=app.extensions['school_settings_helpers']['direct_choices'](c.data['campus'],c.data['class_name'])
-        snapshot=dict(assignment=c.data,award=a.data,roster=[(s.id,s.name,d.get('roll_no')) for s,d in rows],grading=direct,saved=[(sid,r.obtained if numeric else r.value,r.state,'' if numeric else r.remarks) for sid,r in sorted(saved.items())]);token=review('marks',str(cid)+':'+str(aid)+':'+str(i),snapshot)
+        a,i,p=selected
+        if request.method=='POST':app.extensions['admission_capacity']['lock']()
+        release_model=app.extensions.get('parent_exam_release_model')
+        release=db.session.get(release_model,aid) if release_model is not None else None
+        published=bool(release and release.published)
+        if published and request.method=='POST':abort(403,'Published results are locked. Contact the school owner.')
+        rows=[(s,d) for s,d in exam_rows(c,a) if enrolled(a,p,d)];ids=[s.id for s,d in rows];numeric=p.get('grading','Marks')=='Marks';Model=ops['score'] if numeric else ops['qualitative'];saved={r.student_id:r for r in Model.query.filter_by(award_id=aid,paper=i).filter(Model.student_id.in_(ids)).all()};direct=app.extensions['school_settings_helpers']['direct_choices'](c.data['campus'],c.data['class_name'])
+        snapshot=dict(publication_version=release.version if release else 0,published=published,assignment=c.data,award=a.data,roster=[(s.id,s.name,d.get('roll_no')) for s,d in rows],grading=direct,saved=[(sid,r.obtained if numeric else r.value,r.state,'' if numeric else r.remarks) for sid,r in sorted(saved.items())]);token=review('marks',str(cid)+':'+str(aid)+':'+str(i),snapshot)
         if request.method=='POST':
             extra_ids(['mark_','state_'],ids)
             for s,d in rows:
@@ -235,7 +241,7 @@ def configure_teacher_app(app,db,Student,Employee):
                     row.value=None if state else value or None;row.remarks=direct.get(value,'') if mode=='Direct Grading' else ''
                 row.state=state
             audit('Teacher saved subject marks',c,award_id=aid,paper=i);db.session.commit();flash('Marks saved. Parent report publication remains with the school.','success');return redirect(url_for('teacher_app.marks',cid=cid,aid=aid,paper=i))
-        return render('marks',cohort=c,award=a,paper=p,paper_index=i,rows=rows,saved=saved,numeric=numeric,direct=direct,review_token=token)
+        return render('marks',cohort=c,award=a,paper=p,paper_index=i,rows=rows,saved=saved,numeric=numeric,direct=direct,review_token=token,published=published)
     @bp.route('/meetings',methods=['GET','POST'])
     def meetings():
         M=app.extensions['ptm_models'];allowed=grants('ptm.update' if request.method=='POST' else 'ptm.view');query=M['meeting'].query.filter_by(employee_id=g.teacher_employee.id).filter(M['meeting'].campus.in_(allowed))

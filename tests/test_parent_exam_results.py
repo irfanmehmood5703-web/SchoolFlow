@@ -51,6 +51,29 @@ class ParentExamResultTests(unittest.TestCase):
         self.assertEqual(self.publish(dict(self.review(),fingerprint='🔥')).status_code,422)
         self.assertEqual(self.c.post(f'/workspace/general/parents/exams/{self.award}/publish',data=self.review()).status_code,400)
         data=self.review();self.assertEqual(self.publish(data).status_code,302);self.assertEqual(self.publish(data).status_code,422)
+    def test_separate_award_actions_and_published_correction_confirmation(self):
+        self.seed_exam()
+        path=f'/workspace/core/exam/results/{self.award}'
+        awards=self.c.get('/workspace/examination/awards')
+        self.assertEqual(awards.status_code,200)
+        for label in (b'Enter / Edit Marks',b'View Results',b'Print Result Cards',b'Publish Results'):
+            self.assertIn(label,awards.data)
+        self.assertNotIn(b'name="fingerprint"',self.c.get(path+'?mode=view').data)
+        self.assertNotIn(b'name="fingerprint"',self.c.get(path+'?mode=print').data)
+        self.assertIn(b'Result Card Display Options',self.c.get(path+'?mode=print').data)
+        self.assertIn(b'name="fingerprint"',self.c.get(path+'?mode=publish').data)
+        self.assertEqual(self.publish().status_code,302)
+        marks=f'/workspace/marks/{self.award}'
+        page=self.c.get(marks)
+        token=re.search(rb'name="marks_review_token" value="([^"]+)"',page.data)[1].decode()
+        data=dict(marks_review_token=token,mark_1_0='90',mark_2_0='27',action='save')
+        self.assertEqual(self.post(marks,data).status_code,422)
+        self.assertEqual(self.post(marks,dict(data,confirm_published_correction='1')).status_code,302)
+        p=self.parent()
+        self.assertIn(b'80 / 100',p.get('/parents/PARENT-TEST/students/1/results').data)
+        self.assertEqual(self.publish().status_code,302)
+        self.assertIn(b'90 / 100',p.get('/parents/PARENT-TEST/students/1/results').data)
+
     def test_parent_cannot_publish_and_fee_privileges_still_apply(self):
         self.seed_exam();self.publish();p=self.parent()
         self.assertEqual(p.post(f'/workspace/general/parents/exams/{self.award}/publish',data={}).status_code,302)
