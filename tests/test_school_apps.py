@@ -96,7 +96,14 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(public.json['version_code'],7)
         self.assertNotIn('keystore',public.json)
         self.assertIn('/qr-attendance-7-55-1/SchoolFlow-QR-Attendance.apk',public.json['url'])
-        self.assertIn(public.json['url'].encode(),self.clients[0].get('/workspace/general/app-links').data)
+        self.prepare()
+        page=self.clients[0].get('/workspace/general/app-links').data
+        qr_card=page.split(b'id="app-qr"',1)[1].split(b'</article>',1)[0]
+        self.assertIn(b'Download will appear when the school build is ready.',qr_card)
+        self.assertNotIn(public.json['url'].encode(),qr_card)
+        self.assertIn(b'data-build-status-url=',page)
+        self.assertIn(b'Face Attendance (shared)',page)
+        self.assertIn(public.json['url'].encode(),page)
         self.assertNotIn(b'signing',self.clients[0].get('/workspace/general/school-apps/status').data)
     def test_oidc_rejects_foreign_repo_branch_workflow_expiry_and_missing_auth(self):
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={}).status_code,401)

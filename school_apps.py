@@ -149,7 +149,8 @@ def configure_school_apps(app,db):
             if row['key'] in ('qr','face') and qr:
                 row.update(official_qr=True,platform='apk',url=qr['url'],version=qr['version_name'],size=str(qr['size'])+' bytes',
                            sha256=qr['sha256'],source_commit=qr['source_commit'],
-                           notes='Official SchoolFlow QR Attendance APK. Future versions appear in the app. Register this installation using your school’s attendance device settings.')
+                           notes=('Shared app for Face Attendance gates. For a school-branded QR scanner, use the QR Attendance card above.' if row['key']=='face'
+                                  else 'Official SchoolFlow QR Attendance APK. Register this installation using your school’s attendance device settings.'))
         school=private_school()
         if not school:return rows
         spec,build,_=current(school)
