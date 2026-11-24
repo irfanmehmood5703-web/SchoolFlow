@@ -142,6 +142,21 @@ class BrandingValueTests(unittest.TestCase):
         self.assertEqual(response.status_code,200);self.assertIn(b'Batch Pupil 31',response.data)
         self.assertLessEqual(len(statements),25);self.assertFalse(any('record_file.content' in q for q in statements))
 
+    def test_professional_result_card_individual_and_batch_rank(self):
+        second=Student(admission_no='TEST-S-2',name='Second Pupil',class_name='Class A',status='Active')
+        db.session.add(second);db.session.flush();db.session.add(self.rm['student'](student_id=second.id,data={'campus':'Campus A','section':'A','academic_session':'2026-27','roll_no':'2'}))
+        photo=self.rm['file'](owner_kind='student',owner_id=self.student.id,photo=True,title='Photo',filename='photo.png',mime='image/png',content=b'PNG',sha256='test-hash')
+        db.session.add(photo);db.session.commit();award=self.award()
+        for sid,marks in [(self.student.id,[15,20]),(second.id,[19,29])]:
+            for i,mark in enumerate(marks):db.session.add(self.ops['score'](award_id=award.id,student_id=sid,paper=i,obtained=mark,state=''))
+        db.session.commit();path='/workspace/core/exam/results/'+str(award.id)
+        page=self.c.get(path);self.assertEqual(page.status_code,200);self.assertEqual(page.data.count(b'class="form-card result-card professional-result-card"'),2)
+        self.assertIn(b'1 / 2',page.data);self.assertIn(b'2 / 2',page.data);self.assertIn(b'75.00%',page.data);self.assertIn(b'Student admission photo',page.data);self.assertIn(b'Photo not available',page.data);self.assertIn('no-store',page.headers['Cache-Control'])
+        single=self.c.get(path+'?student_id='+str(self.student.id));self.assertEqual(single.status_code,200);self.assertEqual(single.data.count(b'class="form-card result-card professional-result-card"'),1);self.assertIn(b'2 / 2',single.data)
+        self.assertEqual(self.c.get(path+'?student_id=99999').status_code,404)
+        self.ops['score'].query.filter_by(award_id=award.id,student_id=second.id,paper=0).one().obtained=None;db.session.commit()
+        self.assertNotIn(b'2 / 2',self.c.get(path).data)
+
     def test_final_policy_remarks_are_escaped_and_shown_only_for_complete_results(self):
         policy=self.m['item'](kind='grading',name='Policy',scope='',data={'bands':[{'min':'0','max':'100','grade':'A','remarks':'Good'}],'final_remarks':'<Study well>'})
         db.session.add(policy);db.session.flush();db.session.add(self.m['item'](kind='class-grading',name='Assignment',scope='Campus A',data={'classes':['Class A'],'policy':policy.id}));db.session.commit()
