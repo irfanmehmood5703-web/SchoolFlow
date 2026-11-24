@@ -107,6 +107,50 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
             row,data,digest=document(int(raw));review=dict(row=row,data=data,fingerprint=digest)
         if request.method=='POST':
             action=request.form.get('action')
+            if action=='edit-resource':
+                row=db.get_or_404(Item,request.form.get('id',type=int))
+                if request.form.get('version')!=str(row.version):abort(409)
+                if row.published:raise ValueError('Unpublish the resource before editing.')
+                title=request.form.get('title','').strip()
+                body=clean_work(request.form.get('body',''))
+                if not 1<=len(title)<=180:raise ValueError('Enter a title of 1 to 180 characters.')
+                try:
+                    start=date.fromisoformat(request.form.get('starts',''))
+                    end=date.fromisoformat(request.form.get('ends',''))
+                    due=date.fromisoformat(request.form['due']) if request.form.get('due') else None
+                except ValueError:raise ValueError('Choose valid publication dates.')
+                if end<start or (end-start).days>1096 or (due and not start<=due<=end):raise ValueError('Check the publication window and deadline.')
+                resource=request.form.get('resource_url','').strip()
+                if resource:
+                    parsed=urlsplit(resource)
+                    if len(resource)>2000 or parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or any(c.isspace() for c in resource):raise ValueError('Use a public HTTPS study link without credentials.')
+                # Reviewed examination snapshots and resources with responses retain their original audience.
+                fixed=row.kind in ('dates','rollslip') or Submission.query.filter_by(item_id=row.id).first() is not None
+                scope={k:request.form.get(k,getattr(row,k)) for k in ('campus','class_name','section','subject')}
+                if fixed and any(v!=getattr(row,k) for k,v in scope.items()):raise ValueError('The reviewed audience cannot be changed. Create a new resource for a different audience.')
+                if not fixed:
+                    campus,cls,section,subject=(scope[k] for k in ('campus','class_name','section','subject'))
+                    if campus not in choices('campus') or cls not in choices('class_name') or (section and section not in choices('section')) or (subject and subject not in choices('subject')):raise ValueError('Choose a valid campus, class, section and subject.')
+                    mapping=app.extensions['institute_setup_helpers']['payload']();maps=mapping['maps'];cohort=next((m for m in maps.get(campus,[]) if m['class_name']==cls),None)
+                    if mapping['campuses'].get(campus) is False or campus in maps and (not cohort or section and section not in cohort.get('sections',[])):raise ValueError('Choose an active campus, class and section combination.')
+                    if subject and not app.extensions['school_settings_helpers']['subject_allowed'](campus,cls,subject):raise ValueError('Subject is not assigned to this class.')
+                existing_files=File.query.filter_by(item_id=row.id).all()
+                remove=set(request.form.getlist('remove_file'))
+                if not remove.issubset({str(f.id) for f in existing_files}):abort(422)
+                retained=[f for f in existing_files if str(f.id) not in remove]
+                uploads=app.extensions['student_extra_uploads']()
+                if len(retained)+len(uploads)>5 or sum(len(f.content) for f in retained)+sum(len(content) for _,_,content in uploads)>15*1024*1024:raise ValueError('Keep at most five attachments and 15 MB combined.')
+                before=dict(title=row.title,starts=row.starts.isoformat(),ends=row.ends.isoformat(),scope={k:getattr(row,k) for k in scope})
+                row.title=title;row.body=body;row.starts=start;row.ends=end;row.due=due;row.resource_url=resource
+                for k,v in scope.items():setattr(row,k,v)
+                for f in existing_files:
+                    if str(f.id) in remove:db.session.delete(f)
+                for name,mime,content in uploads:db.session.add(File(item_id=row.id,filename=name,mime=mime,content=content))
+                # Bump optimistic revision even on attachment-only changes.
+                row.version+=1
+                db.session.add(ops['audit'](action='Edit parent study draft',data=dict(item_id=row.id,campus=row.campus,before=before,after=dict(title=title,starts=start.isoformat(),ends=end.isoformat(),scope=scope),removed_files=len(remove),added_files=len(uploads))))
+                db.session.commit();flash('Resource updated. It remains unpublished.','success')
+                return redirect(url_for('parent_study.publisher'))
             if action=='edit-dates':
                 row=db.get_or_404(Item,request.form.get('id',type=int))
                 if request.form.get('version')!=str(row.version):abort(409)
@@ -160,6 +204,7 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
             row=Item(kind=kind,campus=campus,class_name=cls,section=section,subject=subject,title=title,body=body,starts=start,ends=end,due=due,resource_url=resource,data=data,published=request.form.get('published')=='1',token=token);db.session.add(row);db.session.flush()
             for name,mime,content in files:db.session.add(File(item_id=row.id,filename=name,mime=mime,content=content))
             db.session.add(ops['audit'](action='Publish parent study resource',data=dict(item_id=row.id,campus=campus,kind=kind,published=row.published)));db.session.commit();return redirect(url_for('parent_study.publisher'))
-        return render_template('parent_study_admin.html',title='Parent Study & Documents',kinds=KINDS,choices=choices,items=Item.query.order_by(Item.id.desc()).limit(100).all(),submissions=Submission.query.order_by(Submission.id.desc()).limit(100).all(),review=review,token=secrets.token_urlsafe(32),today=school_today(),end=school_today()+timedelta(days=180))
+        items=Item.query.order_by(Item.id.desc()).limit(100).all()
+        return render_template('parent_study_admin.html',title='Parent Study & Documents',kinds=KINDS,choices=choices,items=items,submissions=Submission.query.order_by(Submission.id.desc()).limit(100).all(),resource_files={i.id:File.query.filter_by(item_id=i.id).all() for i in items},fixed_audiences={i.id for i in items if i.kind in ('dates','rollslip') or Submission.query.filter_by(item_id=i.id).first() is not None},review=review,token=secrets.token_urlsafe(32),today=school_today(),end=school_today()+timedelta(days=180))
     app.extensions['parent_study_helpers']=dict(parent_page=parent_page,submit=submit,listing=listing)
     app.register_blueprint(bp)

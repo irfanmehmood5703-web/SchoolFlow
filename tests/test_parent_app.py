@@ -106,7 +106,7 @@ class ParentAppTests(unittest.TestCase):
             row=I.query.filter_by(title='Draft dates regression').one()
             return row.id,row.version,row.starts.isoformat(),row.ends.isoformat(),row.published,row.body
         rid,version,*_=self.tenant(snapshot)
-        self.assertIn(b'Edit Visibility Dates',self.c.get(path).data)
+        self.assertIn(b'Edit Resource',self.c.get(path).data)
         edit=dict(action='edit-dates',id=rid,version=version,starts='2026-11-24',ends='2026-11-30')
         self.assertEqual(self.post(path,dict(edit,ends='2026-11-23')).status_code,422)
         self.assertEqual(self.post(path,edit).status_code,302)
@@ -115,6 +115,23 @@ class ParentAppTests(unittest.TestCase):
         current_version=self.tenant(snapshot)[1]
         self.assertEqual(self.post(path,dict(action='toggle',id=rid,version=current_version)).status_code,302)
         self.assertEqual(self.post(path,dict(edit,version=self.tenant(snapshot)[1])).status_code,422)
+
+    def test_full_draft_edit_preserves_reviewed_audience_and_snapshot(self):
+        path='/workspace/general/parent-study'
+        def seed():
+            I=app.extensions['parent_study_models']['item']
+            row=I(kind='dates',title='Original draft',campus='North',class_name='One',section='A',body='Old instructions',starts=school_today(),ends=school_today(),published=False,token=secrets.token_urlsafe(32),data={'students':{'1':{}},'papers':[{'subject':'Math'}]})
+            db.session.add(row);db.session.flush();return row.id,row.version
+        rid,version=self.tenant(seed)
+        edit=dict(action='edit-resource',id=rid,version=version,title='Revised draft',body='New instructions',starts='2026-11-24',ends='2026-11-30',resource_url='https://example.org/study')
+        self.assertEqual(self.post(path,dict(edit,campus='Other')).status_code,422)
+        self.assertEqual(self.post(path,dict(edit,resource_url='javascript:alert(1)')).status_code,422)
+        self.assertEqual(self.post(path,edit).status_code,302)
+        def inspect():
+            row=db.session.get(app.extensions['parent_study_models']['item'],rid)
+            return row.title,row.body,row.ends.isoformat(),row.resource_url,row.published,row.data,row.campus
+        self.assertEqual(self.tenant(inspect),('Revised draft','New instructions','2026-11-30','https://example.org/study',False,{'students':{'1':{}},'papers':[{'subject':'Math'}]},'North'))
+        self.assertEqual(self.post(path,edit).status_code,409)
 
     def test_fee_rules_hide_summary_results_study_and_files(self):
         self.seed_app();fixture.ParentsPtmTests.seed_debt(self)
