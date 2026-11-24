@@ -377,7 +377,7 @@ def configure_school_settings(app,db,Student,Employee):
     expand=expand_tags
     campus_values=tag_values['school']
     app.extensions['branding_values']=tag_values
-    def branding(module,layout,part,campus='',values=None,person=None):
+    def branding(module,layout,part,campus='',values=None,person=None,hidden_keys=()):
         rows=items(module+'-branding',campus)
         row=next((r for r in rows if r.name==layout),None)
         if not row and campus:row=next((r for r in items(module+'-branding','') if r.name==layout),None)
@@ -386,6 +386,9 @@ def configure_school_settings(app,db,Student,Employee):
         if campus:
             for key in ('institute_name','campus_name','campus_address','campus_contact','campus_email','campus_city','campus_open_date','slogan'):data[key]=school[key]
         assets=tag_values['assets']('student' if module=='exam' else 'employee',person)
+        for key in hidden_keys:
+            if key in assets:assets[key]=''
+            if key in data:data[key]=''
         text=(row.data if row else default_exam_branding(layout)).get(part,'')
         unresolved=getattr(request,'unresolved_branding_tags',set());unresolved.update(missing_tags(text,data,assets));request.unresolved_branding_tags=unresolved
         return Markup(clean_html(expand(text,data,True,assets)))
@@ -781,6 +784,17 @@ def configure_school_settings(app,db,Student,Employee):
         award=db.get_or_404(W,award_id)
         if award.kind!='awards':abort(404)
         group_view=request.args.get('view')=='groups'
+        display_options=(
+            ('grade','Grade (subject and overall)'),('percentage','Percentage (subject and overall)'),
+            ('position','Award position'),('photo','Student photo'),('remarks','Remarks'),
+            ('paper_mode','Paper mode'),('father','Father name'),('admission','Admission number'),
+            ('roll','Roll number'),('status','Result status'))
+        shown={key for key,label in display_options}
+        if not group_view and request.args.get('display_options')=='1':
+            shown.intersection_update(request.args.getlist('show'))
+        hidden_tags=[]
+        for key,tags in {'grade':('grade',),'percentage':('percentage',),'photo':('stdPic',),'remarks':('remarks',),'father':('fatherName',),'admission':('regNo',),'roll':('rollNo','examRollNo'),'status':('currentStatus',)}.items():
+            if key not in shown:hidden_tags.extend(tags)
         rows=result_rows(award,group_view)
         publication=app.extensions.get('parent_exam_helpers',{}).get('review')
         release=publication(award,rows if not group_view else result_rows(award)) if publication else None
@@ -809,7 +823,7 @@ def configure_school_settings(app,db,Student,Employee):
         exam_name=award.data['name']
         if award.data.get('source_date_sheet_id') and exam_name.startswith('Award — '):exam_name=exam_name[len('Award — '):]
         from flask import make_response
-        response=make_response(render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+exam_name,award=award,rows=rows,group_view=group_view,parent_release=release,roster=roster,selected_student=selected,ranks=ranks,photo_ids=photo_ids,custom_body=custom_body,exam_name=exam_name))
+        response=make_response(render_template('exam_results.html',title=('Subject groups · ' if group_view else 'Results · ')+exam_name,award=award,rows=rows,group_view=group_view,parent_release=release,roster=roster,selected_student=selected,ranks=ranks,photo_ids=photo_ids,custom_body=custom_body,exam_name=exam_name,display_options=display_options,shown=shown,hidden_tags=hidden_tags))
         response.headers['Cache-Control']='private, no-store'
         return response
 

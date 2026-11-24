@@ -157,6 +157,26 @@ class BrandingValueTests(unittest.TestCase):
         self.ops['score'].query.filter_by(award_id=award.id,student_id=second.id,paper=0).one().obtained=None;db.session.commit()
         self.assertNotIn(b'2 / 2',self.c.get(path).data)
 
+    def test_result_card_display_options_hide_fields_without_changing_saved_marks(self):
+        award=self.award()
+        db.session.add_all([self.ops['score'](award_id=award.id,student_id=self.student.id,paper=0,obtained=15,state=''),self.ops['score'](award_id=award.id,student_id=self.student.id,paper=1,obtained=20,state='')])
+        db.session.commit()
+        path='/workspace/core/exam/results/'+str(award.id)
+        default=self.c.get(path)
+        self.assertEqual(default.status_code,200)
+        self.assertIn(b'<th>Percentage</th>',default.data)
+        self.assertIn(b'<th>Grade</th>',default.data)
+        self.assertIn(b'<span>Award Position</span>',default.data)
+        page=self.c.get(path+'?display_options=1&show=roll&show=remarks')
+        self.assertEqual(page.status_code,200)
+        for value in [b'<th>Percentage</th>',b'<th>Grade</th>',b'<span>Percentage</span>',b'<span>Grade</span>',b'<span>Award Position</span>',b'Photo not available',b'<span>Father Name</span>',b'<span>Admission No.</span>',b'<th>Paper mode</th>',b'<span>Result Status</span>']:
+            self.assertNotIn(value,page.data)
+        self.assertIn(b'<span>Roll No.</span>',page.data)
+        self.assertIn(b'<th>Remarks</th>',page.data)
+        self.assertIn(b'35.00',page.data)
+        self.assertEqual(self.ops['score'].query.count(),2)
+        self.assertIn(b'<th>Percentage</th>',self.c.get(path).data)
+
     def test_final_policy_remarks_are_escaped_and_shown_only_for_complete_results(self):
         policy=self.m['item'](kind='grading',name='Policy',scope='',data={'bands':[{'min':'0','max':'100','grade':'A','remarks':'Good'}],'final_remarks':'<Study well>'})
         db.session.add(policy);db.session.flush();db.session.add(self.m['item'](kind='class-grading',name='Assignment',scope='Campus A',data={'classes':['Class A'],'policy':policy.id}));db.session.commit()
