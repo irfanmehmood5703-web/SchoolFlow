@@ -6,7 +6,7 @@
 {% if student is defined and student %}
 <section class="date-sheet-student" aria-label="Student details">
 <div class="date-sheet-student-details"><div><strong>Student Name:</strong> {{student.name}}</div><div><strong>Father Name:</strong> {{student.father or '—'}}</div><div><strong>Admission No:</strong> {{student.admission_no}}</div><div><strong>Roll No:</strong> {{student_data.get('roll_no') or 'Not assigned'}}</div><div><strong>Class / Section:</strong> {{student.class_name}} / {{student_data.get('section') or '—'}}</div><div><strong>Session:</strong> {{student_data.get('academic_session') or d.get('academic_session') or '—'}}</div></div>
-{% if show_photo %}{% if student_photo %}<img class="date-sheet-student-photo" src="{{url_for('ops.date_sheet_photo',sheet_id=row.id,sid=student.id)}}" alt="Student admission photo">{% else %}<div class="date-sheet-student-photo date-sheet-photo-empty">Photo not available</div>{% endif %}{% endif %}
+{% if show_photo %}{% if student_photo %}<img class="date-sheet-student-photo" width="68" height="85" loading="eager" src="{{url_for('ops.date_sheet_photo',sheet_id=row.id,sid=student.id)}}" alt="Student admission photo">{% else %}<div class="date-sheet-student-photo date-sheet-photo-empty">Photo not available</div>{% endif %}{% endif %}
 </section>{% endif %}
 {{settings_branding('exam','Date Sheet','body',d.get('campus',''),{'examName':d.name})}}
 {% set show_recheck=office and d.recheck %}
