@@ -46,4 +46,6 @@ android {
 dependencies {
     testImplementation 'junit:junit:4.13.2'
     qrImplementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    // ZXing's camera permission code uses AndroidX Core at runtime.
+    qrImplementation 'androidx.core:core:1.13.1'
 }
