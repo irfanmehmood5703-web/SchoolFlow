@@ -34,6 +34,26 @@ class SmsGatewayTests(unittest.TestCase):
         with self.c.session_transaction() as session:token=session['record_csrf']
         self.assertEqual(self.c.post('/auth/login',data={'_csrf':token,'email':'qa@example.invalid','password':'Fictional-SMS-password-2026'}).status_code,302)
         with self.c.session_transaction() as session:return session['record_csrf']
+    def test_sms_report_uses_outbox_state_and_filters_without_sending(self):
+        self.login()
+        path='/workspace/message-log?view=sms-report'
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'SMS History',page.data)
+        self.assertIn(b'Fictional test only',page.data)
+        self.assertEqual(page.headers.get('Cache-Control'),'private, no-store')
+        self.assertNotIn(b'Fictional test only',self.c.get(path+'&state=sent').data)
+        export=self.c.get(path+'&state=queued&export=csv')
+        self.assertEqual(export.status_code,200)
+        self.assertIn('text/csv',export.content_type)
+        self.assertIn(b'Fictional test only',export.data)
+        self.assertIn(b'Pending',export.data)
+        self.assertNotIn(b'Fictional test only',self.c.get(path+'&q=NoSuchRecipient').data)
+        self.assertEqual(self.c.get(path+'&from=2027-01-10&to=2027-01-01').status_code,422)
+        self.assertEqual(self.c.get(path+'&state=invalid').status_code,422)
+        self.assertIn(b'Communication Requests',self.c.get('/workspace/message-log').data)
+        self.heartbeat()
+        self.assertEqual(self.call('heartbeat').json['queued'],1)
     def test_authentication_scope_and_replay_do_not_implicitly_send(self):
         self.assertEqual(self.call('heartbeat',headers={}).status_code,401)
         self.heartbeat();wrong={**self.headers,'X-Device-Scope':'wrong'}
