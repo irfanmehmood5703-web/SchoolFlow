@@ -30,7 +30,13 @@ android {
         parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','SchoolFlow Parents (School Test)' }
         teacher { dimension 'role'; applicationId 'com.schoolflow.teacher'; buildConfigField 'String', 'ROLE', '"teacher"'; resValue 'string','app_name','SchoolFlow Teacher (School Test)' }
         owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','SchoolFlow Owner (School Test)' }
-        qr { dimension 'role'; applicationId 'com.schoolflow.qr'; buildConfigField 'String', 'ROLE', '"qr"'; resValue 'string','app_name','SchoolFlow QR Attendance' }
+        qr {
+            dimension 'role'
+            applicationId 'com.schoolflow.qr'
+            buildConfigField 'String', 'ROLE', '"qr"'
+            resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
+            resValue 'string', 'qr_scan_prompt', resourceText(school ? "Scan QR card · ${school.name}" : 'Scan a SchoolFlow QR card')
+        }
         sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','SchoolFlow SMS (School Test)' }
     }
     if(school){ productFlavors.all { flavor ->
