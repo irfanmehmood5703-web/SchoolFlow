@@ -105,6 +105,49 @@ class ParentsPtmTests(unittest.TestCase):
             row=self.M['challenge'].query.one();key=base64.urlsafe_b64encode(hashlib.sha256(app.config['SECRET_KEY'].encode()+b'parent-code-encryption-v1').digest());return Fernet(key).decrypt(row.encrypted).decode()
         code=self.tenant(real_code)
         self.assertNotEqual(self.post('/parents/PARENT-TEST/login',{'action':'verify','challenge':cid,'otp':code},p).status_code,302)
+    def test_school_shared_code_is_opt_in_reusable_and_phone_scoped(self):
+        path='/workspace/general/parents/login-settings'
+        login='/parents/PARENT-TEST/login'
+        code='58312694'
+        self.assertEqual(self.c.get(path).status_code,200)
+        self.assertIn(b'Request a login code',app.test_client().get(login).data)
+        payload={'version':'0','action':'enable','login_code':code,'confirm_code':code}
+        self.assertEqual(self.post(path,payload).status_code,422)
+        self.assertEqual(self.post(path,{**payload,'acknowledge':'yes'}).status_code,302)
+        cfg=self.tenant(lambda:self.M['policy'].query.one().data)
+        self.assertNotIn(code,str(cfg))
+        self.assertIn(b'School login code',app.test_client().get(login).data)
+        self.assertNotIn(b'Request a login code',app.test_client().get(login).data)
+        def sign(number,pin=code):
+            p=app.test_client();self.token(p,login)
+            result=self.post(login,{'action':'shared','phone':number,'login_code':pin},p)
+            return p,result
+        p,r=sign('03000000001');self.assertEqual(r.status_code,302)
+        self.assertIn(b'Fictional Child 1',p.get('/parents/PARENT-TEST').data)
+        self.assertNotIn(b'Fictional Child 2',p.get('/parents/PARENT-TEST').data)
+        self.assertEqual(p.get('/parents/PARENT-TEST/students/2/fees').status_code,404)
+        q,r=sign('03000000002');self.assertEqual(r.status_code,302)
+        self.assertIn(b'Fictional Child 2',q.get('/parents/PARENT-TEST').data)
+        self.assertEqual(sign('03000000001')[1].status_code,302)
+        self.assertEqual(sign('03000000001','12345678')[1].status_code,200)
+        self.assertEqual(sign('03000000009')[1].status_code,200)
+        self.assertEqual(self.tenant(lambda:self.M['challenge'].query.count()),0)
+        self.assertEqual(self.post('/workspace/general/parents/privileges',{'version':'1','action':'rules'}).status_code,302)
+        self.assertIn(b'School login code',app.test_client().get(login).data)
+        self.assertEqual(self.post(path,{'version':'2','action':'disable'}).status_code,302)
+        self.assertEqual(p.get('/parents/PARENT-TEST').status_code,302)
+        self.assertIn(b'Request a login code',app.test_client().get(login).data)
+    def test_school_shared_code_rejects_ambiguous_registered_number(self):
+        path='/workspace/general/parents/login-settings'
+        code='58312694'
+        self.assertEqual(self.post(path,{'version':'0','action':'enable','login_code':code,'confirm_code':code,'acknowledge':'yes'}).status_code,302)
+        def duplicate():
+            family=db.session.get(self.rm['family'],2)
+            family.data={**family.data,'phone':'03000000001'}
+        self.tenant(duplicate)
+        p=app.test_client();login='/parents/PARENT-TEST/login';self.token(p,login)
+        self.assertEqual(self.post(login,{'action':'shared','phone':'03000000001','login_code':code},p).status_code,200)
+        self.assertEqual(p.get('/parents/PARENT-TEST').status_code,302)
     def test_otp_request_rate_limit(self):
         p=app.test_client();self.token(p,'/parents/PARENT-TEST/login')
         for _ in range(5):self.assertEqual(self.post('/parents/PARENT-TEST/login',{'action':'request','phone':'03000000001'},p).status_code,200)

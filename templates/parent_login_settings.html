@@ -1,0 +1,17 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}
+{% block content %}
+{{m.heading(title,'Choose how parents sign in to this school. Only the school owner can change this setting.')}}
+<p><a class="button secondary" href="{{url_for('parents.analytics')}}">Back to Parents App</a></p>
+<section class="form-card">
+<h2>Current login mode: {{'Shared school code' if enabled else 'One-time code (OTP)'}}</h2>
+<p>A shared code applies to every registered parent in this school. Anyone who knows the code and another registered mobile number can access that family's records. The number alone does not prove ownership.</p>
+<form method="post">{{m.csrf()}}<input type="hidden" name="version" value="{{version}}">
+<h3>{{'Change shared school code' if enabled else 'Enable shared school code'}}</h3>
+<div class="fields-grid"><label>School login code (8–12 digits)<input name="login_code" type="password" inputmode="numeric" pattern="[0-9]{8,12}" required maxlength="12" autocomplete="new-password"></label><label>Confirm code<input name="confirm_code" type="password" inputmode="numeric" pattern="[0-9]{8,12}" required maxlength="12" autocomplete="new-password"></label></div>
+<label><input type="checkbox" name="acknowledge" value="yes" required> I understand the privacy risk of a shared code.</label>
+<p>The code is stored as a password hash. Changing the code signs out existing parent sessions.</p>
+<button name="action" value="enable">Save school login code</button>
+</form>
+{% if enabled %}<form method="post">{{m.csrf()}}<input type="hidden" name="version" value="{{version}}"><button class="button secondary" name="action" value="disable">Disable shared code and restore OTP</button></form>{% endif %}
+</section>
+{% endblock %}
