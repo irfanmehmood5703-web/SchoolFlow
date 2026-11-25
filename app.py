@@ -220,6 +220,8 @@ from teacher_login import configure_teacher_login
 configure_teacher_login(app,db,Employee)
 from teacher_app import configure_teacher_app
 configure_teacher_app(app,db,Student,Employee)
+from firebase_push import configure_firebase_push
+configure_firebase_push(app,db)
 
 
 @app.route('/')
