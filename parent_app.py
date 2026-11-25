@@ -138,6 +138,10 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
             for r in results(s.id)[:5]:add('result:'+str(r['id']),r['updated'],'Published result · '+r['name'],'Your child’s published report is available.',link('results',s.id),r['updated'])
         if allowed(s,d,'notice'):
             for event in app.extensions['teacher_app_helpers']['parent_reminders'](s,d):add(event['key'],event['revision'],event['title'],event['body'],link('notifications',s.id),event['when'])
+        if allowed(s,d,'leave'):
+            L=app.extensions['general_leave_model']
+            for row in L.query.filter_by(institute_scope=g.parent_school.storage_key,student_id=s.id).filter(L.status.in_(['Approved','Rejected'])).order_by(L.id.desc()).limit(10):
+                add('leave:'+str(row.id),(row.status,row.comment),'Leave request '+row.status.lower(),str(row.from_date)+' to '+str(row.to_date),link('leave',s.id),school_today())
         states={r.source:r.revision for r in NoticeState.query.filter_by(family_id=f.id,student_id=s.id).all()}
         for e in out:e['read']=states.get(e['key'])==e['revision']
         return sorted(out,key=lambda e:(e['when'],e['key']),reverse=True)[:40]
@@ -151,6 +155,17 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
             return
         rate('app:'+str(f.id)+':'+str(s.id),40)
         row=create();db.session.add(row);db.session.flush();db.session.add(Action(token=token,family_id=f.id,student_id=s.id,kind=kind,target_id=row.id,fingerprint=digest));db.session.add(ops['audit'](action='Parent '+kind,data=dict(family_id=f.id,student_id=s.id,target_id=row.id)));db.session.commit()
+    @bp.get('/app/notification-feed')
+    def native_notification_feed(code):
+        from mobile_notices import feed
+        f,rows=family_rows()
+        if not f:abort(401)
+        events=[]
+        for s,d in rows:
+            if not allowed(s,d,'messages'):continue
+            for e in notifications(s,d,f):
+                events.append({**e,'key':str(s.id)+':'+e['key'],'title':s.name+' · '+e['title']})
+        return feed('parents',g.parent_school.storage_key,f.id,events)
     @bp.get('/app/<view>')
     def app_view(code,view,selected_sid=None):
         f,rows=family_rows()
