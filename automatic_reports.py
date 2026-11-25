@@ -5,7 +5,7 @@ External delivery is opt-in. All amounts remain integer paisa.
 """
 from datetime import datetime,timedelta
 from collections import Counter
-import re,os,hashlib
+import re,hashlib
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,session,url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -116,12 +116,15 @@ def configure_automatic_reports(app,db,Student,Employee):
         saved=W.query.filter_by(kind='automatic-report-snapshot',status='Active').all()
         seen={(r.data.get('key'),r.data.get('revision')) for r in saved}
         count=0
-        for event in due_reports(now):
+        current_events=due_reports(now)
+        current_keys={(event['key'],event['revision']) for event in current_events}
+        for event in current_events:
             if (event['key'],event['revision']) in seen:continue
             db.session.add(W(kind='automatic-report-snapshot',status='Active',data={**event,'captured':now.isoformat()}));count+=1
         if count:
             # Keep bounded history and never store external credentials here.
-            for old in sorted(saved,key=lambda r:r.id,reverse=True)[max(0,90-count):]:db.session.delete(old)
+            expired=[r for r in saved if (r.data.get('key'),r.data.get('revision')) not in current_keys]
+            for old in sorted(expired,key=lambda r:r.id,reverse=True)[90:]:db.session.delete(old)
         db.session.commit()
         return count
     WA_KEY='automatic-report-whatsapp'
@@ -139,8 +142,23 @@ def configure_automatic_reports(app,db,Student,Employee):
         # Only the current enabled reports; no replay of older saved history.
         # Stable report period + recipient consent, with provider-side claim before network.
         for event in due_reports(now):
+            # Durable per-report claim remains even when provider history is pruned.
+            # Commit the claim first; uncertain external results are not retried.
+            app.extensions['admission_capacity']['lock']()
+            latest=db.session.get(Setting,WA_KEY,populate_existing=True)
+            if not latest or latest.data!=cfg:db.session.rollback();break
+            claim_key='automatic-wa-claim:'+event['key']
+            claim=db.session.get(Setting,claim_key,populate_existing=True)
+            if claim and claim.data.get('revision')==event['revision']:db.session.rollback();continue
+            claim=claim or Setting(key=claim_key)
+            claim.data=dict(revision=event['revision'],status='Pending')
+            db.session.add(claim);db.session.commit()
             token=hashlib.sha256(('scheduled-report:'+event['key']+':'+event['revision']).encode()).hexdigest()
-            helper['send_report'](token,cfg['device'],cfg['provider'],mobile,event['title']+'\n'+event['detail'])
+            outcome=helper['send_report'](token,cfg['device'],cfg['provider'],mobile,event['title']+'\n'+event['detail'])
+            app.extensions['admission_capacity']['lock']()
+            claim=db.session.get(Setting,claim_key,populate_existing=True)
+            if claim and claim.data.get('revision')==event['revision']:claim.data={**claim.data,'status':outcome}
+            db.session.commit()
     @bp.post('/whatsapp')
     def whatsapp():
         if not owner():abort(403)
