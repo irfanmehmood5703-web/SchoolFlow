@@ -289,12 +289,25 @@ a.dashboard-metric:hover {
 }
 
 .school-dashboard .personal-dashboard {
+  --widget-gap: 15px;
+  --widget-row-unit: 4px;
   align-items: start;
-  gap: 15px;
+  gap: var(--widget-gap);
 }
 
 .school-dashboard .personal-dashboard.compact {
-  gap: 10px;
+  --widget-gap: 10px;
+}
+
+@media screen and (min-width: 651px) {
+  .school-dashboard .personal-dashboard.is-packed {
+    grid-auto-rows: var(--widget-row-unit);
+    row-gap: 0;
+  }
+
+  .school-dashboard .personal-dashboard.is-packed > [data-dashboard-widget] {
+    grid-row-end: span var(--widget-rows);
+  }
 }
 
 .school-dashboard .widget {
