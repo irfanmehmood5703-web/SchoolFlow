@@ -124,6 +124,14 @@ def configure_records(app, db, Student, Employee):
             item = (row.value, row.value, row.class_name)
             if item not in result.setdefault(row.category, []):
                 result[row.category].append(item)
+        # Include actual active fee schedules, even before they are linked to a class map.
+        Workflow = app.extensions['ops_models']['workflow']
+        plans = result.setdefault('fee_plan', [])
+        for row in Workflow.query.filter_by(kind='fee-plans', status='Active').all():
+            name = row.data.get('name')
+            if isinstance(name, str) and name and not any(item[0] == name for item in plans):
+                plans.append((name, name, ''))
+        plans.sort(key=lambda item: item[1].casefold())
         if app.extensions.get('school_settings_helpers'):
             order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
             result['subject']=sorted(result.get('subject',[]),key=lambda item:(order.get(item[0],1000000),item[0],item[2]))
