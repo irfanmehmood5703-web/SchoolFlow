@@ -221,7 +221,9 @@ def configure_sms_gateway(app,db,Student):
 
     def resolve_school_template(body):
         """Resolve school branding before preview or SIM queueing."""
-        school=(getattr(g,'sms_school',None) or {}).get('name') or (getattr(g,'school_identity',None) or {}).get('name')
+        profile_model=app.extensions.get('institute_setup_models',{}).get('profile')
+        profile=db.session.get(profile_model,1) if profile_model else None
+        school=((profile.data or {}).get('name') if profile else '') or (getattr(g,'sms_school',None) or {}).get('name') or (getattr(g,'school_identity',None) or {}).get('name')
         school=str(school or '').strip()
         if not school:raise ValueError('School name is missing from Institute Setup. Configure it before sending SMS.')
         body=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school,str(body),flags=re.IGNORECASE)
@@ -295,6 +297,21 @@ def configure_sms_gateway(app,db,Student):
         audit('Auto queue student attendance SMS',request_id=row.id,device_id=device.id,count=created,staff_id=principal.id if principal is not None else None)
         return created,''
     app.extensions['auto_attendance_sms_queue']=auto_attendance_queue
+
+    def direct_blaster_queue(row,campus):
+        # The explicit Send SMS action is the owner approval; dispatch stays on
+        # the registered campus phone with its existing review and SIM pacing.
+        owner()
+        if row.data.get('source')!='sms-blaster-direct':raise ValueError('Invalid SMS Blaster request.')
+        devices=Device.query.filter_by(campus=campus,active=True).all() if campus else []
+        if len(devices)!=1:raise ValueError('Select or register exactly one active SMS phone for campus '+(campus or '(missing)')+'.')
+        device=devices[0]
+        items=candidates(row,device)
+        if not items:raise ValueError('No valid SMS recipients were found.')
+        created=enqueue_items(row,device,items)
+        audit('Queue SMS Blaster messages',request_id=row.id,device_id=device.id,count=created)
+        return created
+    app.extensions['direct_blaster_queue']=direct_blaster_queue
 
     def queue_automatic_absence_sms(row,campus):
         # Called only by the automatic attendance worker under the tenant write lock.
