@@ -128,4 +128,26 @@ class OwnerAppTests(unittest.TestCase):
         browser=self.login(bound=False);r=browser.get('/workspace/dashboard');self.assertIn(b'class="top-navigation"',r.data)
         r=self.c.get('/workspace/general/parents');self.assertIn(b'owner-embed.css',r.data)
 
+    def test_direct_leave_review_and_decision_is_scoped_and_not_repeated(self):
+        Leave=app.extensions['general_leave_model']
+        with self.tenant():
+            row=Leave(institute_scope=self.schools[0][1],student_id=1,from_date=self.today,to_date=self.today,leave_type='Sick Leave',reason='Fictional leave request')
+            db.session.add(row);db.session.flush();lid=row.id;db.session.commit()
+        path='/owner-app/approvals/student-leave/'+str(lid)
+        r,_=self.page('/owner-app/approvals?campus=North')
+        self.assertIn(path.encode(),r.data)
+        r,_=self.page(path+'?campus=North')
+        self.assertIn(b'Fictional leave request',r.data);self.assertIn(b'name="decision" value="Approved"',r.data);self.assertNotIn(b'<iframe',r.data)
+        self.assertEqual(self.c.get(path+'?campus=South').status_code,404)
+        other=self.login(1);self.assertEqual(other.get(path).status_code,404)
+        self.assertEqual(self.c.post(path,data=dict(decision='Approved')).status_code,400)
+        with self.c.session_transaction() as s:csrf=s['record_csrf']
+        self.assertEqual(self.c.post(path,data=dict(_csrf=csrf,campus='South',decision='Approved')).status_code,404)
+        self.assertEqual(self.c.post(path,data=dict(_csrf=csrf,campus='North',decision='Approved',comment='Fictional note')).status_code,302)
+        self.assertEqual(self.c.post(path,data=dict(_csrf=csrf,campus='North',decision='Rejected')).status_code,409)
+        r,_=self.page(path+'?campus=North');self.assertIn(b'Fictional note',r.data);self.assertNotIn(b'name="decision"',r.data)
+        with self.tenant():
+            row=db.session.get(Leave,lid);self.assertEqual(row.status,'Approved')
+            self.assertEqual(self.ops['audit'].query.filter_by(action='Decide student leave').count(),1)
+
 if __name__=='__main__':unittest.main()
