@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,send_file,session,url_for
 from sqlalchemy.exc import IntegrityError
+from werkzeug.security import generate_password_hash,check_password_hash
 from sqlalchemy.orm.exc import StaleDataError
 
 FEATURES=[('shop','School Shop'),('quizzes','Vacation quizzes'),('notice','Notice Board'),('messages','Messages & Notifications'),('attendance','Attendance'),('diary','Daily Diary'),('marks','Academics & Marks'),('results','Exam Report Cards'),('dates','Date Sheet'),('rollslip','Roll Number Slip'),('fees','Fee Details'),('leave','Leave Application'),('complaints','Complaints & Suggestions'),('talk','Teacher Talk'),('overview','Student 360°'),('profile','Student Profile'),('pickup','Pickup pass'),('help','Get Help / Contact Us')]
@@ -84,6 +85,43 @@ def configure_parents(app,db,Student):
         return value
     def campuses():return app.extensions['staff_access_helpers']['campuses']()
     def policy():return db.session.get(Policy,1)
+    def shared_code_config():
+        cfg=policy()
+        return (cfg.data or {}).get('shared_login',{}) if cfg else {}
+    def shared_login_enabled():
+        cfg=shared_code_config()
+        return bool(cfg.get('enabled') and cfg.get('hash'))
+    def matches_contact(raw):
+        if not re.fullmatch(r'[0-9]{10,15}',raw):return []
+        return [f for f in rm['family'].query.all() if raw in {phone(f.data.get(k)) for k in ('phone','mother_phone','whatsapp')}]
+    def active_family_match(raw):
+        matches=matches_contact(raw)
+        if len(matches)!=1:return None
+        fid=matches[0].id
+        return matches[0] if rm['student'].query.join(Student,Student.id==rm['student'].student_id).filter(rm['student'].family_id==fid,Student.status=='Active').first() else None
+    @bp.route('/login-settings',methods=['GET','POST'])
+    def login_settings():
+        if not session.get('owner_id') or session.get('staff_id') or session.get('demo') or getattr(g,'staff_principal',None):abort(403)
+        cfg=policy();data=dict(cfg.data or {}) if cfg else {};saved=dict(data.get('shared_login',{}))
+        if request.method=='POST':
+            if request.form.get('version')!=str(cfg.version if cfg else 0):raise ValueError('Settings changed. Reload first.')
+            action=request.form.get('action')
+            if action=='enable':
+                code=request.form.get('login_code','')
+                if not re.fullmatch(r'[0-9]{8,12}',code) or code!=request.form.get('confirm_code') or len(set(code))<4:raise ValueError('Enter and confirm a non-trivial 8–12 digit school login code.')
+                if request.form.get('acknowledge')!='yes':raise ValueError('Acknowledge the shared-code privacy risk before enabling.')
+                saved=dict(enabled=True,hash=generate_password_hash(code))
+            elif action=='disable':saved={}
+            else:raise ValueError('Choose an authentication setting.')
+            data['shared_login']=saved
+            if cfg:cfg.data=data
+            else:db.session.add(Policy(id=1,data=data))
+            Account.query.update({Account.version:Account.version+1},synchronize_session=False)
+            Challenge.query.filter_by(used=0,replaced=False).update({'replaced':True})
+            audit('Change school parent login mode',enabled=bool(saved));db.session.commit()
+            flash('Parent login settings saved. Existing parent sessions were revoked.','success')
+            return redirect(url_for('parents.login_settings'))
+        return render_template('parent_login_settings.html',title='Parent Login Settings',enabled=bool(saved.get('enabled') and saved.get('hash')),version=cfg.version if cfg else 0)
     def pending():
         result=defaultdict(set);day=today()
         for b in Bill.query.filter(Bill.due<day).all():
@@ -325,7 +363,7 @@ def configure_parents(app,db,Student):
                         if mode!='follow':updated[feature]=dict(mode=mode,note=note,until=until)
                     overrides[sid]=updated
             else:raise ValueError('Choose a settings action.')
-            if cfg:cfg.data=dict(rules=rules,overrides=overrides)
+            if cfg:cfg.data={**data,'rules':rules,'overrides':overrides}
             else:cfg=Policy(id=1,data=dict(rules=rules,overrides=overrides));db.session.add(cfg)
             audit('Update parent privileges',action_kind=action);db.session.commit();flash('Parent access settings saved.','success');return redirect(url_for('parents.privileges',tab='students' if action!='rules' else 'rules'))
         campus=request.args.get('campus','')
@@ -350,12 +388,18 @@ def configure_parents(app,db,Student):
         account=db.session.get(Account,session.get('parent_family'))
         if not account or account.version!=session.get('parent_version'):return None
         g.parent_actor=dict(kind='Parent',id=account.family_id,label='Family #'+str(account.family_id))
-        return db.session.get(rm['family'],account.family_id)
+        f=db.session.get(rm['family'],account.family_id)
+        raw=session.get('parent_login_phone')
+        if raw and (not shared_login_enabled() or not f or raw not in {phone(f.data.get(k)) for k in ('phone','mother_phone','whatsapp')}):return None
+        return f
     def sign_in(row):
-        account=db.session.get(Account,row.family_id)
-        if not account:account=Account(family_id=row.family_id,version=1);db.session.add(account)
-        account.last_used=now();g.parent_actor=dict(kind='Parent',id=row.family_id,label='Family #'+str(row.family_id));db.session.flush();audit('Parent signed in',family_id=row.family_id,challenge_id=row.id);db.session.commit()
+        return sign_in_family(row.family_id,challenge_id=row.id)
+    def sign_in_family(fid,challenge_id=None,login_phone=None):
+        account=db.session.get(Account,fid)
+        if not account:account=Account(family_id=fid,version=1);db.session.add(account)
+        account.last_used=now();g.parent_actor=dict(kind='Parent',id=fid,label='Family #'+str(fid));db.session.flush();audit('Parent signed in',family_id=fid,challenge_id=challenge_id,method='school-shared-code' if login_phone else 'one-time');db.session.commit()
         session.clear();session.update(parent_scope=g.parent_school.storage_key,parent_family=account.family_id,parent_version=account.version,parent_expiry=now()+28800,record_csrf=secrets.token_urlsafe(32))
+        if login_phone:session['parent_login_phone']=login_phone
         return redirect(url_for('parent_portal.home',code=g.parent_school.code))
     def consume(cid,value,kind):
         row=db.session.get(Challenge,cid)
@@ -369,11 +413,19 @@ def configure_parents(app,db,Student):
         row.used=now();return row
     @public.route('/login',methods=['GET','POST'])
     def login(code):
-        challenge='';error=''
+        challenge='';error='';shared=shared_login_enabled()
         if request.method=='POST':
             rate('ip:'+request.remote_addr,30)
             action=request.form.get('action')
-            if action=='request':
+            if shared:
+                if action!='shared':abort(400)
+                raw=phone(request.form.get('phone',''));rate('shared-phone:'+raw[:30],5)
+                value=request.form.get('login_code','')
+                valid=bool(re.fullmatch(r'[0-9]{8,12}',value) and check_password_hash(shared_code_config()['hash'],value))
+                f=active_family_match(raw) if valid else None
+                if f:return sign_in_family(f.id,login_phone=raw)
+                db.session.commit();error='The registered mobile number or school login code is invalid. Contact the school office.'
+            elif action=='request':
                 raw=phone(request.form.get('phone',''));rate('phone:'+raw,5)
                 matches=[f for f in rm['family'].query.all() if len(raw)>=10 and raw in {phone(f.data.get(k)) for k in ('phone','mother_phone','whatsapp')}]
                 challenge=secrets.token_urlsafe(32)
@@ -385,7 +437,7 @@ def configure_parents(app,db,Student):
                 if row:return sign_in(row)
                 db.session.commit();error='This code is invalid, expired, replaced or already used.'
             else:abort(400)
-        return render_template('parent_portal.html',title='Parent sign in',view='login',school=g.parent_school,challenge=challenge,error=error)
+        return render_template('parent_portal.html',title='Parent sign in',view='login',school=g.parent_school,challenge=challenge,error=error,shared_login=shared)
     @public.route('/enter',methods=['GET','POST'])
     def enter(code):
         error=''
