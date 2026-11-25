@@ -149,7 +149,7 @@
   transition: transform .16s ease, box-shadow .16s ease;
 }
 
-.dashboard-metric::after {
+a.dashboard-metric::after {
   content: "↗\fe0e";
   position: absolute;
   inset: 12px 12px auto auto;
@@ -165,7 +165,7 @@
   font-weight: 700;
 }
 
-.dashboard-metric:hover {
+a.dashboard-metric:hover {
   transform: translateY(-3px);
   text-decoration: none;
   box-shadow: 0 9px 22px #172e2720;
@@ -193,6 +193,24 @@
   color: var(--dashboard-muted);
   font-size: 11px;
   line-height: 1.35;
+}
+
+.dashboard-metric-balance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tone-line);
+  color: var(--tone-dark);
+  font-size: 11px;
+}
+
+.dashboard-metric-balance b {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-view-heading {
@@ -271,6 +289,7 @@
 }
 
 .school-dashboard .personal-dashboard {
+  align-items: start;
   gap: 15px;
 }
 
@@ -351,6 +370,18 @@
 .school-dashboard .widget-calculation {
   margin-top: 12px;
   color: var(--dashboard-muted);
+}
+
+.school-dashboard .dashboard-finance-summary {
+  padding-top: 8px;
+  border-top: 1px solid var(--tone-line);
+}
+
+.dashboard-finance-summary > summary {
+  color: var(--tone-dark);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .dashboard-bars {
@@ -443,7 +474,7 @@
     padding: 11px;
   }
 
-  .dashboard-metric::after {
+  a.dashboard-metric::after {
     content: none;
   }
 
@@ -462,7 +493,7 @@
     transition: none;
   }
 
-  .dashboard-metric:hover {
+  a.dashboard-metric:hover {
     transform: none;
   }
 }
