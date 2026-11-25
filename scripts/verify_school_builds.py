@@ -72,7 +72,7 @@ def verify():
                 assert run(base,fixture_token=token)
                 with app.app_context():
                     latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
-                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==17
+                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==18
                     assert db.session.get(models['signing'],scope).fingerprint==first_key
             with tempfile.TemporaryDirectory(prefix='face-build-qa-') as folder:
                 path=Path(folder)/'test.p12'
