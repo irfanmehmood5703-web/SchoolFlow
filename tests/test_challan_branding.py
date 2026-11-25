@@ -32,6 +32,22 @@ class ChallanBrandingTests(unittest.TestCase):
         return self.c.post('/workspace/core/fees/challan-branding',data=data)
     def print(self,**changes):
         data=dict(_csrf=self.csrf,action='branded',ids=str(self.bill.id));data.update(changes);return self.c.post('/workspace/fee-action',data=data)
+    def test_family_number_visible_in_pay_print_and_both_layouts(self):
+        family=self.rm['family'](number='F-CANONICAL',data={});db.session.add(family);db.session.flush()
+        detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.family_id=family.id
+        db.session.commit()
+        page=self.c.get('/workspace/fees/payments?q=F-CANONICAL')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'<th>Family No.</th>',page.data)
+        self.assertIn(b'<td>F-CANONICAL</td>',page.data)
+        self.assertIn(self.s.name.encode(),page.data)
+        for action in ('branded','vertical','horizontal','family'):
+            printed=self.print(action=action)
+            self.assertEqual(printed.status_code,200)
+            self.assertEqual(printed.data.count(b'<th scope="row">Family No.</th><td>F-CANONICAL</td>'),3)
+        self.assertEqual(self.bill.remaining,200000)
+        detail.family_id=None;detail.data={**detail.data,'family_no':''};db.session.commit()
+        self.assertIn('Family No.</th><td>—</td>'.encode(),self.print().data)
     def test_get_is_read_only_and_form_ids_unique(self):
         for scope in ('','Campus A'):
             r=self.c.get('/workspace/core/fees/challan-branding',query_string={'campus':scope});self.assertEqual(r.status_code,200)
