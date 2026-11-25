@@ -42,6 +42,7 @@ def configure_notices(app,db,Student):
                 if allowed is not None and not required<=allowed:continue
                 result.append(dict(key='payment:'+str(row.id),revision=str(row.version) if hasattr(row,'version') else 'pending',title='Payment request pending',detail='Request #'+str(row.id),url=url_for('staff_access.payment_requests')))
                 if sum(e['key'].startswith('payment:') for e in result)>=10:break
+        result=app.extensions['automatic_report_events']()+result
         states={s.source:s.revision for s in State.query.filter(State.actor==a['key'],State.source.in_([e['key'] for e in result])).all()} if result else {}
         for e in result:e['read']=states.get(e['key'])==e['revision']
         return result[:40]
