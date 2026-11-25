@@ -124,3 +124,28 @@
  /* Do not squeeze multi-month ranges into the monthly grid. */
  .attendance-sheet-print .report-table-output:not([data-day-count]) table{table-layout:auto!important}
 }
+
+/* Student attendance reports: use one print flow and the configured school branding.
+   Long reports paginate naturally with repeated column headers. */
+@media print {
+ body:has(.student-attendance-report-print){page:sf-report-table}
+ body:has(.student-attendance-report-print) :is(main,.page-content,.student-attendance-report-print,.student-attendance-report-print *){page:auto!important}
+ body:has(.student-attendance-report-print .report-branding-header.has-branding) .school-print-header{display:none!important}
+ .student-attendance-report-print>.page-heading,.student-attendance-report-print>.cards:empty{display:none!important}
+ .student-attendance-report-print{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;break-inside:auto!important}
+ .student-attendance-report-print>.report-branding-header{break-after:avoid;margin:0!important}
+ .student-attendance-report-print .report-branding-header>div{padding:3pt!important;margin:0 0 4pt!important}
+ .student-attendance-report-print .report-branding-header img{max-height:12mm!important;max-width:30mm!important;width:auto!important;object-fit:contain}
+ .student-attendance-report-print .report-branding-header :is(h2,h3,p){margin:2pt 0!important;line-height:1.2!important}
+ .student-attendance-report-print>p,.student-attendance-report-print .report-branding-body p{margin:3pt 0!important;font-size:9pt}
+ .student-attendance-report-print>.flash{margin:4pt 0!important;padding:3pt 5pt!important;font-size:8pt!important}
+ .student-attendance-report-print .report-table-output{margin:4pt 0!important;break-inside:auto!important}
+ .student-attendance-report-print .report-table-output h2{font-size:10pt;margin:3pt 0}
+ .student-attendance-report-print .report-table-output .table{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+ .student-attendance-report-print .report-table-output .table>table{width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important;font-size:9pt!important;line-height:1.25!important;border-collapse:collapse}
+ .student-attendance-report-print .report-table-output table :is(th,td){padding:3pt 3pt!important;border:1px solid #a9c4b5!important;vertical-align:middle;white-space:normal!important;overflow-wrap:anywhere!important}
+ .student-attendance-report-print .report-table-output th{color:#174d38;background:#e9f3ed;font-weight:700}
+ .student-attendance-report-print .report-table-output tr{break-inside:avoid!important}
+ .student-attendance-report-print .report-branding-footer{display:block!important;margin-top:5pt!important;break-inside:avoid!important;page-break-inside:avoid!important;break-before:auto!important}
+ .student-attendance-report-print .report-branding-footer p{margin:3pt 0!important;font-size:9pt}
+}

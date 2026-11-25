@@ -56,7 +56,7 @@ _EXAM_BRANDING_COPY = {
     'Award List': ('Examination Award List', '<p><strong>Examination:</strong> [examName]</p>'),
     'Individual Attendance Report': ('Individual Attendance Report', '<p>Student attendance details</p>'),
     'Combine Attendance Report': ('Combined Attendance Report', '<p>Consolidated attendance information</p>'),
-    'Class/section attendance': ('Class / Section Attendance', '<p>Class and section attendance summary</p>'),
+    'Class/section attendance': ('Combined Day-wise Attendance Report', '<p>Daily attendance totals for the selected students</p>'),
     'Combined Subject Result Card': ('Combined Subject Result Card', '<p>Subject-wise examination performance</p>'),
     'Combined Subject Report': ('Combined Subject Report', '<p>Consolidated subject performance</p>'),
     'Term Wise Report': ('Term-Wise Examination Report', '<p>Term-wise performance overview</p>'),

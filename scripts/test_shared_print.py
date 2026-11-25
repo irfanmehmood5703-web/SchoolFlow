@@ -40,5 +40,13 @@ with sync_playwright() as p:
         assert len(result.pages)==1,(fmt,'attendance page count',len(result.pages))
         text=result.pages[0].extract_text()
         assert 'Student 4 Example' in text and 'Principal' in text and '30' in text and 'Duplicate school heading' not in text
-        print(fmt+': salary slips, long register, voucher and monthly attendance print passed',flush=True)
+        for n in (10,110):
+            page.set_content('<html><head><style>'+css+'</style><style>'+shared+'</style><style>'+report+'</style><style>@page sf-report-table{size:'+fmt+';margin:10mm}</style></head><body><main><div class="page-content"><div class="school-print-header">Duplicate school heading</div><div class="report-print-document student-attendance-report-print"><div class="page-heading">Screen heading</div><p>November 2026</p><div class="report-branding-header has-branding"><div><h2>Example School</h2><h3>Individual Attendance Report</h3></div></div><div class="report-branding-body"><p>Saved attendance records</p></div><section class="form-card report-table-output"><h2>'+str(n)+' matching rows</h2><div class="table">'+table(n)+'</div></section><div class="report-branding-footer"><p>Date: 2026-11-25</p><p>Class Teacher: ______ Principal: ______</p></div></div></div></main></body></html>')
+            result=pdf(page,fmt)
+            assert (len(result.pages)==1 if n==10 else len(result.pages)>1),(fmt,n,len(result.pages))
+            pages=[pg.extract_text() for pg in result.pages]
+            assert 'Entry '+str(n) in pages[-1] and 'Principal' in pages[-1]
+            assert 'Duplicate school heading' not in ' '.join(pages)
+            assert all('Reference' in t for t in pages)
+        print(fmt+': salary slips, long register, voucher and attendance reports print passed',flush=True)
     browser.close()
