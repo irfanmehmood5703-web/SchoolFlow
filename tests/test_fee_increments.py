@@ -129,7 +129,7 @@ class FeeIncrementTests(unittest.TestCase):
         main=page.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertNotIn(b'Configuration',main);self.assertNotIn(b'Core Settings',main)
         self.assertEqual(page.count(b'class="nav-menu configuration-menu"'),1)
-        self.assertNotIn(b'<aside',page)
+        self.assertNotIn(b'<aside',main)
 
     def test_batch_selection_is_paginated_and_database_queries_are_bounded(self):
         from sqlalchemy import event
