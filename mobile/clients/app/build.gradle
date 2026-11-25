@@ -1,10 +1,24 @@
 plugins { id 'com.android.application' }
 import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 
 def schoolFile=providers.gradleProperty('schoolBrandingFile').orNull
 def school=schoolFile ? new JsonSlurper().parse(new File(schoolFile),'UTF-8') : null
 if (school && (!(school.school_key ==~ /[0-9a-f]{32}/) || !(school.code ==~ /[A-Z0-9][A-Z0-9-]{2,39}/) || school.name.size()<1 || school.name.size()>80)) throw new GradleException('Invalid school branding')
 def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').replace("'","\\'")+'"' }
+
+// Only build-time public Android app configuration is accepted here. Never
+// put a service-account key in an APK or in this repository.
+def firebaseRaw=System.getenv('SCHOOLFLOW_FIREBASE_ANDROID_CONFIG_JSON')
+def firebaseApps=firebaseRaw ? new JsonSlurper().parseText(firebaseRaw) : [:]
+if (!(firebaseApps instanceof Map)) throw new GradleException('Invalid Firebase app configuration')
+def firebaseOptions={ packageName ->
+    def cfg=firebaseApps[packageName]
+    if (!cfg) return [:]
+    if (!(cfg instanceof Map) || !(cfg.app_id ==~ /1:[0-9]+:android:[a-f0-9]+/) || !(cfg.sender_id ==~ /[0-9]+/) || !(cfg.project_id ==~ /[a-z][a-z0-9-]{4,62}/) || !(cfg.api_key ==~ /[A-Za-z0-9_-]{20,100}/)) throw new GradleException('Invalid Firebase options for registered app')
+    if (!cfg.app_id.startsWith('1:'+cfg.sender_id+':')) throw new GradleException('Firebase sender does not match app')
+    [app_id:cfg.app_id,sender_id:cfg.sender_id,project_id:cfg.project_id,api_key:cfg.api_key]
+}
 
 android {
     namespace 'com.schoolflow.clients'
@@ -15,6 +29,7 @@ android {
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
         buildConfigField 'String','SCHOOL_SCOPE',school ? '"'+school.school_key+'"' : '""'
+        buildConfigField 'String','FCM_CONFIG','""'
         manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/schoolflow_icon']
         if(school){ versionCode (school.sequence as int); versionName '0.3-school-test.'+school.sequence }
     }
@@ -44,6 +59,10 @@ android {
         def names=[parents:'Parents',teacher:'Teacher',owner:'Owner',sms:'SMS',qr:'QR Attendance']
         flavor.applicationId='com.schoolflow.schools.s'+school.school_key+'.'+flavor.name
         flavor.resValue 'string','app_name',resourceText(school.name+' '+names[flavor.name])
+        if (flavor.name!='qr') {
+            def cfg=firebaseOptions(flavor.applicationId+'.test')
+            if(cfg) flavor.buildConfigField 'String','FCM_CONFIG',JsonOutput.toJson(JsonOutput.toJson(cfg))
+        }
     } }
     buildTypes { debug { applicationIdSuffix '.test'; if(school) { debuggable false; signingConfig signingConfigs.schoolKey } }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
         release { minifyEnabled false } }
@@ -51,6 +70,7 @@ android {
     lint { abortOnError true }
 }
 dependencies {
+    implementation 'com.google.firebase:firebase-messaging:24.1.2'
     testImplementation 'junit:junit:4.13.2'
     qrImplementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     // ZXing's camera permission code uses AndroidX Core at runtime.

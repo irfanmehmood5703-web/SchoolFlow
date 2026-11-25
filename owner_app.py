@@ -294,7 +294,7 @@ def configure_owner_app(app,db,Student,Employee):
             if row:row.revision=event['revision'];row.read_at=time.time()
             else:db.session.add(State(actor=who,source=event['key'],revision=event['revision']))
         db.session.commit();return '',204
-    @bp.get('/notification-feed')
+    @bp.route('/notification-feed',methods=['GET','POST'])
     def native_notification_feed():
         from mobile_notices import feed
         # Native owner notices use the whole authorised institute, not the last

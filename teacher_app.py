@@ -97,7 +97,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return events
     @bp.get('/notifications')
     def notifications():return render('notifications',events=teacher_notification_events())
-    @bp.get('/notification-feed')
+    @bp.route('/notification-feed',methods=['GET','POST'])
     def native_notification_feed():
         from mobile_notices import feed
         return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events())

@@ -44,6 +44,31 @@ public final class NoticeJob extends JobService {
   long now=System.currentTimeMillis();
   if(s.getPendingJob(ONCE)==null&&now-p.getLong("last_check",0L)>120000L)s.schedule(new JobInfo.Builder(ONCE,name).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build());
  }
+ public static void wake(Context c){
+  if(!supported()||!permitted(c))return;
+  JobScheduler s=c.getSystemService(JobScheduler.class);
+  if(s.getPendingJob(ONCE)==null)s.schedule(new JobInfo.Builder(ONCE,new ComponentName(c,NoticeJob.class)).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build());
+ }
+ public static void push(Context c,String actor,String ids){
+  if(!supported()||!permitted(c)||!actor.matches("[a-f0-9]{64}")||ids.length()>1300)return;
+  android.content.SharedPreferences state=c.getSharedPreferences("notice_state",MODE_PRIVATE);
+  long epoch=SESSION_EPOCH.get();
+  if(!actor.equals(state.getString("actor","")))return;
+  Set<String> seen=state.getStringSet("seen",Collections.emptySet());
+  boolean fresh=false;
+  for(String id:ids.split(","))if(id.matches("[a-f0-9]{64}")&&!seen.contains(id)){fresh=true;break;}
+  if(!fresh)return;
+  NotificationManager nm=c.getSystemService(NotificationManager.class);
+  nm.createNotificationChannel(new NotificationChannel(CHANNEL,"School updates",NotificationManager.IMPORTANCE_DEFAULT));
+  Intent intent=new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+  PendingIntent tap=PendingIntent.getActivity(c,NOTICE,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+  // No school records or financial amounts are included in the push payload.
+  Notification note=new Notification.Builder(c,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("School update").setContentText("Open your school app for new updates.").setVisibility(Notification.VISIBILITY_PRIVATE).setContentIntent(tap).setOnlyAlertOnce(true).setAutoCancel(true).build();
+  if(epoch!=SESSION_EPOCH.get())return;
+  nm.notify(NOTICE,note);
+  if(epoch!=SESSION_EPOCH.get()){nm.cancel(NOTICE);return;}
+  wake(c);
+ }
  public static void clear(Context c){
   SESSION_EPOCH.incrementAndGet();
   c.getSharedPreferences("notice_state",MODE_PRIVATE).edit().clear().commit();
@@ -58,6 +83,24 @@ public final class NoticeJob extends JobService {
   tasks.put(params.getJobId(),worker);worker.start();return true;
  }
  @Override public boolean onStopJob(JobParameters params){Thread t=tasks.remove(params.getJobId());if(t!=null)t.interrupt();return false;}
+ private JSONObject response(HttpURLConnection conn)throws Exception{
+  int status=conn.getResponseCode();
+  if(status==401||status==403||status==409||(status>=300&&status<400))return null;
+  if(status!=200)throw new IOException("Notice feed unavailable");
+  if(conn.getContentType()==null||!conn.getContentType().contains("application/json"))throw new IOException("Unexpected response");
+  try(InputStream in=conn.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] bytes=new byte[2048];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>131072)throw new IOException("Notice response too large");out.write(bytes,0,n);}return new JSONObject(out.toString("UTF-8"));}
+ }
+ private void registerPortal(String path,String cookie,JSONObject result,String token)throws Exception{
+  if(!result.optBoolean("push_enabled")||token.isEmpty()||result.optString("push_csrf").isEmpty())return;
+  HttpURLConnection conn=(HttpURLConnection)new URL(EndpointPolicy.BASE+path).openConnection();
+  try{
+   conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(10000);conn.setReadTimeout(10000);conn.setRequestMethod("POST");conn.setDoOutput(true);
+   conn.setRequestProperty("Cookie",cookie);conn.setRequestProperty("Content-Type","application/x-www-form-urlencoded");
+   String data="_csrf="+URLEncoder.encode(result.getString("push_csrf"),"UTF-8")+"&push_token="+URLEncoder.encode(token,"UTF-8")+"&package="+URLEncoder.encode(getPackageName(),"UTF-8");
+   try(OutputStream out=conn.getOutputStream()){out.write(data.getBytes(StandardCharsets.UTF_8));}
+   response(conn);
+  }finally{conn.disconnect();}
+ }
  private JSONObject fetch()throws Exception{
   String role=BuildConfig.ROLE,path,cookie=null;
   JSONObject sms=null;
@@ -81,13 +124,12 @@ public final class NoticeJob extends JobService {
    if(sms!=null){
     conn.setRequestMethod("POST");conn.setDoOutput(true);conn.setRequestProperty("Content-Type","application/json");
     conn.setRequestProperty("X-Institute-Code",sms.getString("code"));conn.setRequestProperty("X-Device-Scope",sms.getString("scope"));conn.setRequestProperty("Authorization","Bearer "+sms.getString("key"));
-    try(OutputStream out=conn.getOutputStream()){out.write("{}".getBytes(StandardCharsets.UTF_8));}
+    JSONObject payload=new JSONObject();String token=SchoolPushService.token(this);if(!token.isEmpty())payload.put("push_token",token).put("package",getPackageName());
+   try(OutputStream out=conn.getOutputStream()){out.write(payload.toString().getBytes(StandardCharsets.UTF_8));}
    }else conn.setRequestProperty("Cookie",cookie);
-   int status=conn.getResponseCode();
-   if(status==401||status==403||status==409||(status>=300&&status<400))return null;
-   if(status!=200)throw new IOException("Notice feed unavailable");
-   if(conn.getContentType()==null||!conn.getContentType().contains("application/json"))throw new IOException("Unexpected response");
-   try(InputStream in=conn.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] bytes=new byte[2048];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>131072)throw new IOException("Notice response too large");out.write(bytes,0,n);}return new JSONObject(out.toString("UTF-8"));}
+   JSONObject result=response(conn);
+   if(sms==null&&result!=null&&result.optBoolean("push_enabled"))try{registerPortal(path,cookie,result,SchoolPushService.token(this));}catch(Exception ignored){/* Polling still works. */}
+   return result;
   }finally{conn.disconnect();}
  }
  private void check()throws Exception{
@@ -114,7 +156,7 @@ public final class NoticeJob extends JobService {
    Intent intent=new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
    PendingIntent tap=PendingIntent.getActivity(this,NOTICE,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
    Notification publicVersion=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("School update").setContentText("Open your school app").build();
-   Notification notice=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body)).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion).setContentIntent(tap).setAutoCancel(true).build();
+   Notification notice=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body)).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion).setOnlyAlertOnce(true).setContentIntent(tap).setAutoCancel(true).build();
    getSystemService(NotificationManager.class).notify(NOTICE,notice);
   }
   if(epoch!=SESSION_EPOCH.get()){getSystemService(NotificationManager.class).cancel(NOTICE);return;}

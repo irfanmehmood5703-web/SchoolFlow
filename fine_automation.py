@@ -238,6 +238,8 @@ def configure_fine_automation(app,db,Student):
                 except Exception:app.logger.exception('Fine schedule worker tick failed')
                 try:app.extensions['automatic_report_helpers']['tick_all']()
                 except Exception:app.logger.exception('Automatic report scheduler tick failed')
+                try:app.extensions['firebase_push_helpers']['tick']()
+                except Exception:app.logger.warning('FCM scheduler unavailable; mobile polling remains available.')
                 try:app.extensions['snapshot_helpers']['tick_all']()
                 except Exception:app.logger.exception('Daily snapshot scheduler tick failed')
                 try:app.extensions['attendance_device_helpers']['tick_all']()
