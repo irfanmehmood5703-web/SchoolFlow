@@ -113,7 +113,7 @@ public final class QrActivity extends Activity {
         buttons();
         new IntentIntegrator(this).setCaptureActivity(QrCaptureActivity.class)
                 .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setOrientationLocked(true)
-                .setPrompt("Scan a SchoolFlow QR card").initiateScan();
+                .setPrompt(getString(R.string.qr_scan_prompt)).initiateScan();
     }
 
     private void unlock() {
