@@ -159,7 +159,12 @@ def configure_parents(app,db,Student):
         if not row:row=Rate(key=key,count=0,expires=stamp+seconds);db.session.add(row)
         elif row.expires<=stamp:row.count=0;row.expires=stamp+seconds
         row.count+=1
-        if row.count>limit:db.session.commit();abort(429,'Too many attempts. Try again later.')
+        if row.count>limit:
+            # Preserve the original rate window; extra attempts do not extend it.
+            g.parent_retry_after=max(1,int(row.expires-stamp+0.999999))
+            g.parent_retry_at=row.expires
+            db.session.commit()
+            abort(429,'Too many attempts. Try again later.')
     def csrf():
         if request.method=='POST' and (not request.form.get('_csrf') or not hmac.compare_digest(request.form['_csrf'],session.get('record_csrf',''))):abort(400,'Reload this form before continuing.')
     @bp.before_request
@@ -375,6 +380,15 @@ def configure_parents(app,db,Student):
         rows,page,total=pagination(matching)
         return render_template('parents.html',title='Parents App Privileges',tab='privileges',priv_tab=tab,features=FEATURES,always=ALWAYS,campuses=campuses(),campus=campus,rules=data.get('rules',{}).get(campus,{}),overrides=data.get('overrides',{}),version=cfg.version if cfg else 0,rows=rows,page=page,total=total,months=months,manage=manage,access=access)
 
+    @public.errorhandler(429)
+    def parent_rate_limited(error):
+        seconds=getattr(g,'parent_retry_after',None)
+        school=getattr(g,'parent_school',None)
+        if seconds is None or school is None:return error
+        response=app.make_response((render_template('parent_rate_limit.html',title='Login temporarily limited',school=school,retry_minutes=(seconds+59)//60,retry_at=datetime.fromtimestamp(g.parent_retry_at,ZoneInfo('Asia/Karachi')).strftime('%d %b %Y, %I:%M %p')),429))
+        response.headers['Retry-After']=str(seconds)
+        response.headers['Cache-Control']='private, no-store'
+        return response
     @public.before_request
     def public_scope():
         code=(request.view_args or {}).get('code','').upper();School=app.extensions['identity_models']['institute']
