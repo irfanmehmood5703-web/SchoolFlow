@@ -2,7 +2,7 @@
 import calendar,hmac,secrets,time,hashlib,json
 from collections import Counter,defaultdict
 from datetime import date,datetime,timedelta,timezone
-from flask import Blueprint,abort,g,redirect,render_template,request,session,url_for
+from flask import Blueprint,abort,flash,g,redirect,render_template,request,session,url_for
 from sqlalchemy import or_
 from urllib.parse import quote
 from sqlalchemy.exc import IntegrityError
@@ -205,7 +205,7 @@ def configure_owner_app(app,db,Student,Employee):
             if state:rows.append(dict(id='student:'+str(s.id),group='Students',kind='Admission Approval',label=s.name,state=state,url=link('owner_app.open_tool',key='admissions')))
         student_names={s.id:s.name for s,_ in students}
         for leave in app.extensions['general_leave_model'].query.filter_by(institute_scope=g.school_identity['scope']).all():
-            if leave.student_id in student_names:rows.append(dict(id='student-leave:'+str(leave.id),group='Students',kind='Leaves',label=student_names[leave.student_id],state='Declined' if leave.status=='Rejected' else leave.status,url=link('owner_app.open_tool',key='student-leaves')))
+            if leave.student_id in student_names:rows.append(dict(id='student-leave:'+str(leave.id),group='Students',kind='Leaves',label=student_names[leave.student_id],state='Declined' if leave.status=='Rejected' else leave.status,url=link('owner_app.review_student_leave',leave_id=leave.id),leave=leave))
         names={str(e.id):e.name for e,_ in employees()}
         kinds={'salary-plans':'Salary Plan','increments':'Annual Increment','advances':'Advance Salary','leave-approvals':'Leaves','staff-payment-approval':'Fee Payment'}
         for row in workflows():
@@ -252,6 +252,25 @@ def configure_owner_app(app,db,Student,Employee):
         if group not in ('All','Students','Employees','Finance') or state not in ('Pending','Approved','Declined'):abort(422)
         all_rows=approvals();rows=[r for r in all_rows if (group=='All' or r['group']==group) and r['state']==state]
         return render('approvals',rows=rows,all_rows=all_rows,group=group,state=state)
+    @bp.route('/approvals/student-leave/<int:leave_id>',methods=['GET','POST'])
+    def review_student_leave(leave_id):
+        Leave=app.extensions['general_leave_model']
+        row=Leave.query.filter_by(id=leave_id,institute_scope=g.school_identity['scope']).populate_existing().first_or_404()
+        student=db.get_or_404(Student,row.student_id)
+        detail=D.query.filter_by(student_id=student.id).first()
+        data=detail.data if detail else {}
+        if g.owner_campus and data.get('campus')!=g.owner_campus:abort(404)
+        if request.method=='POST':
+            decision=request.form.get('decision','')
+            comment=request.form.get('comment','').strip()
+            if decision not in ('Approved','Rejected') or len(comment)>2000:abort(422,'Choose a valid decision and comment.')
+            # POST protection already holds the tenant write gate.
+            if row.status!='Pending':abort(409,'This leave request has already been decided.')
+            row.status=decision;row.comment=comment
+            db.session.add(ops['audit'](action='Decide student leave',data=dict(leave_id=row.id,student_id=student.id,campus=data.get('campus',''),decision=decision)))
+            db.session.commit()
+            return redirect(link('owner_app.review_student_leave',leave_id=row.id,saved=1))
+        return render('leave-review',leave=row,student=student,student_data=data,saved=request.args.get('saved')=='1')
     def feedback_counts():
         F=app.extensions['general_feedback_model'];q=F.query.filter_by(institute_scope=g.school_identity['scope'])
         if g.owner_campus:q=q.filter_by(campus=g.owner_campus)
