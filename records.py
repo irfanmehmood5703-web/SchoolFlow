@@ -432,6 +432,8 @@ def configure_records(app, db, Student, Employee):
                 return render_form(kind,obj,data,errors,422)
         capacity_waiting = False
         try:
+            if request.form.get('update_family_mobile')=='1' and (kind!='student' or created or data.get('family_mode')!='existing'):
+                raise ValueError('Update family mobile is available for an existing student in an existing family.')
             if kind == "student":
                 capacity_waiting = app.extensions['admission_capacity']['guard'](data,obj)
                 obj = obj or Student()
@@ -443,8 +445,29 @@ def configure_records(app, db, Student, Employee):
                     data["bio_id"] = str(obj.id)
                 if data["family_mode"] == "existing":
                     family = db.session.get(RecordFamily, int(data["family_id"]))
-                    # Existing-family details are authoritative. Editing one sibling
-                    # must not silently rewrite every other sibling's family.
+                    # Existing family is authoritative except for an explicitly
+                    # confirmed, owner-only update of the student's own family contact.
+                    if request.form.get('update_family_mobile')=='1':
+                        if created or not session.get('owner_id') or session.get('demo') or session.get('staff_id') or getattr(g,'staff_principal',None):abort(403)
+                        prior=StudentDetails.query.filter_by(student_id=obj.id).first()
+                        if not prior or prior.family_id!=family.id:raise ValueError('Save the family link first, then update its mobile number.')
+                        normalize=app.extensions['parent_helpers']['phone']
+                        new_phone=data['phone'].strip()
+                        if not re.fullmatch(r'03[0-9]{9}',normalize(new_phone)):raise ValueError('Enter a valid Pakistani mobile number.')
+                        if new_phone!=family.data.get('phone',''):
+                            family.data={**family.data,'phone':new_phone}
+                            siblings=StudentDetails.query.filter_by(family_id=family.id).all()
+                            for sibling in siblings:
+                                pupil=db.session.get(Student,sibling.student_id)
+                                if pupil:pupil.phone=new_phone
+                                sibling.data={**sibling.data,'phone':new_phone}
+                            pm=app.extensions['parent_models']
+                            account=db.session.get(pm['account'],family.id)
+                            if account:account.version+=1
+                            pm['challenge'].query.filter_by(family_id=family.id,used=0,replaced=False).update({'replaced':True})
+                            db.session.add(app.extensions['ops_models']['audit'](action='Update family registered mobile',data={'family_id':family.id,'student_count':len(siblings)}))
+                    elif not created and data['phone']!=family.data.get('phone','') and StudentDetails.query.filter_by(student_id=obj.id,family_id=family.id).first():
+                        flash('Family mobile was not changed. Tick Update registered family mobile number to save a new number for this family.','warning')
                     data.update(family.data)
                     obj.father, obj.phone = data["father"], data["phone"]
                 else:
