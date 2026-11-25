@@ -32,6 +32,28 @@ def configure_sms_batches(app,db,bp,Device,Job,auth,data):
         row.active=False
         for job in rows(row):
             if job.state=='claimed':job.state='queued';job.token='';job.expires=0;job.updated=time.time()
+    def selected_ids(payload):
+        ids=payload.get('ids')
+        if not isinstance(ids,list) or not 1<=len(ids)<=50 or any(not isinstance(i,str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',i) for i in ids) or len(set(ids))!=len(ids):abort(422)
+        return ids
+    def pending(device):
+        return Job.query.filter_by(device_id=device.id,generation=device.generation,state='queued')
+    @bp.post('/api/sms/devices/<int:did>/pending')
+    def pending_list(did):
+        device,_=auth(did);data();q=pending(device)
+        count=q.count();jobs=q.order_by(Job.created,Job.id).limit(50).all()
+        response=dict(total=count,jobs=[dict(id=j.id,phone=j.phone,text=j.text) for j in jobs])
+        db.session.commit();return jsonify(**response)
+    @bp.post('/api/sms/devices/<int:did>/cancel-pending')
+    def cancel_pending(did):
+        device,_=auth(did);ids=selected_ids(data())
+        if active(device):abort(409,'Pause sending before cancelling messages.')
+        jobs=Job.query.filter(Job.id.in_(ids),Job.device_id==device.id,Job.generation==device.generation).all()
+        if len(jobs)!=len(ids) or any(j.state not in ('queued','cancelled') for j in jobs):abort(409,'Selection changed. Refresh pending messages.')
+        for job in jobs:
+            if job.state=='queued':
+                job.state='cancelled';job.updated=time.time();job.detail='Cancelled by registered SMS phone operator before submission.'
+        db.session.commit();return jsonify(cancelled=len(jobs))
     @bp.post('/api/sms/devices/<int:did>/batch')
     def batch(did):
         device,_=auth(did);payload=data();token=payload.get('id');interval=payload.get('interval',20)
@@ -39,11 +61,16 @@ def configure_sms_batches(app,db,bp,Device,Job,auth,data):
         old=db.session.get(Batch,token)
         if old:
             row=owned(device,token)
-            if row.interval!=interval:abort(409)
+            if row.interval!=interval or ('ids' in payload and set(row.jobs)!=set(selected_ids(payload))):abort(409)
             response=summary(row);db.session.commit();return jsonify(batch=response)
         if Batch.query.filter_by(device_id=device.id,generation=device.generation,active=True).first():abort(409,'Pause the previous run before starting another.')
         # A snapshot never absorbs newly queued messages without another Start.
-        jobs=Job.query.filter_by(device_id=device.id,generation=device.generation,state='queued').order_by(Job.created,Job.id).limit(200).all()
+        q=pending(device)
+        if 'ids' in payload:
+            ids=selected_ids(payload)
+            jobs=q.filter(Job.id.in_(ids)).order_by(Job.created,Job.id).all()
+            if len(jobs)!=len(ids):abort(409,'Selection changed. Refresh pending messages.')
+        else:jobs=q.order_by(Job.created,Job.id).limit(200).all()
         if not jobs:db.session.commit();return jsonify(batch=None,queued=0)
         row=Batch(id=token,device_id=device.id,generation=device.generation,interval=interval,jobs=[j.id for j in jobs]);db.session.add(row);db.session.flush();response=summary(row);db.session.commit();return jsonify(batch=response)
     @bp.post('/api/sms/devices/<int:did>/batch-status')
