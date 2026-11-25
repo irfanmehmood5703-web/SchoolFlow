@@ -1,9 +1,9 @@
 {% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}
 {% block content %}
-{{m.heading(title,'Select recipients, choose a template and save a communication request. Actual SMS delivery requires a verified SMS connection.')}}
+{{m.heading(title,'Select recipients, choose a template and prepare messages. School SIM delivery uses the registered SMS App.')}}
 <div class="form-card" style="border-left:4px solid #176b52">
 <strong>{{'Fee Intimation — outstanding balances only' if fee_mode else 'SMS Blaster — general school announcements'}}</strong>
-<p class="muted">This page saves requests only. It does not send SMS or claim delivery. Use the SMS Report to review recorded requests.</p>
+<p class="muted">{{'Send SMS adds messages directly to the registered School SIM queue. Use SMS Report to review the request and open the SMS App to submit messages.' if direct_allowed else 'This page saves requests for review. It does not send SMS or claim delivery. Use SMS Report to review recorded requests.'}}</p>
 <p><a href="{{url_for('ops.messages')}}">SMS Blaster</a> · <a href="{{url_for('ops.fee_intimation')}}">Fee Intimation</a></p>
 </div>
 <form method="get" class="form-card no-print">
@@ -32,14 +32,18 @@
 </select></div>
 {{m.input('message','Message','textarea','',true)}}
 <p class="muted">Available placeholders: {student_name}, {father_name}, {school_name}{% if fee_mode %}, {remaining_fee}, {fee_month}{% endif %}. Personalisation requires saved student information and a connected delivery service.</p>
-{{m.communication()}}
+{% if direct_allowed %}<div class="check-grid comm-options">{% for key,label in [('father_contact','Father Contact'),('mother_contact','Mother Contact'),('student_contact','Student Contact'),('app_sms','App SMS'),('branded_sms','Branded SMS'),('whatsapp_sms','WhatsApp SMS'),('parent_notification','Parent App Notification'),('teacher_notification','Teacher App Notification')] %}<label class="check"><input type="checkbox" name="{{key}}" {{'checked' if key in ['father_contact','app_sms'] else ''}}>{{label}}</label>{% endfor %}</div>{% else %}{{m.communication()}}{% endif %}
 <h3>{{'Students with unpaid challans' if fee_mode else 'Select students'}} ({{students|length}} matching)</h3>
 <p class="muted" id="sms-selection-count" aria-live="polite">0 selected. Use the header checkbox to select all students in this filtered list.</p>
 <div class="table"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="Select all students"></th><th>SID</th><th>Student</th><th>Class</th>{% if fee_mode %}<th>Outstanding (Rs.)</th>{% endif %}</tr></thead><tbody>
 {% for s in students %}<tr><td><input type="checkbox" name="student_ids" value="{{s.id}}"></td><td>{{s.id}}</td><td>{{s.name}}</td><td>{{s.class_name}}</td>{% if fee_mode %}<td>{{balances[s.id]|cash}}</td>{% endif %}</tr>
 {% else %}<tr><td colspan="{{5 if fee_mode else 4}}">No matching {{'students with outstanding challans' if fee_mode else 'students'}} found.</td></tr>{% endfor %}
 </tbody></table></div>
-<button type="submit" data-needs-selection>Save communication request (not sent)</button>
+{% if direct_allowed %}
+<p class="muted">Send SMS queues the selected parent messages immediately for the registered campus phone. SIM charges apply. Open the SMS App and press Send Messages to submit. Other delivery channels require review.</p>
+<div class="award-actions"><button type="submit" name="action" value="send_sms" data-needs-selection>Send SMS</button><button type="submit" name="action" value="save" class="button secondary" data-needs-selection>Save for review</button></div>
+<input type="hidden" name="send_token" value="{{send_token}}">
+{% else %}<button type="submit" data-needs-selection>Save communication request (not sent)</button>{% endif %}
 </form>
 <script>
 document.addEventListener('DOMContentLoaded',function(){
