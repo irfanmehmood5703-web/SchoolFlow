@@ -53,6 +53,24 @@ class ParentsPtmTests(unittest.TestCase):
     def parent(self):
         credential=self.credential();c=app.test_client();self.token(c,'/parents/PARENT-TEST/enter')
         self.assertEqual(self.post('/parents/PARENT-TEST/enter',{'credential':credential},c).status_code,302);return c
+    def test_manage_students_shows_linked_family_number_in_each_row(self):
+        def sibling():
+            s=Student(admission_no='S3',name='Fictional Sibling',class_name='One',status='Active')
+            db.session.add(s);db.session.flush()
+            db.session.add(self.rm['student'](student_id=s.id,family_id=1,data={'campus':'North','section':'A','family_no':'stale'}))
+        self.tenant(sibling)
+        page=self.c.get('/records/student')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Family No.</th>',page.data)
+        for name,family in [('Fictional Child 1','F1'),('Fictional Child 2','F2'),('Fictional Sibling','F1')]:
+            row=next(r for r in re.findall(rb'<tr>.*?</tr>',page.data,re.S) if name.encode() in r)
+            self.assertIn(('<td class="family-number">'+family+'</td>').encode(),row)
+        filtered=self.c.get('/records/student?q=F1')
+        self.assertIn(b'Fictional Sibling',filtered.data)
+        self.assertNotIn(b'Fictional Child 2',filtered.data)
+        employees=self.c.get('/records/employee')
+        self.assertEqual(employees.status_code,200)
+        self.assertNotIn(b'Family No.</th>',employees.data)
     def test_all_reference_parent_and_ptm_tabs_render(self):
         paths=['/workspace/general/parents','/workspace/general/parents/links','/workspace/general/parents/otp','/workspace/general/parents/otp?tab=contact','/workspace/general/parents/otp?tab=not-installed','/workspace/general/parents/otp?tab=activity','/workspace/general/parents/privileges','/workspace/general/parents/privileges?tab=students','/workspace/general/parents/privileges?tab=students&student=1','/workspace/general/ptm/events','/workspace/general/ptm/events?new=1','/workspace/general/ptm/create','/workspace/general/ptm/meetings','/workspace/general/ptm/reports']
         for path in paths:
