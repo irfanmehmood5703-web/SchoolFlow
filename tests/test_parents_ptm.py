@@ -216,6 +216,14 @@ class ParentsPtmTests(unittest.TestCase):
         self.tenant(expire)
         self.assertNotIn(b'Parent-visible notice',p.get('/parents/PARENT-TEST/students/1/notice').data)
         self.assertEqual(p.get(path).status_code,404)
+    def test_export_column_checkboxes_preserve_selection(self):
+        page=self.c.get('/workspace/general/parents?columns=SID&columns=Student')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'type="checkbox" name="columns" value="SID" checked',page.data)
+        self.assertIn(b'type="checkbox" name="columns" value="Student" checked',page.data)
+        self.assertNotIn(b'type="checkbox" name="columns" value="Campus" checked',page.data)
+        self.assertNotIn(b'<select name="columns"',page.data)
+
     def test_filters_and_selected_export_columns_are_validated(self):
         self.assertEqual(self.c.get('/workspace/general/parents?from=invalid').status_code,422)
         self.assertEqual(self.c.get('/workspace/general/parents?campus=Unknown').status_code,422)
