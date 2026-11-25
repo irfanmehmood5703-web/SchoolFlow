@@ -301,7 +301,7 @@ def configure_owner_app(app,db,Student,Employee):
         # viewed campus, and retain the existing report and approval policies.
         g.owner_campus=''
         events=notification_events()
-        reports=[e for e in events if e['key'].startswith('auto-report:')]
+        reports=[e for e in app.extensions['notice_events']() if e['key'].startswith('auto-report:')]
         others=[e for e in events if not e['key'].startswith('auto-report:')]
         return feed('owner',g.school_identity['scope'],session['owner_id'],reports+others)
     @bp.get('/notifications')
