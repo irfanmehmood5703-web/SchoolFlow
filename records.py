@@ -467,7 +467,7 @@ def configure_records(app, db, Student, Employee):
                             pm['challenge'].query.filter_by(family_id=family.id,used=0,replaced=False).update({'replaced':True})
                             db.session.add(app.extensions['ops_models']['audit'](action='Update family registered mobile',data={'family_id':family.id,'student_count':len(siblings)}))
                     elif not created and data['phone']!=family.data.get('phone','') and StudentDetails.query.filter_by(student_id=obj.id,family_id=family.id).first():
-                        raise ValueError('The selected family has a saved mobile number. To change it, confirm Update family mobile or restore the saved number.')
+                        flash('Family mobile was not changed. Tick Update registered family mobile number to save a new number for this family.','warning')
                     data.update(family.data)
                     obj.father, obj.phone = data["father"], data["phone"]
                 else:
