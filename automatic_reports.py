@@ -13,7 +13,7 @@ from school_clock import SCHOOL_TIMEZONE
 from workspace_actor import csrf
 
 REPORTS=(
-    ('fee-received','Fee Collection','daily','14:00'),
+    ('fee-received','Fee Collection','daily','20:00'),
     ('fee-forecast','Next Month Fee Forecast','monthly','08:00'),
     ('fee-due','Monthly Billed Fee & Outstanding','monthly','08:00'),
     ('student-attendance','Student Attendance Summary','daily','14:00'),
@@ -39,12 +39,12 @@ def configure_automatic_reports(app,db,Student,Employee):
     def settings():
         row=db.session.get(Setting,KEY)
         data=row.data if row else {}
-        return row,{k:{'enabled':False,'frequency':f,'time':t,**data.get(k,{})} for k,_,f,t in REPORTS}
+        return row,{k:{'enabled':not row and k=='fee-received','frequency':f,'time':t,**data.get(k,{})} for k,_,f,t in REPORTS}
     def summary(key,start,end):
         Bill=ops['bill'];Receipt=ops['receipt'];Daily=ops['daily'];Salary=ops['salary']
         if key=='fee-received':
             rows=Receipt.query.filter(Receipt.voided==False,Receipt.day>=start,Receipt.day<=end).all()
-            return 'Received '+money(sum(r.amount for r in rows))+' · Discounts '+money(sum(r.discount for r in rows))+' · '+str(len(rows))+' receipts'
+            return ('No fee received · ' if not any(r.amount>0 for r in rows) else '')+'Received '+money(sum(r.amount for r in rows))+' · Discounts '+money(sum(r.discount for r in rows))+' · '+str(len(rows))+' receipts'
         if key=='fee-forecast':
             # Use exactly the automatic generation rules and effective dated
             # assigned plans; never generate a bill or claim arrears here.
@@ -111,7 +111,7 @@ def configure_automatic_reports(app,db,Student,Employee):
         # Serialize with all other tenant mutations; stable per-period keys
         # prevent repeat snapshots across gunicorn workers and restarts.
         row,rules=settings()
-        if not row or not any(rule['enabled'] for rule in rules.values()):return 0
+        if not any(rule['enabled'] for rule in rules.values()):return 0
         app.extensions['admission_capacity']['lock']()
         saved=W.query.filter_by(kind='automatic-report-snapshot',status='Active').all()
         seen={(r.data.get('key'),r.data.get('revision')) for r in saved}
