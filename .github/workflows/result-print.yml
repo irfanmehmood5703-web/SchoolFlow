@@ -2,7 +2,7 @@ name: Result card print pagination
 on:
   push:
     branches: [main]
-    paths: ['templates/exam_results.html','static/style.css','school_settings.py','scripts/test_result_print.py','scripts/test_shared_print.py','static/compact_print.css','templates/base.html','templates/challan_print.html','templates/certificate_print.html','.github/workflows/result-print.yml']
+    paths: ['templates/exam_results.html','static/style.css','school_settings.py','scripts/test_result_print.py','scripts/test_shared_print.py','static/compact_print.css','static/report_print.css','templates/reports.html','templates/base.html','templates/challan_print.html','templates/certificate_print.html','.github/workflows/result-print.yml']
   workflow_dispatch:
 permissions:
   contents: read

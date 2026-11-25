@@ -39,6 +39,8 @@ public final class QrActivity extends Activity {
     private String scanningDirection;
     private QrVoiceFeedback feedback;
     private boolean foreground;
+    private String pendingAnnouncement;
+    private String savedScanName;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -75,6 +77,8 @@ public final class QrActivity extends Activity {
         scan = button(content, "Scan QR card", this::openScanner);
         retry = button(content, "Retry pending scan", () -> run(this::deliver));
         connect = button(content, "Connection settings", this::unlock);
+        button(content, "Test voice / sound", () -> feedback.confirm("SchoolFlow", true));
+        setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC);
         status = new TextView(this);
         status.setTextColor(Color.DKGRAY);
         status.setPadding(0, dp(12), 0, 0);
@@ -96,6 +100,7 @@ public final class QrActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
+        if (pendingAnnouncement != null) { feedback.confirm(pendingAnnouncement, false); pendingAnnouncement = null; }
         updates.resume();
     }
 
@@ -238,7 +243,11 @@ public final class QrActivity extends Activity {
             JSONObject state = new JSONObject(data.toString());
             state.remove("pending");
             store(state);
-            if (reply.code == 200 || reply.code == 201) return reply.body.getString("outcome") + ": " + reply.body.optString("reason");
+            if (reply.code == 200 || reply.code == 201) {
+                String outcome = reply.body.getString("outcome");
+                if ("Marked".equals(outcome)) savedScanName = reply.body.optString("person_name", "");
+                return outcome + ": " + reply.body.optString("reason");
+            }
             return "Scan refused (" + reply.code + "). Check attendance history.";
         }
         return "Scan not confirmed. Retry uses the same submission.";
@@ -309,17 +318,23 @@ public final class QrActivity extends Activity {
         buttons();
         worker.execute(() -> {
             String message;
+            savedScanName = null;
             try { message = work.execute(); }
             catch (IllegalStateException error) { message = error.getMessage(); }
             catch (Exception error) { message = "Could not confirm the request. Check the connection and retry any pending scan."; }
             String result = message;
+            String confirmedName = savedScanName;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 busy = false;
-                status.setText(result);
+                status.setText(confirmedName != null && !confirmedName.isEmpty() ? confirmedName + "\n" + result : result);
                 buttons();
-                // Speak only after the server confirms attendance was saved.
-                if (foreground && feedback != null && result.startsWith("Marked: ")) feedback.confirm();
+                // The scanner activity can return a result before onResume.
+                // Retain one confirmed announcement until the activity is visible.
+                if (confirmedName != null && feedback != null) {
+                    if (foreground) feedback.confirm(confirmedName, false);
+                    else pendingAnnouncement = confirmedName;
+                }
             });
         });
     }

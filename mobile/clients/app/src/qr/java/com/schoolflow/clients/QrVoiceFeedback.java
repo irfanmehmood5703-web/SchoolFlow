@@ -13,23 +13,28 @@ import java.util.Set;
 
 /** Local audible confirmation, without transmitting student names or QR data. */
 final class QrVoiceFeedback {
-    private static final String MESSAGE = "Thank you. Attendance marked.";
+    private String waitingMessage;
+    private boolean initializing = true;
+    private int generation;
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final Context speechContext;
     private TextToSpeech speech;
     private ToneGenerator tone;
     private boolean ready, closed;
 
     QrVoiceFeedback(Context context) {
+        speechContext = context.getApplicationContext();
         try {
             speech = new TextToSpeech(context.getApplicationContext(),
                     result -> main.post(() -> initialize(result)));
         } catch (RuntimeException ignored) {
-            // No text-to-speech engine installed. Use a short confirmation tone.
+            initializing = false; // No engine installed; confirmation tone remains available.
         }
     }
 
     private void initialize(int result) {
-        if (closed || speech == null || result != TextToSpeech.SUCCESS) return;
+        initializing = false;
+        if (closed || speech == null || result != TextToSpeech.SUCCESS) { waitingMessage = null; return; }
         try {
             if (speech.setLanguage(Locale.US) < TextToSpeech.LANG_AVAILABLE) return;
             Set<Voice> voices = speech.getVoices();
@@ -48,7 +53,8 @@ final class QrVoiceFeedback {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
             speech.setSpeechRate(0.95f);
             ready = true;
-        } catch (RuntimeException ignored) { ready = false; }
+            if (waitingMessage != null) { String message = waitingMessage; waitingMessage = null; speak(message); }
+        } catch (RuntimeException ignored) { ready = false; } finally { if (!ready) waitingMessage = null; }
     }
 
     // Android has no standard voice-gender property. Prefer explicitly
@@ -60,19 +66,39 @@ final class QrVoiceFeedback {
         return female + ("US".equals(voice.getLocale().getCountry()) ? 10 : 0);
     }
 
-    void confirm() {
+    void confirm(String name, boolean test) {
         if (closed) return;
+        String safe = name == null ? "" : name.replaceAll("[\\p{Cntrl}]", " ").trim();
+        if (safe.length() > 100) safe = safe.substring(0, 100);
+        String message = (safe.isEmpty() ? "" : safe + ". ") + "Thank you. Attendance marked.";
+        // A short audible acknowledgement is always attempted, even when
+        // TTS claims success but the installed voice cannot actually play.
+        int ticket = ++generation;
         try {
-            if (ready && speech != null && speech.speak(MESSAGE, TextToSpeech.QUEUE_FLUSH,
-                    null, "attendance-confirmed") == TextToSpeech.SUCCESS) return;
-        } catch (RuntimeException ignored) { /* use confirmation tone */ }
+            if (tone == null) tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 80);
+            tone.startTone(ToneGenerator.TONE_PROP_ACK, 140);
+        } catch (RuntimeException ignored) { /* media stream may be unavailable */ }
+        main.postDelayed(() -> {
+            if (closed || ticket != generation) return;
+            if (ready) speak(message);
+            else if (initializing) {
+                waitingMessage = message;
+                main.postDelayed(() -> { if (ticket == generation) waitingMessage = null; }, 2500);
+            }
+        }, 180);
+        if (test && !ready && !initializing) {
+            android.widget.Toast.makeText(speechContext, "Offline English voice unavailable. Check Android text-to-speech settings.", android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void speak(String message) {
         try {
-            if (tone == null) tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 35);
-            tone.startTone(ToneGenerator.TONE_PROP_ACK, 180);
-        } catch (RuntimeException ignored) { /* audio may be unavailable */ }
+            if (ready && speech != null) speech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "attendance-confirmed");
+        } catch (RuntimeException ignored) { /* acknowledgement tone has already played */ }
     }
 
     void stop() {
+        generation++; waitingMessage = null;
         if (speech != null) speech.stop();
         if (tone != null) tone.stopTone();
     }

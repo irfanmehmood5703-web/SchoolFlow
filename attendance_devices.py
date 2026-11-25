@@ -427,7 +427,7 @@ def configure_attendance_devices(app,db,Student,Employee):
         digest=hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':')).encode()).hexdigest();prior=Scan.query.filter_by(device_id=device.id,event_id=data['event_id']).first()
         if prior:
             if prior.fingerprint!=digest:return jsonify(error='An event ID cannot be reused for different data.'),409
-            return jsonify(id=prior.id,outcome=prior.outcome,reason=prior.reason,replayed=True)
+            return jsonify(id=prior.id,outcome=prior.outcome,reason=prior.reason,replayed=True,**({'person_name':prior.person_name} if prior.outcome=='Marked' and device.kind=='biometric' and 'qr_token' in data else {}))
         if 'qr_token' in data:
             kind,pid=resolve_qr(data['qr_token'],device);data={**data,'person_kind':kind,'person_id':pid}
         received=now()
@@ -441,7 +441,7 @@ def configure_attendance_devices(app,db,Student,Employee):
         else:outcome,reason,pid,name='Not marked','Identity enrollment changed. Verify and re-enroll this person.',None,''
         seen(device,received)
         row=Scan(device_id=device.id,campus=device.campus,event_id=data['event_id'],fingerprint=digest,person_kind=data['person_kind'],person_id=pid,person_name=name,direction=data['direction'],occurred=stamp,received=received,outcome=outcome,reason=reason);db.session.add(row);db.session.flush();commit()
-        return jsonify(id=row.id,outcome=outcome,reason=reason,replayed=False),201
+        return jsonify(id=row.id,outcome=outcome,reason=reason,replayed=False,**({'person_name':name} if outcome=='Marked' and device.kind=='biometric' and 'qr_token' in data else {})),201
     def manual_write(row):
         if not row.id:return
         state=Mark.query.filter_by(daily_id=row.id).first()

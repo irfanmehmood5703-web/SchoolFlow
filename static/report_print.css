@@ -95,3 +95,32 @@
   .detail-fee-print .cards .card b { font-size: 17px !important; }
   .detail-fee-print .report-table-output h2 { font-size: 14px !important; }
 }
+
+.attendance-day-print{display:none}
+@media print{
+ /* Keep the entire attendance document in one named-page context. */
+ body:has(.attendance-sheet-print){page:sf-report-table}
+ body:has(.attendance-sheet-print) :is(main,.page-content,.attendance-sheet-print,.attendance-sheet-print *){page:auto!important}
+ body:has(.attendance-sheet-print .report-branding-header.has-branding) .school-print-header{display:none!important}
+ .attendance-sheet-print>.page-heading,.attendance-sheet-print>.cards:empty{display:none!important}
+ .attendance-sheet-print>.report-branding-header{break-after:avoid;margin:0!important}
+ .attendance-sheet-print .report-branding-header img{max-height:12mm!important;width:auto!important;max-width:30mm!important;object-fit:contain}
+ .attendance-sheet-print .report-branding-header :is(h2,h3,p){margin:2pt 0!important;line-height:1.2!important}
+ .attendance-sheet-print .report-branding-header>div{padding:3pt!important;margin:0 0 4pt!important}
+ .attendance-sheet-print>p,.attendance-sheet-print .report-branding-body p{margin:3pt 0!important;font-size:9pt}
+ .attendance-sheet-print .report-table-output{margin:4pt 0!important;break-inside:auto!important}
+ .attendance-sheet-print .report-table-output h2{font-size:10pt;margin:3pt 0}
+ .attendance-sheet-print .report-table-output .table{overflow:visible!important;min-height:0!important;height:auto!important}
+ .attendance-sheet-print .report-table-output .table>table{width:100%!important;min-width:0!important;table-layout:fixed!important;font-size:8pt!important;line-height:1.2!important}
+ .attendance-sheet-print .report-table-output table :is(th,td){padding:3pt 1pt!important;border:1px solid #a9c4b5!important;text-align:center;vertical-align:middle;overflow-wrap:normal!important;word-break:normal!important}
+ .attendance-sheet-print .report-table-output table :is(th,td):nth-child(1){width:4%}
+ .attendance-sheet-print .report-table-output table :is(th,td):nth-child(2){width:5%}
+ .attendance-sheet-print .report-table-output table :is(th,td):nth-child(3){width:18%;text-align:left;overflow-wrap:anywhere!important;padding-left:3pt!important}
+ .attendance-sheet-print .attendance-day-full{display:none}
+ .attendance-sheet-print .attendance-day-print{display:block;font-size:8pt;line-height:1.1}
+ .attendance-sheet-print .attendance-day-print small{font-size:6pt;line-height:1.1}
+ .attendance-sheet-print .report-branding-footer{display:block!important;break-inside:avoid!important;page-break-inside:avoid!important;break-before:auto!important;margin-top:5pt!important}
+ .attendance-sheet-print .report-branding-footer p{margin:3pt 0!important;font-size:9pt}
+ /* Do not squeeze multi-month ranges into the monthly grid. */
+ .attendance-sheet-print .report-table-output:not([data-day-count]) table{table-layout:auto!important}
+}
