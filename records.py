@@ -812,7 +812,21 @@ def configure_records(app, db, Student, Employee):
         flash('Unused session deleted. Saved school records were not changed.','success')
         return redirect(url_for('records.settings',category='academic_session')+'#options-academic_session')
 
-    app.extensions['record_helpers']=dict(raw_many=raw_many,read_many=read_many,validate=validate_form,choices=setup_choices)
+    def family_numbers(student_ids):
+        """Resolve only displayed student IDs against the current tenant's linked family."""
+        ids=list({int(sid) for sid in student_ids if sid is not None})
+        result={}
+        for offset in range(0,len(ids),900):
+            result.update(db.session.query(StudentDetails.student_id,RecordFamily.number).join(
+                RecordFamily,StudentDetails.family_id==RecordFamily.id
+            ).filter(StudentDetails.student_id.in_(ids[offset:offset+900])).all())
+        return result
+
+    @app.context_processor
+    def family_number_context():
+        return dict(family_numbers=family_numbers)
+
+    app.extensions['record_helpers']=dict(family_numbers=family_numbers,raw_many=raw_many,read_many=read_many,validate=validate_form,choices=setup_choices)
     app.register_blueprint(bp)
 
     @app.cli.command("seed-record-demo-options")
