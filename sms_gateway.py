@@ -226,8 +226,8 @@ def configure_sms_gateway(app,db,Student):
         school=((profile.data or {}).get('name') if profile else '') or (getattr(g,'sms_school',None) or {}).get('name') or (getattr(g,'school_identity',None) or {}).get('name')
         school=str(school or '').strip()
         if not school:raise ValueError('School name is missing from Institute Setup. Configure it before sending SMS.')
-        body=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school,str(body),flags=re.IGNORECASE)
-        remaining=re.findall(r'\\{[a-zA-Z_][a-zA-Z_0-9]*\\}',body)
+        body=re.sub(r'(?:\{\s*school_name\s*\}|\[\s*institute_name\s*\])',lambda match:school,str(body),flags=re.IGNORECASE)
+        remaining=re.findall(r'(?:\{[a-zA-Z_][a-zA-Z_0-9]*\}|\[[a-zA-Z_][a-zA-Z_0-9]*\])',body)
         if remaining:raise ValueError('Unresolved SMS template variables: '+', '.join(sorted(set(remaining)))+'. Update the request before sending.')
         return body
 
@@ -238,7 +238,7 @@ def configure_sms_gateway(app,db,Student):
         snapshots=data.get('messages',[])
         if not snapshots:raise ValueError('This request has no saved message snapshots.')
         for message in snapshots:
-            if message.get('unresolved') and any(str(tag).strip('{} ').lower()!='school_name' for tag in message['unresolved']):raise ValueError('Resolve missing template values before releasing this request.')
+            if message.get('unresolved') and any(str(tag).strip('{}[] ').lower() not in ('school_name','institute_name') for tag in message['unresolved']):raise ValueError('Resolve missing template values before releasing this request.')
             person=db.session.get(Student,message.get('person_id'));details=rm['student'].query.filter_by(student_id=person.id).first() if person else None
             if not person or not details or details.data.get('campus')!=device.campus:raise ValueError('All recipients must belong to the selected device campus.')
             if data.get('attendance_day'):
