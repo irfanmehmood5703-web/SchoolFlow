@@ -37,6 +37,21 @@ class ParentAppTests(unittest.TestCase):
         self.tenant(seed)
     def page(self,p,view,sid=1):return p.get(f'{self.base}/app/{view}?sid={sid}')
     def action(self,p,kind,data,sid=1):return self.post(f'{self.base}/app/students/{sid}/{kind}',{**dict(token=secrets.token_urlsafe(32)),**data},p)
+    def test_native_notice_feed_requires_family_and_contains_leave_decision(self):
+        self.seed_app()
+        L=app.extensions['general_leave_model']
+        def seed():
+            # Use the real scope and the signed-in family's student.
+            db.session.add(L(institute_scope=self.scope,student_id=1,from_date=school_today(),to_date=school_today(),leave_type='Sick Leave',reason='Fictional reason',status='Approved'))
+        # Scope is obtained from the actual institute registry, not request input.
+        School=app.extensions['identity_models']['institute'];self.scope=School.query.filter_by(code='PARENT-TEST').one().storage_key
+        self.tenant(seed);p=self.parent()
+        path=self.base+'/app/notification-feed'
+        self.assertEqual(app.test_client().get(path).status_code,401)
+        r=p.get(path);self.assertEqual(r.status_code,200);data=r.get_json()
+        self.assertTrue(any('Leave request approved' in e['title'] for e in data['events']))
+        self.assertNotIn('Fictional Child 2',str(data))
+        self.assertEqual(p.get(path).get_json(),data)
     def test_all_tabs_family_switch_and_no_other_family(self):
         self.seed_app();p=self.parent()
         r=p.get(self.base);self.assertEqual(r.status_code,200);self.assertIn(b'Fictional Sibling',r.data);self.assertNotIn(b'Fictional Child 2',r.data)
