@@ -3,7 +3,7 @@ import os
 import secrets
 import sys
 from datetime import date
-from flask import Flask, redirect, request, url_for
+from flask import Flask, abort, redirect, request, send_from_directory, url_for
 from flask_sqlalchemy import SQLAlchemy
 from identity import InstituteSession, configure_identity
 
@@ -225,6 +225,19 @@ def home():
     from flask import render_template
     return render_template('landing.html')
 
+@app.route('/schoolflow-worker.js')
+def opening_worker():
+    return send_from_directory(app.static_folder, 'schoolflow-worker.js', max_age=0)
+
+
+@app.route('/opening/<asset>')
+def opening_asset(asset):
+    files = {'screen.html': 'reopen.html', 'start.css': 'start.css', 'start.js': 'start.js'}
+    if asset not in files:
+        abort(404)
+    return send_from_directory(os.path.join(app.root_path, 'launch'), files[asset], max_age=0)
+
+
 @app.route('/admissions',methods=['GET','POST'])
 def admissions():
     return redirect(url_for('records.new_record' if request.method=='POST' else 'records.record_list',kind='student'),code=307 if request.method=='POST' else 302)
@@ -247,6 +260,7 @@ def favicon(): return '',204
 
 @app.after_request
 def headers(response):
+    response.headers['X-SchoolFlow-Response']='1'
     response.headers['X-Content-Type-Options']='nosniff'
     # Keep stricter policies on private files, Messages and owner pages.
     response.headers.setdefault('Referrer-Policy','same-origin')
