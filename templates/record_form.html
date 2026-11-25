@@ -7,7 +7,7 @@
   {% elif f.kind == 'radio' %}
   <fieldset class="radio-group"><legend>{{f.label}}</legend>{% for key, label in f.options %}<label class="check"><input type="radio" name="{{f.key}}" value="{{key}}" {{'checked' if key == value else ''}}> {{label}}</label>{% endfor %}</fieldset>
   {% else %}
-  <label for="{{f.key}}">{{f.label}} {% if f.required %}<span aria-label="required">*</span>{% endif %}</label>
+  <label for="{{f.key}}" {% if f.kind == 'subjects' %}id="subjects-label"{% endif %}>{{f.label}} {% if f.required %}<span aria-label="required">*</span>{% endif %}</label>
   {% if f.kind in ['select','family','subjects'] %}
   <select id="{{f.key}}" name="{{f.key}}" {% if f.required %}required{% endif %} {% if f.kind == 'subjects' %}multiple size="5"{% endif %} {% if errors.get(f.key) %}aria-invalid="true" aria-describedby="error-{{f.key}}"{% endif %}>
     {% if f.kind != 'subjects' %}<option value="">{{'Not Set' if f.key == 'increment_month' else 'Select ' + f.label}}</option>{% endif %}
@@ -23,13 +23,14 @@
       {% if value and not ns.found and f.kind != 'subjects' %}<option value="{{value}}" selected>{{value}}</option>{% endif %}
     {% endif %}
   </select>
+  {% if f.kind == 'subjects' %}<div id="subject-checkboxes" class="check-grid" role="group" aria-labelledby="subjects-label" hidden></div>{% endif %}
   {% if f.category %}<details data-advanced class="option-editor" data-category="{{f.category}}" data-target="{{f.key}}"><summary>Add {{f.label}} option</summary><label for="new-{{f.key}}">New {{f.label}}</label><input id="new-{{f.key}}" type="text" maxlength="160" autocomplete="off"><button type="button" class="button secondary add-option">Add option</button><small class="option-feedback" role="status">Saved for this school. Your form stays open.</small></details>{% endif %}
   {% elif f.kind == 'textarea' %}<textarea id="{{f.key}}" name="{{f.key}}" rows="3" maxlength="5000">{{value}}</textarea>
   {% else %}<input id="{{f.key}}" name="{{f.key}}" type="{{'text' if f.kind == 'digits' else ('number' if f.kind in ['number','integer'] else f.kind)}}" value="{{'' if f.kind == 'password' else value}}" {% if f.required %}required{% endif %} {% if f.kind in ['number','integer'] %}min="0" step="{{'1' if f.kind == 'integer' else 'any'}}"{% endif %} {% if f.kind == 'digits' %}inputmode="numeric" pattern="[0-9]*"{% endif %} {% if f.kind == 'password' %}autocomplete="new-password" minlength="10"{% else %}maxlength="160"{% endif %} {% if errors.get(f.key) %}aria-invalid="true" aria-describedby="error-{{f.key}}"{% endif %}>
   {% endif %}
   {% endif %}
   {% if f.help %}<small>{{f.help}}</small>{% endif %}
-  {% if f.key == 'subjects' %}<small>Choose a class to see its subjects. Hold Ctrl/Command to select multiple subjects.</small>{% endif %}
+  {% if f.key == 'subjects' %}<small>Choose a class to see its subjects. Tick each subject you want to assign.</small>{% endif %}
   {% if f.key == 'password' and obj %}<small>Leave blank to keep the saved password. Passwords are never shown again.</small>{% endif %}
   {% if errors.get(f.key) %}<p class="field-error" id="error-{{f.key}}">{{errors[f.key]}}</p>{% endif %}
 </div>

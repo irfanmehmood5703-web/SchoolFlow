@@ -13,9 +13,23 @@ document.addEventListener('DOMContentLoaded', () => {
       const select = fields[key], value = select.value;
       const values = allowed === null ? catalog[key].map(o => o.value) : allowed;
       select.replaceChildren(new Option('Select ' + select.labels[0].textContent.replace('*','').trim(),''));
-      [...new Set(values)].forEach(v => select.add(new Option(v,v)));
-      if (value && !values.includes(value) && preserve) select.add(new Option(value + ' (saved selection)',value));
-      select.value = [...select.options].some(o => o.value === value) ? value : '';
+      if (key === 'fee_plan') {
+        // Show the entire school fee-plan catalog, even when the selected class
+        // is mapped to a subset. Keep the server's class-map restrictions intact.
+        const all = [...new Set([...catalog[key].map(o => o.value), ...values])];
+        all.sort((a,b) => a.localeCompare(b));
+        all.forEach(v => {
+          const linked = allowed === null || values.includes(v);
+          const retained = preserve && v === value;
+          const option = new Option(v + (linked ? '' : retained ? ' (saved selection)' : ' (not linked to class)'),v);
+          option.disabled = !linked && !retained;
+          select.add(option);
+        });
+      } else {
+        [...new Set(values)].forEach(v => select.add(new Option(v,v)));
+      }
+      if (value && ![...select.options].some(o => o.value === value) && preserve) select.add(new Option(value + ' (saved selection)',value));
+      select.value = [...select.options].some(o => o.value === value && !o.disabled) ? value : '';
     }
     applyAdmissionMap = () => {
       if (!admissionMappings) return;
@@ -32,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setChoices('academic_session',mapped ? (row ? [row.academic_session] : []) : null,preserve);
       if (row && !fields.academic_session.value) fields.academic_session.value = row.academic_session;
       feedback.textContent = inactive ? 'This campus is inactive. New admissions need an active campus.' : mapped ?
-        'Choices follow the saved campus/class map. Change the map in Core Settings → Institute Setup to offer another combination.' :
+        'All fee plans are listed. Plans not linked to this class cannot be assigned until linked in Core Settings → Institute Setup. Other choices follow the campus/class map.' :
         'This campus has no class map yet. Existing catalog choices remain available; set up its links in Core Settings → Institute Setup.';
       document.getElementById('class_name').dispatchEvent(new Event('subjects-refresh'));
     };
@@ -142,7 +156,41 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const classSelect = document.getElementById('class_name');
   const subjects = document.getElementById('subjects');
+  const subjectCheckboxes = document.getElementById('subject-checkboxes');
   let subjectMappings;
+  function renderSubjectCheckboxes() {
+    if (!subjects || !subjectCheckboxes) return;
+    // The existing select remains the submitted field and no-JS fallback.
+    const available = new Map();
+    for (const option of subjects.options) {
+      if (!option.value || option.disabled || option.hidden) continue;
+      if (!available.has(option.value)) available.set(option.value, []);
+      available.get(option.value).push(option);
+    }
+    subjectCheckboxes.replaceChildren();
+    if (!available.size) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'No subjects available for this class.';
+      subjectCheckboxes.append(empty);
+    }
+    for (const [value, options] of available) {
+      const label = document.createElement('label');
+      label.className = 'check';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = options.some(option => option.selected);
+      options.forEach((option,i) => { option.selected = input.checked && i === 0; });
+      input.addEventListener('change', () => {
+        options.forEach((option,i) => { option.selected = input.checked && i === 0; });
+      });
+      label.append(input, document.createTextNode(' ' + value));
+      subjectCheckboxes.append(label);
+    }
+    subjects.hidden = true;
+    subjects.style.display = 'none';
+    subjectCheckboxes.hidden = false;
+  }
   function filterSubjects() {
     if (!subjects || !classSelect) return;
     [...subjects.options].forEach(option => {
@@ -153,7 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
       option.disabled = !allowed;
       if (!allowed) option.selected = false;
     });
+    renderSubjectCheckboxes();
   }
+  subjects?.addEventListener('change', filterSubjects);
   classSelect?.addEventListener('change', filterSubjects);
   classSelect?.addEventListener('subjects-refresh', filterSubjects);
   if(subjects){
