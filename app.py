@@ -210,6 +210,8 @@ from support_desk import configure_support
 configure_support(app,db)
 from assistant_service import configure_assistant
 configure_assistant(app,db,Student,Employee)
+from automatic_reports import configure_automatic_reports
+configure_automatic_reports(app,db,Student,Employee)
 from personal_notices import configure_notices
 configure_notices(app,db,Student)
 from owner_app import configure_owner_app
