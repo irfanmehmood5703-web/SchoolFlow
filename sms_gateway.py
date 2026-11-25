@@ -296,6 +296,38 @@ def configure_sms_gateway(app,db,Student):
         return created,''
     app.extensions['auto_attendance_sms_queue']=auto_attendance_queue
 
+    def queue_automatic_absence_sms(row,campus):
+        # Called only by the automatic attendance worker under the tenant write lock.
+        # Require the saved owner opt-in and a current automatic absence, not session impersonation.
+        settings=db.session.get(app.extensions['school_settings_models']['setting'],'attendance-devices')
+        if not settings or not settings.data.get('auto_absent_sms_queue') or settings.data.get('student_channel')!='android' or session.get('demo'):return 0
+        if row.data.get('source')!='attendance-device-auto' or row.data.get('audience')!='parent':return 0
+        ids=row.data.get('ids',[])
+        if len(ids)!=1:return 0
+        sid=ids[0];person=db.session.get(Student,sid)
+        detail=rm['student'].query.filter_by(student_id=sid).first()
+        if not person or person.status!='Active' or not detail or detail.data.get('campus')!=campus or [campus,person.class_name] not in settings.data.get('classes',[]):return 0
+        from datetime import date
+        daily=app.extensions['ops_models']['daily'].query.filter_by(kind='student',person_id=sid,day=date.fromisoformat(row.data['attendance_day'])).first()
+        mark=app.extensions['attendance_device_models']['mark'].query.filter_by(daily_id=daily.id).first() if daily else None
+        if not daily or daily.status!='Absent' or not mark or mark.origin!='auto':return 0
+        devices=Device.query.filter_by(campus=campus,active=True).all() if campus else []
+        if len(devices)!=1:return 0
+        profile=db.session.get(app.extensions['institute_setup_models']['profile'],1)
+        school=str((profile.data or {}).get('name','') if profile else '').strip()
+        prior=getattr(g,'sms_school',None)
+        if school:g.sms_school={'name':school}
+        try:
+            try:items=candidates(row,devices[0])
+            except ValueError:return 0
+            count=enqueue_items(row,devices[0],items)
+            audit('Auto queue student absence SMS',request_id=row.id,device_id=devices[0].id,count=count)
+            return count
+        finally:
+            if prior is None:g.pop('sms_school',None)
+            else:g.sms_school=prior
+    app.extensions['queue_automatic_absence_sms']=queue_automatic_absence_sms
+
     @bp.route('/workspace/general/sms/release/<int:wid>',methods=['GET','POST'])
     def release(wid):
         owner();row=Workflow.query.filter_by(id=wid,kind='message').first_or_404();items=[]

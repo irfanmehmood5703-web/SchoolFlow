@@ -132,6 +132,23 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertEqual(self.tenant(run),0);self.assertEqual(self.daily(),[])
         self.config(classes=[['Campus A','One']],student_channel='none');self.assertEqual(self.tenant(run),1);self.assertEqual(self.daily(),[dict(kind='student',pid=1,status='Absent',time_in='',time_out='')]);self.assertEqual(self.tenant(run),0)
         self.assertEqual(self.event().json['outcome'],'Marked');self.assertEqual(self.daily()[0]['status'],'Late')
+    def test_auto_absent_direct_sms_queue_requires_opt_in_and_is_repeat_safe(self):
+        M=app.extensions['sms_models']
+        def seed():
+            db.session.get(Student,1).phone='+12025550123'
+            db.session.add(M['device'](name='Fictional SMS phone',campus='Campus A',active=True,digest=hashlib.sha256(('k'*43).encode()).hexdigest()))
+            profile=app.extensions['institute_setup_models']['profile']
+            row=db.session.get(profile,1)
+            if row:row.data={**row.data,'name':'Fictional device school'}
+            else:db.session.add(profile(id=1,data={'name':'Fictional device school'}))
+        self.tenant(seed)
+        self.config(classes=[['Campus A','One']],student_channel='android',auto_absent_sms_queue=True)
+        self.stamp=self.stamp.replace(hour=4,minute=5)
+        run=lambda:app.extensions['attendance_device_helpers']['tick'](self.stamp,force=True)
+        self.assertEqual(self.tenant(run),1)
+        self.assertEqual(self.tenant(lambda:[(j.source,j.phone,j.state) for j in M['job'].query.all()]),[('attendance:2026-11-05:1:Absent:+12025550123','+12025550123','queued')])
+        self.assertEqual(self.tenant(run),0)
+        self.assertEqual(self.tenant(lambda:M['job'].query.count()),1)
     def test_auto_absent_skips_holidays_and_locked_staff_dates(self):
         self.stamp=self.stamp.replace(hour=4,minute=5);self.config(classes=[['Campus A','One']],auto_staff_absent=True,student_channel='none',staff_channel='none')
         def prepare():

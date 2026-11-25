@@ -15,7 +15,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 TZ=ZoneInfo('Asia/Karachi')
 CHANNELS=('android','branded','whatsapp','none')
-DEFAULTS=dict(student_channel='android',student_only_absent=True,student_absent=60,student_late=30,staff_channel='android',staff_only_absent=False,staff_absent=0,staff_late=0,teacher_notification=False,auto_staff_absent=False,auto_staff_short=False,early_short=False,early_minutes=0,classes=[])
+DEFAULTS=dict(student_channel='android',student_only_absent=True,student_absent=60,student_late=30,staff_channel='android',staff_only_absent=False,staff_absent=0,staff_late=0,teacher_notification=False,auto_staff_absent=False,auto_staff_short=False,early_short=False,early_minutes=0,classes=[],auto_absent_sms_queue=False)
 API_ENDPOINTS=('attendance_devices.heartbeat','attendance_devices.ingest','attendance_devices.identity_card')
 BROWSER_ENDPOINT='attendance_devices.scanner_connection'
 QR_COOKIE='sf_qr_pair'
@@ -151,6 +151,8 @@ def configure_attendance_devices(app,db,Student,Employee):
             if campus not in options or cls not in options[campus]:raise ValueError('Choose configured auto-absent classes.')
             if [campus,cls] not in selected:selected.append([campus,cls])
         result['classes']=selected
+        # Explicit one-time owner approval; never allow a staff form to enable it.
+        result['auto_absent_sms_queue']=request.form.get('auto_absent_sms_queue')=='1' if session.get('owner_id') and not session.get('demo') and not getattr(g,'staff_principal',None) else cfg()[1]['auto_absent_sms_queue']
         return result
     @bp.route('/workspace/core/qr-attendance',methods=['GET','POST'])
     def settings():
@@ -331,12 +333,24 @@ def configure_attendance_devices(app,db,Student,Employee):
             if not isinstance(value,str) or len(value)>size:raise ValueError('Check device information length.')
             if value:setattr(device,key,value)
         seen(device,now());result=dict(status=device.status,marks=device.marks,scope_id=device_scope(device),server_time=now().isoformat());commit();return jsonify(**result)
-    def notify_many(kind,person_ids,status,day,data):
+    def notify_many(kind,person_ids,status,day,data,automatic=False):
         prefix='student' if kind=='student' else 'staff';channel=data[prefix+'_channel'];sms=channel!='none' and (not data[prefix+'_only_absent'] or status=='Absent');teacher=kind=='staff' and data['teacher_notification']
         if not sms and not teacher:return
         prefs=dict(father_contact=kind=='student',app_sms=sms and channel=='android',branded_sms=sms and channel=='branded',whatsapp_sms=sms and channel=='whatsapp',teacher_notification=teacher)
         audience='parent' if kind=='student' else 'teacher';db.session.flush()
         messages=app.extensions['school_settings_helpers']['message_snapshots']('Attendance',person_ids,audience,event='attendance',context={'day':day.isoformat()})
+        if automatic and kind=='student' and status=='Absent' and prefs['app_sms'] and data.get('auto_absent_sms_queue'):
+            # Each pupil gets an independent request so missing contacts do not block other pupils.
+            for message in messages:
+                sid=message['person_id'];person=db.session.get(Student,sid)
+                details=rm['student'].query.filter_by(student_id=sid).first()
+                campus=details.data.get('campus','') if details else ''
+                if not person or not details or [campus,person.class_name] not in data['classes']:continue
+                row=W(kind='message',status='Pending SMS review',data=dict(subject='Attendance',ids=[sid],audience=audience,preferences=prefs,messages=[message],source='attendance-device-auto',attendance_day=day.isoformat(),attendance_statuses={str(sid):status}))
+                db.session.add(row);db.session.flush()
+                queue=app.extensions.get('queue_automatic_absence_sms')
+                if queue:queue(row,campus)
+            return
         db.session.add(W(kind='message',status='Provider not configured',data=dict(subject='Attendance',ids=person_ids,audience=audience,preferences=prefs,messages=messages,source='attendance-device')))
     def holiday(campus,day):
         return any((r.data['date'][5:]==day.strftime('%m-%d') if r.data.get('repeats') else r.data['date']==day.isoformat()) for r in app.extensions['holiday_calendar_helpers']['rows'](campus))
@@ -476,7 +490,7 @@ def configure_attendance_devices(app,db,Student,Employee):
                     existing=Daily(kind=kind,person_id=person.id,day=day,status=status,lectures=0,time_in='',time_out='');db.session.add(existing);db.session.flush();state=Mark(daily_id=existing.id,campus=campus,origin='auto');db.session.add(state)
                 existing.status=status;notifications[(kind,status)].append(person.id);changes.append(dict(id=person.id,kind=kind,before=before,after={'status':status},campus=campus))
         for (kind,status),ids in notifications.items():
-            for offset in range(0,len(ids),500):notify_many(kind,ids[offset:offset+500],status,day,config)
+            for offset in range(0,len(ids),500):notify_many(kind,ids[offset:offset+500],status,day,config,automatic=True)
         if tickrow:tickrow.data=dict(bucket=bucket,revision=row.version)
         else:db.session.add(Setting(key='attendance-device-tick',data=dict(bucket=bucket,revision=row.version)))
         if changes:audit('Automatic attendance marked',changes=changes,day=day.isoformat())
