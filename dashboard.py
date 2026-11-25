@@ -107,16 +107,29 @@ def configure_dashboard(app, db):
                 start = date.fromisoformat(setup.get('year_start', ''))
                 end = date.fromisoformat(setup.get('year_end', ''))
             except (TypeError, ValueError):
-                pass
-            else:
-                if start <= end:
-                    first_month, last_month = (day.strftime('%Y-%m') for day in (start, end))
-                    session_dues = dict(
-                        name=setup.get('current_session'),
-                        amount=sum(balance for month, balance in remaining.items() if first_month <= month <= last_month),
-                        url=url_for('ops.history', view='defaulters', **{'from': first_month, 'to': last_month}),
-                        period=f'{start:%b %Y} – {end:%b %Y}',
-                    )
+                start = end = None
+
+            is_current = start is not None and start <= today <= end
+            notice = None
+            if not is_current:
+                if start is None or start > end:
+                    notice = 'Set the current academic year dates in Institute Setup.'
+                elif end < today:
+                    notice = f'The saved academic year ended {end:%d %b %Y}. Update the dates in Institute Setup.'
+                else:
+                    notice = f'The saved academic year starts {start:%d %b %Y}. Update the dates in Institute Setup if needed.'
+                start, end = date(today.year, 1, 1), date(today.year, 12, 31)
+
+            first_month, last_month = (day.strftime('%Y-%m') for day in (start, end))
+            session_dues = dict(
+                name=setup.get('current_session') if is_current else '',
+                amount=sum(balance for month, balance in remaining.items() if first_month <= month <= last_month),
+                url=url_for('ops.history', view='defaulters', **{'from': first_month, 'to': last_month}),
+                period=f'{start:%b %Y} – {end:%b %Y}',
+                year=today.year,
+                is_current=is_current,
+                notice=notice,
+            )
         if any(item['key']=='expenses' for item in selected):
             models=app.extensions['ledger_models']
             J,L=models['journal'],models['line']
