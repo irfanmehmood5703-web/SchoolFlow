@@ -264,6 +264,9 @@ def configure_owner_app(app,db,Student,Employee):
         for event in events:
             tool=next((tool for prefix,tool in [('message:','messages'),('support:','support'),('payment:','payments')] if event['key'].startswith(prefix)),None)
             if tool:event['url']=link('owner_app.open_tool',key=tool)
+        for row in approvals():
+            if row['id'].startswith('student-leave:') and row['state']=='Pending':
+                events.insert(0,dict(key=row['id'],revision='pending',title='Student leave request',detail=row['label']+' · Awaiting approval',url=row['url']))
         holidays=app.extensions['holiday_calendar_helpers']['rows']();sh=app.extensions['school_settings_helpers'];settings=sh['config']('attendance-alerts')
         for kind,rows in [('student',people(True)),('staff',[(e,d) for e,d in employees() if e.status=='Active'])]:
             if settings.get(kind+'_enabled') is False:continue
@@ -291,6 +294,16 @@ def configure_owner_app(app,db,Student,Employee):
             if row:row.revision=event['revision'];row.read_at=time.time()
             else:db.session.add(State(actor=who,source=event['key'],revision=event['revision']))
         db.session.commit();return '',204
+    @bp.get('/notification-feed')
+    def native_notification_feed():
+        from mobile_notices import feed
+        # Native owner notices use the whole authorised institute, not the last
+        # viewed campus, and retain the existing report and approval policies.
+        g.owner_campus=''
+        events=notification_events()
+        reports=[e for e in events if e['key'].startswith('auto-report:')]
+        others=[e for e in events if not e['key'].startswith('auto-report:')]
+        return feed('owner',g.school_identity['scope'],session['owner_id'],reports+others)
     @bp.get('/notifications')
     def notifications():return render('notifications',events=notification_events(),reminders=[r for r in preference()[0]['reminders'] if not r.get('done') and r['due']<=school_today().isoformat()])
     @bp.get('/activity')
