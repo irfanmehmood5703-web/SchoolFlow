@@ -29,6 +29,7 @@ public final class QrActivity extends Activity {
     private static final String QR = "schoolflow:(student|employee):[a-f0-9]{64}";
     private static final String KEY = "[A-Za-z0-9_-]{40,60}";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final AppUpdates updates = new AppUpdates(this);
     private JSONObject data;
     private Vault vault;
     private TextView status;
@@ -87,7 +88,16 @@ public final class QrActivity extends Activity {
             status.setText("Protected gate storage could not be opened.");
         }
         buttons();
-        AppUpdates.check(this);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        updates.resume();
+    }
+
+    @Override protected void onPause() {
+        updates.pause();
+        super.onPause();
     }
 
     private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density * value); }
