@@ -5,9 +5,9 @@
 <div class="school-dashboard">
 <header class="dashboard-welcome">
   <div class="dashboard-welcome-copy">
-    <h1>School Dashboard</h1>
-    {% set school_name = school_profile.get('name') or (school_identity.name if school_identity else '') %}
-    {% if school_name %}<p>{{school_name}}</p>{% endif %}
+    <span class="dashboard-welcome-eyebrow">YOUR SCHOOL AT A GLANCE</span>
+    <h1>A clearer view of your school.</h1>
+    <p>Admissions, attendance, exams and your people — connected.</p>
   </div>
   <time datetime="{{dashboard_date.isoformat()}}"><span>{{dashboard_date.strftime('%A')}}</span>{{dashboard_date.strftime('%d %B %Y').lstrip('0')}}</time>
 </header>
