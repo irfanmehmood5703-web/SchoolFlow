@@ -70,7 +70,7 @@ final class QrVoiceFeedback {
         if (closed) return;
         String safe = name == null ? "" : name.replaceAll("[\\p{Cntrl}]", " ").trim();
         if (safe.length() > 100) safe = safe.substring(0, 100);
-        String message = (safe.isEmpty() ? "" : safe + ". ") + "Thank you. Attendance marked.";
+        String message = (safe.isEmpty() ? "" : safe + ". ") + "Attendance marked. Thank you.";
         // A short audible acknowledgement is always attempted, even when
         // TTS claims success but the installed voice cannot actually play.
         int ticket = ++generation;

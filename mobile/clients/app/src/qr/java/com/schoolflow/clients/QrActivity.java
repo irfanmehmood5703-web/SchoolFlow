@@ -77,7 +77,7 @@ public final class QrActivity extends Activity {
         scan = button(content, "Scan QR card", this::openScanner);
         retry = button(content, "Retry pending scan", () -> run(this::deliver));
         connect = button(content, "Connection settings", this::unlock);
-        button(content, "Test voice / sound", () -> feedback.confirm("SchoolFlow", true));
+        button(content, "Test voice / sound", () -> feedback.confirm("", true));
         setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC);
         status = new TextView(this);
         status.setTextColor(Color.DKGRAY);
