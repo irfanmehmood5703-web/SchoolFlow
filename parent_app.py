@@ -155,7 +155,7 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
             return
         rate('app:'+str(f.id)+':'+str(s.id),40)
         row=create();db.session.add(row);db.session.flush();db.session.add(Action(token=token,family_id=f.id,student_id=s.id,kind=kind,target_id=row.id,fingerprint=digest));db.session.add(ops['audit'](action='Parent '+kind,data=dict(family_id=f.id,student_id=s.id,target_id=row.id)));db.session.commit()
-    @bp.get('/app/notification-feed')
+    @bp.route('/app/notification-feed',methods=['GET','POST'])
     def native_notification_feed(code):
         from mobile_notices import feed
         f,rows=family_rows()
