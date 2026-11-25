@@ -95,6 +95,8 @@ def configure_teacher_app(app,db,Student,Employee):
             for row in W.query.filter(W.kind.in_(['advances','leave-approvals']),W.data['employee_id'].as_string()==str(g.teacher_employee.id)).order_by(W.id.desc()).limit(10):
                 events.append(dict(key='request:'+str(row.id),revision=row.status,title='Your request · '+row.status,detail='Advance salary' if row.kind=='advances' else 'Leave request'))
         return events
+    @bp.get('/notifications')
+    def notifications():return render('notifications',events=teacher_notification_events())
     @bp.get('/notification-feed')
     def native_notification_feed():
         from mobile_notices import feed
