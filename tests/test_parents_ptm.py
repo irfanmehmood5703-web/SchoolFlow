@@ -151,7 +151,18 @@ class ParentsPtmTests(unittest.TestCase):
     def test_otp_request_rate_limit(self):
         p=app.test_client();self.token(p,'/parents/PARENT-TEST/login')
         for _ in range(5):self.assertEqual(self.post('/parents/PARENT-TEST/login',{'action':'request','phone':'03000000001'},p).status_code,200)
-        self.assertEqual(self.post('/parents/PARENT-TEST/login',{'action':'request','phone':'03000000001'},p).status_code,429)
+        limited=self.post('/parents/PARENT-TEST/login',{'action':'request','phone':'03000000001'},p)
+        self.assertEqual(limited.status_code,429)
+        self.assertIn(b'Too many login attempts',limited.data)
+        self.assertIn(b'Fictional School',limited.data)
+        self.assertIn(b'Back to Login',limited.data)
+        self.assertIn(b'Pakistan time',limited.data)
+        self.assertTrue(0<int(limited.headers['Retry-After'])<=3600)
+        self.assertIn('no-store',limited.headers['Cache-Control'])
+        again=self.post('/parents/PARENT-TEST/login',{'action':'request','phone':'03000000001'},p)
+        self.assertEqual(again.status_code,429)
+        self.assertLessEqual(int(again.headers['Retry-After']),int(limited.headers['Retry-After']))
+        self.assertEqual(p.get('/parents/PARENT-TEST/login').status_code,200)
     def test_parent_csrf_and_cross_institute_tokens(self):
         credential=self.credential()
         other_school=self.H['provision']('OTHER-SCHOOL','Other Fictional School','owner@example.invalid',self.password).id
