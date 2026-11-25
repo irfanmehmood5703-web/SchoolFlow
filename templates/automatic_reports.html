@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="form-card">
+<h1>Automatic Reports &amp; Notifications</h1>
+<p class="muted">Configure owner-only summaries for the existing workspace and Owner App notification inbox. All campuses, Pakistan time (PKT). Reports appear on inbox refresh after the chosen time; background push, SMS and WhatsApp delivery are not enabled here.</p>
+<form method="post">
+<input type="hidden" name="_csrf" value="{{record_csrf}}"><input type="hidden" name="version" value="{{version}}">
+<div class="table-scroll"><table><thead><tr><th>Report</th><th>Enabled</th><th>Frequency</th><th>Available after (PKT)</th></tr></thead><tbody>
+{% for key,label,f,t in catalog %}
+<tr><td><strong>{{label}}</strong></td><td><label><input type="checkbox" name="{{key}}_enabled" {% if rules[key].enabled %}checked{% endif %}> On</label></td><td><select name="{{key}}_frequency">{% for option in ('daily','weekly','monthly') %}<option value="{{option}}" {% if rules[key].frequency==option %}selected{% endif %}>{{option|title}}</option>{% endfor %}</select></td><td><input type="time" name="{{key}}_time" value="{{rules[key].time}}" required></td></tr>
+{% endfor %}
+</tbody></table></div>
+<p class="muted">Weekly periods start Monday; monthly periods start on the first. Fee and salary balances reflect generated records only. Next Month Fee Forecast estimates eligible ungenerated assigned plans separately; manual charges and optional arrears are excluded. Reports update with saved data; unmarked attendance is not treated as absent.</p>
+<button class="btn" type="submit">Save report settings</button>
+</form></section>
+<section class="form-card"><h2>Available reports</h2>{% for event in events %}<article class="form-card"><strong>{{event.title}}</strong><p>{{event.detail}}</p></article>{% else %}<p>No enabled report is due yet.</p>{% endfor %}</section>
+{% endblock %}
