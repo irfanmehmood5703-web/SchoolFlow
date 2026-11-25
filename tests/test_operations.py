@@ -38,7 +38,11 @@ class OperationTests(unittest.TestCase):
                     if key.startswith('general-'):continue
                     r=self.client.get('/workspace/'+key,follow_redirects=True)
                     self.assertEqual(r.status_code,200,key)
-        self.assertNotIn(b'<aside',self.client.get('/workspace/dashboard').data)
+        nav=self.client.get('/workspace/dashboard').data.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
+        self.assertNotIn(b'<aside',nav)
+        self.assertIn(b'Student Attendance',nav)
+        for label in (b'Combine Attendance Report',b'Combine Day Wise Attendance Report',b'Individual Attendance Report',b'Attendance Summary',b'Absentees',b'Attendance Sheet'):
+            self.assertNotIn(label,nav)
     def test_payment_discount_duplicate_guard_overpayment_and_reversal(self):
         b=self.bill();token='testtoken_abcdefghijklmnop'
         args=dict(student_id=self.s.id,bill_id=b.id,token=token,paid_date='2026-10-01',account='Cash',action='save',**{f'amount_{b.id}':'400',f'discount_{b.id}':'100'})
