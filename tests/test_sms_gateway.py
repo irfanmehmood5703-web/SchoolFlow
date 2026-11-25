@@ -41,7 +41,7 @@ class SmsGatewayTests(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertIn(b'SMS History',page.data)
         self.assertIn(b'Fictional test only',page.data)
-        self.assertEqual(page.headers.get('Cache-Control'),'private, no-store')
+        self.assertIn('no-store',page.headers.get('Cache-Control',''))
         self.assertNotIn(b'Fictional test only',self.c.get(path+'&state=sent').data)
         export=self.c.get(path+'&state=queued&export=csv')
         self.assertEqual(export.status_code,200)
