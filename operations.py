@@ -1725,12 +1725,12 @@ def configure_operations(app, db, Student, Employee):
                     db.session.flush()
                     created+=app.extensions['direct_blaster_queue'](row,scope)
                 commit()
-                flash(f'{created} SMS queued for the registered school phone(s). Open SMS App and press Send Messages to submit.','success')
+                flash(f'{created} SMS added directly to the registered SMS App. Refresh the app and press Send Messages to submit.','success')
             else:
                 queue(body,ids,context={'type':'fee-intimation' if fee_mode else 'sms-blaster'})
                 commit()
                 flash('Communication request saved for review. No SMS was sent.','info')
-            return redirect(url_for('ops.message_log'))
+            return redirect(url_for('ops.messages') if direct else url_for('ops.message_log'))
         return render('messages.html',sms_templates=default_templates,title='Fee Intimation' if fee_mode else 'SMS Blaster',students=students,fee_mode=fee_mode,balances=balances,direct_allowed=direct_allowed,send_token=secrets.token_urlsafe(32))
 
     @bp.route('/messages',methods=['GET','POST'])
