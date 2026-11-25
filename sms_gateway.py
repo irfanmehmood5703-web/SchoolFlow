@@ -401,6 +401,16 @@ def configure_sms_gateway(app,db,Student):
     @bp.post('/api/sms/devices/<int:did>/heartbeat')
     def heartbeat(did):
         device,expected=auth(did);data();queued=Job.query.filter_by(device_id=device.id,generation=device.generation,state='queued').count();active=batches['active'](device);db.session.commit();return jsonify(scope=expected,name=device.name,campus=device.campus,school_scope=g.sms_school['scope'],school_name=g.sms_school['name'],queued=queued,active_batch=active)
+    @bp.post('/api/sms/devices/<int:did>/notification-feed')
+    def native_notification_feed(did):
+        from mobile_notices import feed
+        device,_=auth(did);data()
+        query=Job.query.filter_by(device_id=device.id,generation=device.generation)
+        events=[]
+        for states,title in [(('queued','claimed'),'Pending school SMS'),(('failed','unknown'),'SMS needs review')]:
+            rows=query.filter(Job.state.in_(states)).order_by(Job.updated.desc()).limit(80).all()
+            if rows:events.append(dict(key=states[0],revision=hashlib.sha256(str([(r.id,r.state,r.updated) for r in rows]).encode()).hexdigest(),title=title,detail=str(query.filter(Job.state.in_(states)).count())+' messages'))
+        response=feed('sms',g.sms_school['scope'],str(device.id)+':'+str(device.generation),events);db.session.commit();return response
     @bp.post('/api/sms/devices/<int:did>/claim')
     def claim(did):
         device,_=auth(did);payload=data();stamp=time.time();batch,response=batches['for_claim'](device,payload)

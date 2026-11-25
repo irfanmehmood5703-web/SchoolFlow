@@ -80,6 +80,27 @@ def configure_teacher_app(app,db,Student,Employee):
             rows=roster(c,False);ids=[s.id for s,d in rows];marked=Daily.query.filter_by(kind='student',day=today).filter(Daily.person_id.in_(ids)).count() if c.data['campus'] in grants('attendance.view') else None
             details.append(dict(row=c,count=len(rows),marked=marked))
         return render('home',cards=details)
+    def teacher_notification_events():
+        events=list(app.extensions['notice_events']())
+        for row in app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()):
+            if row['due']:
+                events.append(dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(school_today()),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time']))
+        if own_access('attendance.own','attendance.view','attendance.self'):
+            for row in Daily.query.filter_by(kind='staff',person_id=g.teacher_employee.id).order_by(Daily.day.desc()).limit(5):
+                events.append(dict(key='attendance:'+str(row.id),revision=digest([row.status,row.time_in,row.time_out]),title='Your attendance',detail=str(row.day)+' · '+row.status))
+        if own_access('payroll.self','payroll.view'):
+            for row in ops['salary'].query.filter_by(employee_id=g.teacher_employee.id).order_by(ops['salary'].month.desc()).limit(3):
+                events.append(dict(key='salary:'+str(row.id),revision=str(row.version),title='Salary record updated',detail=row.month+' · '+('Paid' if row.paid else 'Review salary record')))
+        if own_access('hrm.self_requests'):
+            for row in W.query.filter(W.kind.in_(['advances','leave-approvals']),W.data['employee_id'].as_string()==str(g.teacher_employee.id)).order_by(W.id.desc()).limit(10):
+                events.append(dict(key='request:'+str(row.id),revision=row.status,title='Your request · '+row.status,detail='Advance salary' if row.kind=='advances' else 'Leave request'))
+        return events
+    @bp.get('/notifications')
+    def notifications():return render('notifications',events=teacher_notification_events())
+    @bp.get('/notification-feed')
+    def native_notification_feed():
+        from mobile_notices import feed
+        return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events())
     @bp.get('/classes')
     def classes():return render('classes')
     @bp.route('/classes/<int:cid>/attendance',methods=['GET','POST'])

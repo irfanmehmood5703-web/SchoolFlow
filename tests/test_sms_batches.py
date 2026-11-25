@@ -24,6 +24,14 @@ class SmsBatchTests(unittest.TestCase):
     def claim(self,batch):return self.call('claim',dict(batch=batch['id']))
     def start(self,batch,job):return self.call('start',dict(self.ref(job),batch=batch['id']))
     def report(self,job,state='sent'):return self.call('result',dict(self.ref(job),state=state,detail='Fictional callback'))
+    def test_background_notification_feed_does_not_claim_or_send_sms(self):
+        self.heartbeat();self.extra()
+        before=self.tenant(lambda:self.M['job'].query.filter_by(state='queued').count())
+        r=self.call('notification-feed',{})
+        self.assertEqual(r.status_code,200);self.assertTrue(any(e['title']=='Pending school SMS' for e in r.json['events']))
+        self.assertNotIn('+12025550123',str(r.json));self.assertNotIn('Fictional queued',str(r.json))
+        self.assertEqual(self.tenant(lambda:self.M['job'].query.filter_by(state='queued').count()),before)
+        self.assertEqual(self.call('notification-feed',{}).json,r.json)
     def test_pending_list_selected_send_and_cancel_are_device_scoped(self):
         self.heartbeat();self.extra()
         pending=self.call('pending').json

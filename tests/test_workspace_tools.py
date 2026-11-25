@@ -16,6 +16,10 @@ class WorkspaceToolsTests(unittest.TestCase):
         def move():
             d=self.rm['student'].query.filter_by(student_id=2).one();d.data={**d.data,'campus':'South'}
         self.tenant(move)
+        # These tests exercise support/message unread counts in isolation.
+        # Explicitly opt out of automatic financial reports for this fixture.
+        Setting=app.extensions['school_settings_models']['setting']
+        self.tenant(lambda:db.session.add(Setting(key='automatic-owner-reports',data={'fee-received':dict(enabled=False,frequency='daily',time='20:00')})))
     tearDown=messaging_tests.MessagingTests.tearDown;tenant=messaging_tests.MessagingTests.tenant;csrf=messaging_tests.MessagingTests.csrf;login=messaging_tests.MessagingTests.login;post=messaging_tests.MessagingTests.post;policy=messaging_tests.MessagingTests.policy
     def vendor(self):
         V=app.extensions['vendor_models']['owner'];db.session.add(V(id=1,email='vendor@example.invalid',password_hash=generate_password_hash(self.password)));db.session.commit()
