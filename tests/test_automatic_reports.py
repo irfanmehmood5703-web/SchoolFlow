@@ -13,6 +13,18 @@ class AutomaticReportTests(unittest.TestCase):
     token=fixture.ParentsPtmTests.token
     owner=fixture.ParentsPtmTests.owner
     post=fixture.ParentsPtmTests.post
+    def test_new_school_default_daily_fee_notice_and_explicit_opt_out(self):
+        from unittest.mock import patch
+        Setting=app.extensions['school_settings_models']['setting']
+        path='/owner-app/notification-feed'
+        def due(hour):
+            with patch('automatic_reports.datetime') as clock:
+                clock.now.return_value=datetime(2026,11,25,hour,0,tzinfo=SCHOOL_TIMEZONE)
+                return self.c.get(path).get_json()['events']
+        self.assertFalse(any(e['title']=='Fee Collection' for e in due(19)))
+        self.assertTrue(any(e['title']=='Fee Collection' and 'No fee received' in e['body'] for e in due(20)))
+        self.tenant(lambda:db.session.add(Setting(key='automatic-owner-reports',data={'fee-received':dict(enabled=False,frequency='daily',time='20:00')})))
+        self.assertFalse(any(e['title']=='Fee Collection' for e in due(20)))
     def test_zero_fee_default_and_authentication_for_native_owner_feed(self):
         Setting=app.extensions['school_settings_models']['setting']
         def seed():
