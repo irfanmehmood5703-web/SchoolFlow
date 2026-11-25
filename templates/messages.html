@@ -6,13 +6,20 @@
 <p class="muted">This page saves requests only. It does not send SMS or claim delivery. Use the SMS Report to review recorded requests.</p>
 <p><a href="{{url_for('ops.messages')}}">SMS Blaster</a> · <a href="{{url_for('ops.fee_intimation')}}">Fee Intimation</a></p>
 </div>
-<form method="get" class="form-card filter-grid">
+<form method="get" class="form-card no-print">
+<h2>Filter recipients</h2>
+<p class="muted">Leave a filter blank to include all matching students. Apply filters before writing your message.</p>
+<div class="fields-grid">
 {{m.input('campus','Campus',value=request.args.get('campus',''),options=choices('campus'))}}
-<button type="submit">Filter students / Load templates</button>
+{{m.input('class_name','Class',value=request.args.get('class_name',''),options=choices('class_name'))}}
+{{m.input('section','Section',value=request.args.get('section',''),options=choices('section'))}}
+</div>
+<div class="award-actions"><button type="submit">Apply filters / Load templates</button><a class="button secondary" href="{{url_for('ops.fee_intimation' if fee_mode else 'ops.messages')}}">Clear filters</a></div>
 </form>
 <form method="post" class="form-card" id="communication-form">
 {{m.csrf()}}
-<input type="hidden" name="campus" value="{{request.args.get('campus','')}}">
+{% for key in ['campus','class_name','section'] %}<input type="hidden" name="{{key}}" value="{{request.args.get(key,'')}}">{% endfor %}
+<p class="muted">Recipients: {{request.args.get('campus') or 'All campuses'}} · {{request.args.get('class_name') or 'All classes'}} · {{request.args.get('section') or 'All sections'}}</p>
 <div class="field"><label for="sms-template">Message template</label>
 <select id="sms-template"><option value="">Choose a template or write your own</option>
 {% for name,text in sms_templates.items() if text %}<option value="{{text}}">{{name}}</option>{% endfor %}
@@ -20,7 +27,8 @@
 {{m.input('message','Message','textarea','',true)}}
 <p class="muted">Available placeholders: {student_name}, {father_name}, {school_name}{% if fee_mode %}, {remaining_fee}, {fee_month}{% endif %}. Personalisation requires saved student information and a connected delivery service.</p>
 {{m.communication()}}
-<h3>{{'Students with unpaid challans' if fee_mode else 'Select students'}}</h3>
+<h3>{{'Students with unpaid challans' if fee_mode else 'Select students'}} ({{students|length}} matching)</h3>
+<p class="muted" id="sms-selection-count" aria-live="polite">0 selected. Use the header checkbox to select all students in this filtered list.</p>
 <div class="table"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="Select all students"></th><th>SID</th><th>Student</th><th>Class</th>{% if fee_mode %}<th>Outstanding (Rs.)</th>{% endif %}</tr></thead><tbody>
 {% for s in students %}<tr><td><input type="checkbox" name="student_ids" value="{{s.id}}"></td><td>{{s.id}}</td><td>{{s.name}}</td><td>{{s.class_name}}</td>{% if fee_mode %}<td>{{balances[s.id]|cash}}</td>{% endif %}</tr>
 {% else %}<tr><td colspan="{{5 if fee_mode else 4}}">No matching {{'students with outstanding challans' if fee_mode else 'students'}} found.</td></tr>{% endfor %}
@@ -31,6 +39,11 @@
 document.addEventListener('DOMContentLoaded',function(){
  const select=document.getElementById('sms-template'),message=document.querySelector('#communication-form [name="message"]');
  if(select&&message)select.addEventListener('change',function(){if(this.value)message.value=this.value;});
+ const form=document.getElementById('communication-form'),count=document.getElementById('sms-selection-count');
+ if(form&&count){
+   const update=()=>{count.textContent=form.querySelectorAll('input[name="student_ids"]:checked').length+' selected out of '+form.querySelectorAll('input[name="student_ids"]').length+' matching students.';};
+   form.addEventListener('change',()=>requestAnimationFrame(update));update();
+ }
 });
 </script>
 <script src="{{asset_url('school_settings.js')}}" defer></script>
