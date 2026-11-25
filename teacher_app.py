@@ -72,7 +72,7 @@ def configure_teacher_app(app,db,Student,Employee):
     def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace'}.get(view,view.title()),**values)
     @bp.context_processor
     def context():
-        return dict(teacher=g.teacher_employee,teacher_account=g.staff_principal,teacher_today=school_today(),teacher_classes=cohorts(),teacher_can=lambda code,campus:campus in grants(code),teacher_token=secrets.token_urlsafe(32),teacher_study=STUDY,timedelta=timedelta,teacher_own=own_access,teacher_money=lambda n:'Rs '+f'{n/100:,.2f}')
+        return dict(teacher=g.teacher_employee,teacher_account=g.staff_principal,teacher_today=school_today(),teacher_classes=cohorts(),teacher_periods=app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()) if request.endpoint in ('teacher_app.home','teacher_app.reminders') else [],teacher_can=lambda code,campus:campus in grants(code),teacher_token=secrets.token_urlsafe(32),teacher_study=STUDY,timedelta=timedelta,teacher_own=own_access,teacher_money=lambda n:'Rs '+f'{n/100:,.2f}')
     @bp.get('')
     def home():
         classes=cohorts();today=school_today();details=[]
