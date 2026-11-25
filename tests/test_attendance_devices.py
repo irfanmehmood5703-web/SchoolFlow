@@ -271,6 +271,7 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertEqual(self.daily(),[])
 
     def test_schoolflow_student_and_employee_qr_tokens_resolve_only_in_their_campus(self):
+        self.tenant(lambda:setattr(db.session.get(self.models['device'],1),'kind','biometric'))
         namespace=self.tenant(lambda:app.extensions['identity_models']['institute'].query.filter_by(id=self.school).one().storage_key)
         def qr(typ,pid,number):return 'schoolflow:'+typ+':'+hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:{typ}-qr:{namespace}:{pid}:{number}'.encode(),hashlib.sha256).hexdigest()
         import hmac
