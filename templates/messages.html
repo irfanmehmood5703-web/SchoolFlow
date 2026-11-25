@@ -35,9 +35,9 @@
 {% if direct_allowed %}<div class="check-grid comm-options">{% for key,label in [('father_contact','Father Contact'),('mother_contact','Mother Contact'),('student_contact','Student Contact'),('app_sms','App SMS'),('branded_sms','Branded SMS'),('whatsapp_sms','WhatsApp SMS'),('parent_notification','Parent App Notification'),('teacher_notification','Teacher App Notification')] %}<label class="check"><input type="checkbox" name="{{key}}" {{'checked' if key in ['father_contact','app_sms'] else ''}}>{{label}}</label>{% endfor %}</div>{% else %}{{m.communication()}}{% endif %}
 <h3>{{'Students with unpaid challans' if fee_mode else 'Select students'}} ({{students|length}} matching)</h3>
 <p class="muted" id="sms-selection-count" aria-live="polite">0 selected. Use the header checkbox to select all students in this filtered list.</p>
-<div class="table"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="Select all students"></th><th>SID</th><th>Student</th><th>Class</th>{% if fee_mode %}<th>Outstanding (Rs.)</th>{% endif %}</tr></thead><tbody>
-{% for s in students %}<tr><td><input type="checkbox" name="student_ids" value="{{s.id}}"></td><td>{{s.id}}</td><td>{{s.name}}</td><td>{{s.class_name}}</td>{% if fee_mode %}<td>{{balances[s.id]|cash}}</td>{% endif %}</tr>
-{% else %}<tr><td colspan="{{5 if fee_mode else 4}}">No matching {{'students with outstanding challans' if fee_mode else 'students'}} found.</td></tr>{% endfor %}
+<div class="table"><table><thead><tr><th><input type="checkbox" data-select-all aria-label="Select all students"></th><th>SID</th><th>Family No.</th><th>Student</th><th>Class</th>{% if fee_mode %}<th>Outstanding (Rs.)</th>{% endif %}</tr></thead><tbody>
+{% set fn=family_numbers(students|map(attribute='id')|list) %}{% for s in students %}<tr><td><input type="checkbox" name="student_ids" value="{{s.id}}"></td><td>{{s.id}}</td><td>{{fn.get(s.id) or '—'}}</td><td>{{s.name}}</td><td>{{s.class_name}}</td>{% if fee_mode %}<td>{{balances[s.id]|cash}}</td>{% endif %}</tr>
+{% else %}<tr><td colspan="{{6 if fee_mode else 5}}">No matching {{'students with outstanding challans' if fee_mode else 'students'}} found.</td></tr>{% endfor %}
 </tbody></table></div>
 {% if direct_allowed %}
 <p class="muted">Send SMS queues the selected parent messages immediately for the registered campus phone. SIM charges apply. Open the SMS App and press Send Messages to submit. Other delivery channels require review.</p>
