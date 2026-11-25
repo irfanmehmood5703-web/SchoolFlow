@@ -24,6 +24,35 @@ class SmsBatchTests(unittest.TestCase):
     def claim(self,batch):return self.call('claim',dict(batch=batch['id']))
     def start(self,batch,job):return self.call('start',dict(self.ref(job),batch=batch['id']))
     def report(self,job,state='sent'):return self.call('result',dict(self.ref(job),state=state,detail='Fictional callback'))
+    def test_pending_list_selected_send_and_cancel_are_device_scoped(self):
+        self.heartbeat();self.extra()
+        pending=self.call('pending').json
+        self.assertEqual(pending['total'],3)
+        self.assertEqual({j['id'] for j in pending['jobs']},{'j'*43,'0'*43,'1'*43})
+        self.assertTrue(all('token' not in j for j in pending['jobs']))
+        for _ in range(2):
+            self.assertEqual(self.call('cancel-pending',{'ids':['0'*43]}).status_code,200)
+        self.assertEqual(self.tenant(lambda:db.session.get(self.M['job'],'0'*43).state),'cancelled')
+        self.assertEqual(self.call('cancel-pending',{'ids':['z'*43,'j'*43]}).status_code,409)
+        token=secrets.token_urlsafe(32)
+        b=self.call('batch',{'id':token,'interval':20,'ids':['1'*43]}).json['batch']
+        self.assertEqual(b['total'],1)
+        self.assertEqual(self.call('cancel-pending',{'ids':['j'*43]}).status_code,409)
+        job=self.claim(b).json['job'];self.assertEqual(job['id'],'1'*43)
+        self.assertEqual(self.start(b,job).status_code,200)
+        self.assertEqual(self.report(job).status_code,200)
+        self.assertTrue(self.claim(b).json['complete'])
+        self.assertEqual(self.call('cancel-pending',{'ids':['1'*43]}).status_code,409)
+        self.assertEqual([j['id'] for j in self.call('pending').json['jobs']],['j'*43])
+        self.assertEqual(self.call('batch',{'id':token,'interval':20,'ids':['j'*43]}).status_code,409)
+    def test_cancel_reviewed_only_before_dispatch(self):
+        self.heartbeat();self.extra()
+        job=self.call('claim').json['job']
+        for _ in range(2):self.assertEqual(self.call('cancel-reviewed',self.ref(job)).status_code,200)
+        self.assertEqual(self.call('start',self.ref(job)).status_code,409)
+        next_job=self.call('claim').json['job']
+        self.assertEqual(self.call('start',self.ref(next_job)).status_code,200)
+        self.assertEqual(self.call('cancel-reviewed',self.ref(next_job)).status_code,409)
     def test_default_and_all_supported_delays_enforced_on_server(self):
         for interval in (15,20,25):
             with self.subTest(interval=interval):
