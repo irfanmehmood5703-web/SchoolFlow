@@ -124,6 +124,44 @@ def configure_automatic_reports(app,db,Student,Employee):
             for old in sorted(saved,key=lambda r:r.id,reverse=True)[max(0,90-count):]:db.session.delete(old)
         db.session.commit()
         return count
+    WA_KEY='automatic-report-whatsapp'
+    def wa_config():
+        row=db.session.get(Setting,WA_KEY)
+        return row,row.data if row else {}
+    def wa_options():
+        return app.extensions['whatsapp_helpers']['report_options']()
+    def wa_send(now=None):
+        row,cfg=wa_config()
+        if not cfg.get('enabled'):return
+        helper=app.extensions['whatsapp_helpers']
+        if not any(o['provider']==cfg.get('provider') and o['id']==cfg.get('device') for o in wa_options()):return
+        mobile=helper['decrypt'](cfg['recipient'])
+        # Only the current enabled reports; no replay of older saved history.
+        # Stable report period + recipient consent, with provider-side claim before network.
+        for event in due_reports(now):
+            token=hashlib.sha256(('scheduled-report:'+event['key']+':'+event['revision']).encode()).hexdigest()
+            helper['send_report'](token,cfg['device'],cfg['provider'],mobile,event['title']+'\n'+event['detail'])
+    @bp.post('/whatsapp')
+    def whatsapp():
+        if not owner():abort(403)
+        csrf();app.extensions['admission_capacity']['lock']()
+        row,cfg=wa_config()
+        if request.form.get('version')!=str(row.version if row else 0):abort(409,'Settings changed. Reload first.')
+        if request.form.get('action')=='disable':
+            if row:row.data={'enabled':False}
+        elif request.form.get('action')=='enable':
+            device=request.form.get('device','');provider=request.form.get('provider',type=int)
+            mobile=request.form.get('mobile','').strip()
+            if not any(o['provider']==provider and o['id']==device for o in wa_options()):abort(422,'Link and enable the selected WhatsApp provider first.')
+            if not re.fullmatch('[1-9][0-9]{7,14}',mobile) or request.form.get('consent')!='yes':abort(422,'Confirm that you control this WhatsApp number and consent to school financial summaries.')
+            row=row or Setting(key=WA_KEY)
+            row.data=dict(enabled=True,provider=provider,device=device,recipient=app.extensions['whatsapp_helpers']['encrypt'](mobile))
+            db.session.add(row)
+        else:abort(422)
+        db.session.add(ops['audit'](action='Change scheduled WhatsApp report consent',data={'enabled':request.form.get('action')=='enable'}))
+        db.session.commit()
+        flash('WhatsApp report settings saved. No immediate message was sent.','success')
+        return redirect(url_for('automatic_reports.index'))
     def tick_all():
         with app.app_context():
             School=app.extensions['identity_models']['institute']
@@ -134,6 +172,7 @@ def configure_automatic_reports(app,db,Student,Employee):
                         g.institute_engine=app.extensions['identity_helpers']['engine'](sid)
                         g.school_identity=dict(scope=scope,demo=False)
                         capture()
+                        wa_send()
                     except Exception:
                         db.session.rollback();app.logger.exception('Automatic report worker failed for institute %s',sid)
                     finally:db.session.remove();g.pop('institute_engine',None)
@@ -201,10 +240,10 @@ def configure_automatic_reports(app,db,Student,Employee):
             flash('Automatic report settings saved.','success')
             return redirect(url_for('automatic_reports.index'))
         row,rules=settings()
-        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=assignments(),employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'))
+        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=assignments(),employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
     @bp.after_request
     def private(response):
         response.headers['Cache-Control']='no-store';return response
     app.extensions['automatic_report_events']=events
-    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all,teacher_periods=teacher_periods)
+    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all,teacher_periods=teacher_periods,wa_send=wa_send)
     app.register_blueprint(bp)
