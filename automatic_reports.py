@@ -1,11 +1,11 @@
 """Owner-only scheduled report notices, derived from actual tenant records.
 
-The existing inbox refreshes these reports when accessed; this is not a background
-worker, SMS or WhatsApp transport. All amounts remain integer paisa.
+Reports can be captured by the existing scheduler and read from the inbox.
+External delivery is opt-in. All amounts remain integer paisa.
 """
 from datetime import datetime,timedelta
 from collections import Counter
-import re
+import re,os,hashlib
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,session,url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -91,8 +91,8 @@ def configure_automatic_reports(app,db,Student,Employee):
             if snapshot.get('account_class')=='Income':income+=credit-debit
             elif snapshot.get('account_class')=='Expense':expense+=debit-credit
         return 'Income '+money(income)+' · Expenses '+money(expense)+' · Net '+money(income-expense)
-    def events(now=None):
-        if not owner():return []
+    W=ops['workflow']
+    def due_reports(now=None):
         now=now or datetime.now(SCHOOL_TIMEZONE)
         _,rules=settings();out=[]
         for key,label,_,_ in REPORTS:
@@ -103,6 +103,43 @@ def configure_automatic_reports(app,db,Student,Employee):
             start,end=dates
             out.append(dict(key='auto-report:'+key,revision=rule['frequency']+':'+str(start),title=label,detail=str(start)+' to '+str(end)+' · '+summary(key,start,end),url=url_for('automatic_reports.index')))
         return out
+    def events(now=None):
+        if not owner():return []
+        return due_reports(now)
+    def capture(now=None):
+        now=now or datetime.now(SCHOOL_TIMEZONE)
+        # Serialize with all other tenant mutations; stable per-period keys
+        # prevent repeat snapshots across gunicorn workers and restarts.
+        row,rules=settings()
+        if not row or not any(rule['enabled'] for rule in rules.values()):return 0
+        app.extensions['admission_capacity']['lock']()
+        saved=W.query.filter_by(kind='automatic-report-snapshot',status='Active').all()
+        seen={(r.data.get('key'),r.data.get('revision')) for r in saved}
+        count=0
+        for event in due_reports(now):
+            if (event['key'],event['revision']) in seen:continue
+            db.session.add(W(kind='automatic-report-snapshot',status='Active',data={**event,'captured':now.isoformat()}));count+=1
+        if count:
+            # Keep bounded history and never store external credentials here.
+            for old in sorted(saved,key=lambda r:r.id,reverse=True)[max(0,90-count):]:db.session.delete(old)
+        db.session.commit()
+        return count
+    def tick_all():
+        with app.app_context():
+            School=app.extensions['identity_models']['institute']
+            schools=[(s.id,s.storage_key) for s in School.query.filter_by(active=True).all()];db.session.remove()
+            for sid,scope in schools:
+                with app.test_request_context('/internal/automatic-reports'):
+                    try:
+                        g.institute_engine=app.extensions['identity_helpers']['engine'](sid)
+                        g.school_identity=dict(scope=scope,demo=False)
+                        capture()
+                    except Exception:
+                        db.session.rollback();app.logger.exception('Automatic report worker failed for institute %s',sid)
+                    finally:db.session.remove();g.pop('institute_engine',None)
+    @app.cli.command('automatic-reports-tick')
+    def tick_cli():
+        tick_all()
     @bp.route('',methods=['GET','POST'])
     def index():
         if not owner():abort(403)
@@ -123,9 +160,10 @@ def configure_automatic_reports(app,db,Student,Employee):
             flash('Automatic report settings saved.','success')
             return redirect(url_for('automatic_reports.index'))
         row,rules=settings()
-        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events())
+        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')))
     @bp.after_request
     def private(response):
         response.headers['Cache-Control']='no-store';return response
     app.extensions['automatic_report_events']=events
+    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all)
     app.register_blueprint(bp)
