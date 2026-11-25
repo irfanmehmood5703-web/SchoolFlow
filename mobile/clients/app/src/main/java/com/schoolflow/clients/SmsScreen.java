@@ -36,6 +36,7 @@ final class SmsScreen {
  private final int mint=Color.rgb(233,245,238),border=Color.rgb(209,226,216);
  private boolean connectionVerified;
  private Runnable timeout;
+ private LinearLayout pendingList;private Button selectAll,deleteSelected,deleteReviewed;private TextView selectionCount;private final LinkedHashSet<String> selectedIds=new LinkedHashSet<>();private final LinkedHashMap<String,CheckBox> pendingChecks=new LinkedHashMap<>();
  SmsScreen(Activity activity){a=activity;vault=new Vault(a);}
  private int dp(int n){return Math.round(n*a.getResources().getDisplayMetrics().density);}
  private GradientDrawable box(int color,int radius,int stroke){
@@ -205,6 +206,14 @@ final class SmsScreen {
   status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
   refreshButton=button(overview,"Refresh queue",this::refresh,false);
 
+  LinearLayout management=card(root);
+  text(management,"Pending messages",18,true);
+  text(management,"Review recipients and select messages to send or delete. Up to 50 pending messages per refresh.",12,false);
+  selectionCount=text(management,"0 selected",14,true);
+  selectAll=button(management,"Select all shown",()->{boolean all=!pendingChecks.isEmpty()&&selectedIds.size()==pendingChecks.size();for(CheckBox check:pendingChecks.values())check.setChecked(!all);},false);
+  pendingList=new LinearLayout(a);pendingList.setOrientation(LinearLayout.VERTICAL);management.addView(pendingList);
+  deleteSelected=button(management,"Delete selected SMS",this::cancelSelected,false);
+
   LinearLayout sending=card(root);
   text(sending,"Sending setup",18,true);
   sims=new Spinner(a);
@@ -215,7 +224,7 @@ final class SmsScreen {
       new String[]{"15 seconds","20 seconds (recommended)","25 seconds"}));
   interval.setSelection(1);
   addSpinner(sending,interval,"Time between messages");
-  start=button(sending,"Send Messages",this::prepareRun,true);
+  start=button(sending,"Send selected SMS",this::prepareRun,true);
   pause=button(sending,"Pause sending",()->stopRun("Paused. An SMS already submitted cannot be recalled.",true),false);
   text(sending,"SIM package charges apply. Keep this app open while sending.",12,false);
 
@@ -226,6 +235,7 @@ final class SmsScreen {
   preview.setPadding(dp(12),dp(9),dp(12),dp(9));
   review=button(next,"Review next SMS",this::claimManual,false);
   send=button(next,"Send reviewed SMS",this::confirmManual,true);
+  deleteReviewed=button(next,"Delete reviewed unsent SMS",this::cancelReviewed,false);
   report=button(next,"Upload saved result",this::reportResult,false);
   resolveButton=button(next,"Resolve uncertain message",this::resolve,false);
 
@@ -247,7 +257,7 @@ final class SmsScreen {
  }
  private void controls(){if(start==null||destroyed)return;boolean free=!busy&&!storageFailed;
   connect.setEnabled(free&&!run.running()&&job==null);code.setEnabled(free&&!run.running()&&job==null&&BuildConfig.INSTITUTE_CODE.isEmpty());id.setEnabled(free&&!run.running()&&job==null);key.setEnabled(free&&!run.running()&&job==null);
-  start.setEnabled(free&&active&&!awaiting&&!run.running()&&job==null&&config.has("scope"));pause.setEnabled(config.has("batch")&&!storageFailed);sims.setEnabled(free&&!run.running()&&!awaiting);interval.setEnabled(free&&!run.running()&&!awaiting);
+  start.setEnabled(free&&active&&!awaiting&&!run.running()&&job==null&&config.has("scope")&&!selectedIds.isEmpty());pause.setEnabled(config.has("batch")&&!storageFailed);sims.setEnabled(free&&!run.running()&&!awaiting);interval.setEnabled(free&&!run.running()&&!awaiting);
   boolean sending=run.running();
   boolean hasResult=job!=null&&config.has("outcome");
   boolean canReview=job!=null&&"claimed".equals(config.optString("stage"));
@@ -260,7 +270,11 @@ final class SmsScreen {
   resolveButton.setVisibility(job!=null&&!sending?View.VISIBLE:View.GONE);
   resolveButton.setEnabled(free&&!awaiting&&!sending);
   pause.setVisibility(config.has("batch")?View.VISIBLE:View.GONE);
-  refreshButton.setEnabled(free&&!awaiting&&!sending&&job==null&&config.has("scope"));
+  refreshButton.setEnabled(free&&!awaiting&&!sending&&config.has("scope"));
+  boolean manage=free&&active&&!awaiting&&!sending&&job==null&&!config.has("batch")&&connectionVerified;
+  selectAll.setEnabled(manage&&!pendingChecks.isEmpty());deleteSelected.setEnabled(manage&&!selectedIds.isEmpty());for(CheckBox check:pendingChecks.values())check.setEnabled(manage);
+  selectionCount.setText(selectedIds.size()+" selected of "+pendingChecks.size()+" shown");
+  deleteReviewed.setVisibility(canReview&&!sending?View.VISIBLE:View.GONE);deleteReviewed.setEnabled(free&&active&&canReview&&!awaiting&&!config.has("batch"));
   activityIndicator.setVisibility(busy||awaiting?View.VISIBLE:View.GONE);
   runBadge.setText(sending?"Sending":hasResult?"Result pending":config.has("batch")?"Paused":"Idle");
   connectionBadge.setText(connectionVerified?"Connected":config.has("scope")?"Checking connection":"Not connected");
@@ -271,14 +285,30 @@ final class SmsScreen {
  private static final class ApiException extends IOException { final int statusCode; ApiException(int code){super("Action refused");statusCode=code;} }
  private JSONObject call(String action,JSONObject body)throws Exception{
   if(!SchoolBinding.matches(BuildConfig.INSTITUTE_CODE,BuildConfig.SCHOOL_SCOPE,config.optString("code"),config.optString("school_scope",BuildConfig.SCHOOL_SCOPE)))throw new IOException("Wrong school");String did=config.getString("device");if(!did.matches("[1-9][0-9]{0,8}"))throw new IOException();HttpURLConnection c=(HttpURLConnection)new URL(EndpointPolicy.BASE+"/api/sms/devices/"+did+"/"+action).openConnection();
-  try{c.setInstanceFollowRedirects(false);c.setConnectTimeout(20000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("X-Institute-Code",config.getString("code"));c.setRequestProperty("Authorization","Bearer "+config.getString("key"));if(config.has("scope"))c.setRequestProperty("X-Device-Scope",config.getString("scope"));try(OutputStream out=c.getOutputStream()){out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}int statusCode=c.getResponseCode();if(statusCode!=200)throw new ApiException(statusCode);try(InputStream in=c.getInputStream()){ByteArrayOutputStream b=new ByteArrayOutputStream();byte[] buffer=new byte[2048];int n;while((n=in.read(buffer))!=-1){if(b.size()+n>16384)throw new IOException();b.write(buffer,0,n);}return new JSONObject(b.toString("UTF-8"));}}finally{c.disconnect();}
+  try{c.setInstanceFollowRedirects(false);c.setConnectTimeout(20000);c.setReadTimeout(20000);c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("X-Institute-Code",config.getString("code"));c.setRequestProperty("Authorization","Bearer "+config.getString("key"));if(config.has("scope"))c.setRequestProperty("X-Device-Scope",config.getString("scope"));try(OutputStream out=c.getOutputStream()){out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}int statusCode=c.getResponseCode();if(statusCode!=200)throw new ApiException(statusCode);try(InputStream in=c.getInputStream()){ByteArrayOutputStream b=new ByteArrayOutputStream();byte[] buffer=new byte[2048];int n;while((n=in.read(buffer))!=-1){if(b.size()+n>524288)throw new IOException();b.write(buffer,0,n);}return new JSONObject(b.toString("UTF-8"));}}finally{c.disconnect();}
  }
  private void save()throws Exception{vault.save(config.toString());}
  private void acceptHeartbeat(JSONObject h)throws Exception{if(!SchoolBinding.matches(BuildConfig.INSTITUTE_CODE,BuildConfig.SCHOOL_SCOPE,config.getString("code"),h.optString("school_scope")))throw new IOException("Wrong school");if(config.has("scope")&&!h.getString("scope").equals(config.getString("scope")))throw new IOException("Connection rotated");config.put("scope",h.getString("scope")).put("school_scope",h.getString("school_scope"));if(h.optJSONObject("active_batch")!=null)config.put("batch",h.getJSONObject("active_batch").getString("id"));save();connectionVerified=true;connection.setText(h.getString("name")+" · "+h.getString("campus"));if(h.optJSONObject("active_batch")==null)runMetrics.setVisibility(View.GONE);counts.setText(h.optInt("queued")+" queued for this phone");}
  private void connect(){if(busy||job!=null)return;String school=code.getText().toString().trim().toUpperCase(Locale.ROOT),device=id.getText().toString().trim(),secret=key.getText().toString().trim();if(!school.matches("[A-Z0-9][A-Z0-9-]{2,39}")||!device.matches("[1-9][0-9]{0,8}")||!secret.matches("[A-Za-z0-9_-]{43}")){status.setText("Check the institute code, numeric phone ID and connection key.");return;}
-  final JSONObject previous=config;try{config=new JSONObject().put("code",school).put("device",device).put("key",secret);}catch(JSONException e){return;}task(()->{try{return call("heartbeat",new JSONObject());}catch(Exception e){config=previous;throw e;}},h->{acceptHeartbeat(h);settings.setVisibility(View.GONE);status.setText("Connection saved. Choose the school SIM and tap Send Messages.");});
+  final JSONObject previous=config;try{config=new JSONObject().put("code",school).put("device",device).put("key",secret);}catch(JSONException e){return;}task(()->{try{return call("heartbeat",new JSONObject());}catch(Exception e){config=previous;throw e;}},h->{acceptHeartbeat(h);settings.setVisibility(View.GONE);status.setText("Connection saved. Select pending messages and choose the school SIM.");loadPending();});
  }
- private void refresh(){task(()->call("heartbeat",new JSONObject()),this::acceptHeartbeat);}
+ private void refresh(){task(()->call("heartbeat",new JSONObject()),h->{acceptHeartbeat(h);loadPending();});}
+ private void loadPending(){task(()->call("pending",new JSONObject()),response->{
+  JSONArray jobs=response.getJSONArray("jobs");Set<String> prior=new HashSet<>(selectedIds);selectedIds.clear();pendingChecks.clear();pendingList.removeAllViews();
+  for(int i=0;i<jobs.length();i++){JSONObject item=jobs.getJSONObject(i);String jid=item.getString("id");
+   CheckBox cb=new CheckBox(a);cb.setText(item.getString("phone")+"\n"+item.getString("text"));cb.setTextColor(ink);cb.setTextSize(14);cb.setPadding(dp(4),dp(8),dp(4),dp(8));
+   pendingChecks.put(jid,cb);cb.setChecked(prior.contains(jid));if(cb.isChecked())selectedIds.add(jid);
+   cb.setOnCheckedChangeListener((v,checked)->{if(checked)selectedIds.add(jid);else selectedIds.remove(jid);controls();});pendingList.addView(cb,new LinearLayout.LayoutParams(-1,-2));
+  }
+  if(jobs.length()==0)text(pendingList,"No pending messages.",14,false);
+  else if(response.optInt("total")>jobs.length())text(pendingList,"More pending messages are available after these are sent or deleted. Refresh to load the next group.",12,false);
+  counts.setText(response.optInt("total")+" queued for this phone");controls();
+ });}
+ private void cancelSelected(){if(selectedIds.isEmpty()||job!=null||busy||run.running())return;final JSONArray ids=new JSONArray(new ArrayList<>(selectedIds));
+  new AlertDialog.Builder(a).setTitle("Delete selected SMS?").setMessage(ids.length()+" unsent message(s) will be cancelled. Sent or uncertain messages are not deleted.").setNegativeButton("Keep messages",null).setPositiveButton("Delete selected",(d,w)->{task(()->call("cancel-pending",new JSONObject().put("ids",ids)),response->{selectedIds.clear();status.setText(response.optInt("cancelled")+" pending messages cancelled.");refresh();});}).show();}
+ private void cancelReviewed(){if(job==null||busy||awaiting||run.running()||!"claimed".equals(config.optString("stage"))||config.has("batch"))return;
+  new AlertDialog.Builder(a).setTitle("Delete reviewed SMS?").setMessage("Cancel this unsent message? It will not be dispatched.").setNegativeButton("Keep message",null).setPositiveButton("Delete",(d,w)->{task(()->call("cancel-reviewed",reference()),response->{job=null;config.remove("job");config.remove("stage");config.remove("outcome");save();showJob();status.setText("Reviewed unsent message cancelled.");refresh();});}).show();}
+
  private boolean permitted(){return a.checkSelfPermission(Manifest.permission.SEND_SMS)==PackageManager.PERMISSION_GRANTED&&a.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED;}
  private void permission(){if(!permitted())a.requestPermissions(new String[]{Manifest.permission.SEND_SMS,Manifest.permission.READ_PHONE_STATE},13);else loadSims();}
  void permissions(int request){if(request==13){loadSims();controls();}}
@@ -286,10 +316,10 @@ final class SmsScreen {
  private boolean selectSim(){if(!permitted()){permission();status.setText("Allow permission, select the school SIM, then tap Send Messages again.");return false;}int pos=sims.getSelectedItemPosition();if(pos<0||pos>=subscriptionIds.size()){status.setText("No active school SIM selected.");return false;}selectedSim=subscriptionIds.get(pos);try{config.put("sim",selectedSim);save();return true;}catch(Exception e){storageFailed=true;controls();return false;}}
  private String newToken(){byte[] bytes=new byte[32];new SecureRandom().nextBytes(bytes);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}
  private JSONObject batchReference()throws JSONException{return new JSONObject().put("batch",config.getString("batch"));}
- private void prepareRun(){if(!active||busy||job!=null||!selectSim())return;final int seconds=interval.getSelectedItemPosition()==0?15:interval.getSelectedItemPosition()==2?25:20;
+ private void prepareRun(){if(!active||busy||job!=null||selectedIds.isEmpty()||!selectSim())return;final JSONArray chosen=new JSONArray(new ArrayList<>(selectedIds));final int seconds=interval.getSelectedItemPosition()==0?15:interval.getSelectedItemPosition()==2?25:20;
   try{config.put("interval",seconds);if(!config.has("batch"))config.put("batch",newToken());save();}catch(Exception e){storageFailed=true;controls();return;}
   // Retire a recovered run explicitly, then obtain a finite queue snapshot.
-  final String old=config.optString("batch");final String fresh=newToken();task(()->{try{call("batch-stop",new JSONObject().put("batch",old));}catch(ApiException e){if(e.statusCode!=404)throw e;}return call("heartbeat",new JSONObject());},h->{acceptHeartbeat(h);if(h.optJSONObject("active_batch")!=null){stopRun("Another run was active. Pausing it; tap Send Messages again.",true);return;}config.put("batch",fresh);save();task(()->call("batch",new JSONObject().put("id",fresh).put("interval",seconds)),response->{JSONObject batch=response.optJSONObject("batch");if(batch==null){config.remove("batch");save();status.setText("No queued SMS. Release approved parent messages from the school software first.");return;}showCounts(batch);if(!active){stopRun("App paused. Tap Send Messages when ready.",true);return;}new AlertDialog.Builder(a).setTitle("Start sending messages?").setMessage(batch.getInt("total")+" queued message(s), one every "+seconds+" seconds, using the selected school SIM. Multipart messages can use several SMS credits. SIM/network charges apply. Keep this app open.").setNegativeButton("Cancel",(d,w)->stopRun("Sending cancelled. Nothing dispatched.",true)).setOnCancelListener(d->stopRun("Sending cancelled. Nothing dispatched.",true)).setPositiveButton("Send Messages",(d,w)->{if(!active)return;run.start(seconds);a.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText("Sending run started. You can pause at any time.");controls();tick();}).show();});});
+  final String old=config.optString("batch");final String fresh=newToken();task(()->{try{call("batch-stop",new JSONObject().put("batch",old));}catch(ApiException e){if(e.statusCode!=404)throw e;}return call("heartbeat",new JSONObject());},h->{acceptHeartbeat(h);if(h.optJSONObject("active_batch")!=null){stopRun("Another run was active. Pausing it; tap Send Messages again.",true);return;}config.put("batch",fresh);save();task(()->call("batch",new JSONObject().put("id",fresh).put("interval",seconds).put("ids",chosen)),response->{JSONObject batch=response.optJSONObject("batch");if(batch==null){config.remove("batch");save();status.setText("No queued SMS. Release approved parent messages from the school software first.");return;}showCounts(batch);if(!active){stopRun("App paused. Tap Send Messages when ready.",true);return;}new AlertDialog.Builder(a).setTitle("Start sending messages?").setMessage(batch.getInt("total")+" queued message(s), one every "+seconds+" seconds, using the selected school SIM. Multipart messages can use several SMS credits. SIM/network charges apply. Keep this app open.").setNegativeButton("Cancel",(d,w)->stopRun("Sending cancelled. Nothing dispatched.",true)).setOnCancelListener(d->stopRun("Sending cancelled. Nothing dispatched.",true)).setPositiveButton("Send Messages",(d,w)->{if(!active)return;run.start(seconds);a.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText("Sending run started. You can pause at any time.");controls();tick();}).show();});});
  }
  private void showCounts(JSONObject batch){
   counts.setText("Current send run");
@@ -301,7 +331,7 @@ final class SmsScreen {
  private final Runnable nextTick=this::tick;
  private void tick(){handler.removeCallbacks(nextTick);if(!active||!run.running()||destroyed)return;if(busy||awaiting){handler.postDelayed(nextTick,1000);return;}long wait=run.delay(SystemClock.elapsedRealtime());if(wait>0){timer.setText("Next message in "+((wait+999)/1000)+" seconds");handler.postDelayed(nextTick,1000);return;}timer.setText("Checking approved queue…");claim(true);}
  private void claimManual(){if(!active||busy||job!=null)return;if(config.has("batch")){stopRun("Previous run paused. Tap Review next SMS again.",true);return;}claim(false);}
- private void claim(boolean automatic){task(()->call("claim",automatic?batchReference():new JSONObject()),response->{JSONObject b=response.optJSONObject("batch");if(b!=null)showCounts(b);if(response.optBoolean("paused")||response.optBoolean("complete")){run.stop();a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText(response.optBoolean("complete")?"Run complete. Tap Send Messages again for newly queued SMS.":"Run paused. Review failed or uncertain messages in the school outbox.");config.remove("batch");save();timer.setText("Sending stopped");return;}int wait=response.optInt("wait_seconds");if(wait>0){run.serverWait(SystemClock.elapsedRealtime(),wait);tick();return;}job=response.optJSONObject("job");if(job==null){if(automatic)stopRun("No pending SMS in this run.",true);else status.setText("No queued SMS for this phone.");return;}config.put("job",job).put("stage","claimed");config.remove("outcome");save();showJob();if(automatic){if(active&&run.running())dispatch();else stopRun("Paused before dispatch.",true);}else status.setText("Review recipient and message, then send using the selected SIM.");});}
+ private void claim(boolean automatic){task(()->call("claim",automatic?batchReference():new JSONObject()),response->{JSONObject b=response.optJSONObject("batch");if(b!=null)showCounts(b);if(response.optBoolean("paused")||response.optBoolean("complete")){run.stop();a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);status.setText(response.optBoolean("complete")?"Run complete. Tap Send Messages again for newly queued SMS.":"Run paused. Review failed or uncertain messages in the school outbox.");config.remove("batch");save();timer.setText("Sending stopped");selectedIds.clear();refresh();return;}int wait=response.optInt("wait_seconds");if(wait>0){run.serverWait(SystemClock.elapsedRealtime(),wait);tick();return;}job=response.optJSONObject("job");if(job==null){if(automatic)stopRun("No pending SMS in this run.",true);else status.setText("No queued SMS for this phone.");return;}config.put("job",job).put("stage","claimed");config.remove("outcome");save();showJob();if(automatic){if(active&&run.running())dispatch();else stopRun("Paused before dispatch.",true);}else status.setText("Review recipient and message, then send using the selected SIM.");});}
  private void confirmManual(){if(job==null||!"claimed".equals(config.optString("stage"))||!selectSim())return;new AlertDialog.Builder(a).setTitle("Send reviewed SMS?").setMessage(job.optString("phone")+"\nYour selected SIM package/network charges apply.").setNegativeButton("Cancel",null).setPositiveButton("Send once",(d,w)->dispatch()).show();}
  private JSONObject reference()throws JSONException{JSONObject r=new JSONObject().put("id",job.getString("id")).put("token",job.getString("token"));if(run.running()&&config.has("batch"))r.put("batch",config.getString("batch"));return r;}
  @SuppressWarnings("MissingPermission") private boolean simPresent(){if(!permitted()||selectedSim<0)return false;try{return ((SubscriptionManager)a.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE)).getActiveSubscriptionInfo(selectedSim)!=null;}catch(Exception e){return false;}}
