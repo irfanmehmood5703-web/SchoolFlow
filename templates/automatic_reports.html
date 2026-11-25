@@ -2,7 +2,7 @@
 {% block content %}
 <section class="form-card">
 <h1>Automatic Reports &amp; Notifications</h1>
-<p class="muted">Configure owner-only summaries for the existing workspace and Owner App notification inbox. All campuses, Pakistan time (PKT). Reports appear on inbox refresh after the chosen time; background push, SMS and WhatsApp delivery are not enabled here.</p>
+<p class="muted">Configure owner-only summaries for the existing workspace and Owner App notification inbox. All campuses, Pakistan time (PKT). Reports appear after the chosen time. Scheduled history is recorded when the host worker is enabled; push, SMS and WhatsApp delivery are not enabled here.</p>
 <form method="post">
 <input type="hidden" name="_csrf" value="{{record_csrf}}"><input type="hidden" name="version" value="{{version}}">
 <div class="table-scroll"><table><thead><tr><th>Report</th><th>Enabled</th><th>Frequency</th><th>Available after (PKT)</th></tr></thead><tbody>
@@ -14,4 +14,5 @@
 <button class="btn" type="submit">Save report settings</button>
 </form></section>
 <section class="form-card"><h2>Available reports</h2>{% for event in events %}<article class="form-card"><strong>{{event.title}}</strong><p>{{event.detail}}</p></article>{% else %}<p>No enabled report is due yet.</p>{% endfor %}</section>
+<section class="form-card"><h2>Scheduled report history</h2><p>{{'Scheduler enabled' if worker else 'Scheduler disabled on host — inbox reports still available on refresh.'}}</p>{% for row in history %}<article><strong>{{row.data.title}}</strong><p>{{row.data.detail}}</p><small>{{row.data.captured}}</small></article>{% else %}<p>No scheduled report captured yet.</p>{% endfor %}</section>
 {% endblock %}
