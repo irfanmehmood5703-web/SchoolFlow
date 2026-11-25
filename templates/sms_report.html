@@ -1,0 +1,39 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}
+{% block content %}
+<style>
+.sms-report-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px;margin:14px 0}.sms-report-stat{padding:14px;border:1px solid #d8e6df;border-radius:10px;background:#f6fbf8}.sms-report-stat strong{display:block;font-size:23px;color:#176b4a}.sms-report-table td{vertical-align:top}.sms-report-text{min-width:210px;max-width:440px;white-space:pre-wrap;overflow-wrap:anywhere}.sms-report-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.sms-report-state{font-weight:650}.sms-report-state.sent{color:#176b4a}.sms-report-state.failed,.sms-report-state.unknown{color:#a23434}.sms-report-state.queued,.sms-report-state.claimed{color:#906215}
+@media print{.sms-report-table{overflow:visible!important}.sms-report-table table{width:100%;min-width:0!important;table-layout:fixed;font-size:9pt}.sms-report-table th,.sms-report-table td{white-space:normal!important;overflow-wrap:anywhere;padding:4px}.sms-report-text{min-width:0;max-width:none}.sms-report-stats{grid-template-columns:repeat(4,1fr)}}
+</style>
+{{m.heading(title,'School SIM message history and actual phone submission status.')}}
+<div class="sms-report-actions no-print"><a class="button secondary" href="{{url_for('ops.message_log')}}">Communication Requests</a><a class="button secondary" href="{{url_for('sms_gateway.index')}}">School SIM Settings &amp; Outbox</a></div>
+<form method="get" class="form-card no-print">
+<input type="hidden" name="view" value="sms-report">
+<h2>Filter SMS history</h2>
+<div class="fields-grid">
+<label>From Date<input type="date" name="from" value="{{filters['from']}}" required></label>
+<label>To Date<input type="date" name="to" value="{{filters['to']}}" required></label>
+{% for key,label,all_label in [('campus','Campus','All Campuses'),('class_name','Class','All Classes'),('section','Section','All Sections')] %}
+<label>{{label}}<select name="{{key}}"><option value="">{{all_label}}</option>{% for v in options[key] %}<option value="{{v}}" {{'selected' if filters[key]==v else ''}}>{{v}}</option>{% endfor %}</select></label>
+{% endfor %}
+<label>Status<select name="state"><option value="">All statuses</option>{% for key,label in states.items() %}<option value="{{key}}" {{'selected' if filters.state==key else ''}}>{{label}}</option>{% endfor %}</select></label>
+<label>Category<select name="category"><option value="">All categories</option>{% for v in categories %}<option value="{{v}}" {{'selected' if filters.category==v else ''}}>{{v}}</option>{% endfor %}</select></label>
+<label>Search<input name="q" maxlength="160" value="{{filters.q}}" placeholder="Student, father, phone or message"></label>
+</div>
+<div class="sms-report-actions"><button type="submit">Apply Filters</button><a class="button secondary" href="{{url_for('ops.message_log',view='sms-report')}}">Clear Filters</a><button type="submit" name="export" value="csv">Excel / CSV</button></div>
+</form>
+<p><strong>Period:</strong> {{filters['from']}} to {{filters['to']}} (Pakistan time, by message creation) · {{filters.campus or 'All Campuses'}} · {{filters.class_name or 'All Classes'}} · {{filters.section or 'All Sections'}}</p>
+<div class="sms-report-stats">
+{% for label,n in [('Total SMS',total),('Submitted',counts.get('sent',0)),('Pending / review',counts.get('queued',0)+counts.get('claimed',0)),('Failed',counts.get('failed',0)),('Cancelled',counts.get('cancelled',0)),('Uncertain / started',counts.get('unknown',0)+counts.get('started',0))] %}
+<div class="sms-report-stat"><span>{{label}}</span><strong>{{n}}</strong></div>
+{% endfor %}
+</div>
+<p class="muted">Submitted means the phone reported network submission; it does not confirm recipient delivery. Requests not transferred to the SIM outbox are listed separately in Communication Requests. Student, father, class and section are current linked records where available; recipient and message are saved SMS history.</p>
+<section class="form-card">
+<h2>SMS History · {{total}} matching messages</h2>
+<p>Page {{page}} of {{pages}}. Print/PDF prints this page; CSV includes all matching rows.</p>
+<div class="table sms-report-table"><table><thead><tr><th>Created / Submitted</th><th>Category</th><th>Student / Father</th><th>Campus / Class / Section</th><th>Recipient</th><th>Message</th><th>Status / Last update</th></tr></thead>
+<tbody>{% for r in rows %}<tr><td>{{r.created}}{% if r.submitted %}<br><small>Submitted: {{r.submitted}}</small>{% endif %}</td><td>{{r.category}}</td><td>{{r.name or 'Not linked'}}{% if r.sid %}<br><small>SID: {{r.sid}}</small>{% endif %}{% if r.father %}<br><small>{{r.father}}</small>{% endif %}</td><td>{{r.campus or '—'}}<br>{{r.cls or '—'}} / {{r.section or '—'}}</td><td>{{r.phone}}</td><td class="sms-report-text">{{r.text}}</td><td><span class="sms-report-state {{r.state}}">{{r.status}}</span><br><small>{{r.updated}}</small>{% if r.detail %}<br><small>{{r.detail}}</small>{% endif %}</td></tr>
+{% else %}<tr><td colspan="7">No SMS match these filters.</td></tr>{% endfor %}</tbody></table></div>
+<div class="sms-report-actions no-print">{% if page>1 %}<a class="button secondary" href="{{url_for('ops.message_log',view='sms-report',page=page-1,**filters)}}">Previous</a>{% endif %}{% if page<pages %}<a class="button secondary" href="{{url_for('ops.message_log',view='sms-report',page=page+1,**filters)}}">Next</a>{% endif %}</div>
+</section>
+{% endblock %}
