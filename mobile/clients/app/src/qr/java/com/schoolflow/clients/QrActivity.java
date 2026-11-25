@@ -37,6 +37,8 @@ public final class QrActivity extends Activity {
     private Button scan, retry, connect;
     private boolean busy;
     private String scanningDirection;
+    private QrVoiceFeedback feedback;
+    private boolean foreground;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -79,6 +81,7 @@ public final class QrActivity extends Activity {
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content.addView(status);
         setContentView(scroll);
+        feedback = new QrVoiceFeedback(this);
         vault = new Vault(this);
         try {
             data = new JSONObject(vault.read());
@@ -92,10 +95,13 @@ public final class QrActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        foreground = true;
         updates.resume();
     }
 
     @Override protected void onPause() {
+        foreground = false;
+        if (feedback != null) feedback.stop();
         updates.pause();
         super.onPause();
     }
@@ -122,7 +128,7 @@ public final class QrActivity extends Activity {
         scanningDirection = direction.getSelectedItemPosition() == 0 ? "in" : "out";
         buttons();
         new IntentIntegrator(this).setCaptureActivity(QrCaptureActivity.class)
-                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setOrientationLocked(true)
+                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setOrientationLocked(true).setBeepEnabled(false)
                 .setPrompt(getString(R.string.qr_scan_prompt)).initiateScan();
     }
 
@@ -312,12 +318,15 @@ public final class QrActivity extends Activity {
                 busy = false;
                 status.setText(result);
                 buttons();
+                // Speak only after the server confirms attendance was saved.
+                if (foreground && feedback != null && result.startsWith("Marked: ")) feedback.confirm();
             });
         });
     }
 
     @Override protected void onDestroy() {
         worker.shutdown();
+        if (feedback != null) feedback.close();
         super.onDestroy();
     }
 }

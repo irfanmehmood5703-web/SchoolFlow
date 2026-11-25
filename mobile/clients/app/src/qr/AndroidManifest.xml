@@ -2,6 +2,9 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="true"/>
+    <queries>
+        <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
+    </queries>
     <application>
         <activity android:name=".MainActivity" tools:node="remove"/>
         <activity android:name=".QrActivity" android:exported="true" android:screenOrientation="portrait">
