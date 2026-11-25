@@ -487,3 +487,11 @@ body:has(.exam-result-page) .school-print-header,body:has(.exam-result-page) .ex
 .attendance-pending-notice{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-left:3px solid #176b51}.attendance-pending-notice strong{color:#176b51}.attendance-pending-notice p{margin:4px 0 0;color:#52685b;font-size:13px}.attendance-pending-link{font-size:13px;color:#52685b;margin:6px 0 10px}.attendance-pending-link a{font-weight:600;color:#176b51;text-decoration:underline}
 
 .qr-connection-status{border:1px solid #c9d4d0;background:#f2f5f3;color:#56645e;border-radius:7px;padding:10px 12px;margin:12px 0;font-weight:600}.qr-connection-status[data-connected=yes]{background:#e5f4eb;border-color:#9dcbb0;color:#176b51}.qr-connect-actions{align-items:center;flex-wrap:wrap;gap:8px}.qr-connect-actions .check{margin-right:auto}
+
+/* Keep student attendance reports visible and directly accessible, including on phones. */
+.attendance-methods .attendance-reports-panel{border-top:1px solid #d5e5dc;margin-top:10px;padding:10px 0 3px}
+.attendance-methods .attendance-reports-panel h2{font-size:14px;font-weight:750;color:#174d38;margin:0 0 8px}
+.attendance-methods .attendance-report-buttons{gap:7px;align-items:stretch;margin-bottom:8px}
+.attendance-methods .attendance-report-buttons a{display:inline-flex;align-items:center;justify-content:center;text-align:center;white-space:normal;min-height:36px;line-height:1.35;padding:7px 11px;border:1px solid #a8cbb7}
+@media screen and (max-width:600px){.attendance-methods .attendance-report-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-methods .attendance-report-buttons a{width:100%;box-sizing:border-box;font-size:12px}}
+@media screen and (max-width:340px){.attendance-methods .attendance-report-buttons{grid-template-columns:1fr}}

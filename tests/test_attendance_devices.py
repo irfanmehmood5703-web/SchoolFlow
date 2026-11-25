@@ -258,6 +258,10 @@ class AttendanceDeviceTests(unittest.TestCase):
         self.assertEqual(page.status_code,200,page.data)
         for label in (b'Take Bulk Attendance',b'View / Update Attendance',b'QR Attendance / Scan Student Card',b'type="radio"',b'Only not present'):
             self.assertIn(label,page.data)
+        self.assertIn(b'id="attendance-reports-title">Attendance Reports',page.data)
+        self.assertNotIn(b'<details class="attendance-report-links">',page.data)
+        for report in ('absentees','attendance-sheet','combined-attendance','daily-attendance','individual-attendance','attendance-summary'):
+            self.assertIn(('/workspace/reports/attendance/'+report).encode(),page.data)
         key='2026-11-05_1';other='2026-11-05_2'
         form={'_csrf':self.token(),'grid_mode':'1','mode':'bulk','from':'2026-11-05','attendance_keys':key,'original_'+key:'','status_'+key:'Present','status_'+other:'Absent'}
         self.assertEqual(self.c.post(url,data=form).status_code,302)
