@@ -424,6 +424,15 @@ def configure_sms_gateway(app,db,Student):
         job=db.get_or_404(Job,jid)
         if job.device_id!=device.id or job.generation!=device.generation or not job.token or not hmac.compare_digest(token,job.token):abort(403)
         return job
+    @bp.post('/api/sms/devices/<int:did>/cancel-reviewed')
+    def cancel_reviewed(did):
+        device,_=auth(did);job=owned(device,data())
+        if batches['active'](device):abort(409,'Pause the active run first.')
+        if job.state not in ('claimed','cancelled'):abort(409,'Only unsent reviewed SMS can be cancelled.')
+        if job.state=='claimed':
+            job.state='cancelled';job.updated=time.time();job.detail='Cancelled by registered SMS phone operator before submission.'
+        audit('Cancel reviewed unsent SMS',job_id=job.id,device_id=device.id)
+        db.session.commit();return jsonify(state='cancelled')
     @bp.post('/api/sms/devices/<int:did>/start')
     def start(did):
         device,_=auth(did);payload=data();job=owned(device,payload)
