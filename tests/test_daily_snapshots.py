@@ -72,7 +72,7 @@ class DailySnapshotTests(unittest.TestCase):
         c,r=self.load();self.assertEqual((c['totals']['income'],c['totals']['expense'],c['totals']['net']),(14000,2500,11500))
         self.assertEqual(c['totals']['collected'],4000)
         c,r=self.load(campus='Campus A');self.assertEqual((c['totals']['income'],c['totals']['expense'],c['totals']['net']),(9000,2500,6500))
-        self.assertIn(b'65.00',r.data)
+        self.assertRegex(r.data,rb'(?<![\d,.])65(?![\d,.])')
         c,_=self.load(campus='Campus B');self.assertEqual(c['totals']['net'],5000)
 
     def test_legacy_unknown_ledger_snapshots_do_not_become_fake_zero_or_get_rewritten(self):

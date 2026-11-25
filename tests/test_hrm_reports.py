@@ -38,7 +38,7 @@ class HrmReportTests(unittest.TestCase):
         self.entry.data={**self.entry.data,'lectures':'99','rate_override':'999'};db.session.commit()
         csv=self.report('lecture-report','&export=csv').data.decode();self.assertIn('3,450.00,450.00,0.00,450.00,Unpaid',csv)
         detail=self.c.get(f'/workspace/hrm-reports/salary/{salary.id}');self.assertEqual(detail.status_code,200)
-        self.assertIn(b'450.00',detail.data);self.assertNotIn(b'99,999',detail.data)
+        self.assertRegex(detail.data,rb'(?<![\d,.])450(?![\d,.])');self.assertNotRegex(detail.data,rb'(?<![\d,.])99,999(?![\d,.])')
     def test_lecture_joining_midmonth_only_actual_postjoining_lectures(self):
         self.lecture_setup();self.detail.data={**self.detail.data,'joining_date':'2026-09-15'};db.session.commit()
         self.entry.data={**self.entry.data,'date':'2026-09-10'};db.session.commit()

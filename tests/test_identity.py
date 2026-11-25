@@ -204,7 +204,7 @@ class IdentityTests(unittest.TestCase):
         token=html.unescape(re.search(rb'name="preview_token" value="([^"]+)"',preview.data)[1].decode())
         self.assertEqual(other.post(path,data=dict(_csrf=csrf_b,action='apply',preview_token=token)).status_code,422)
         self.assertEqual(self.client.post(path,data=dict(_csrf=csrf_a,action='apply',preview_token=token)).status_code,302)
-        self.assertIn(b'1,100.00',self.client.get(path).data);self.assertIn(b'2,000.00',other.get(path).data);self.assertNotIn(b'1,100.00',other.get(path).data)
+        self.assertRegex(self.client.get(path).data,rb'(?<![\d,.])1,100(?![\d,.])');self.assertRegex(other.get(path).data,rb'(?<![\d,.])2,000(?![\d,.])');self.assertNotRegex(other.get(path).data,rb'(?<![\d,.])1,100(?![\d,.])')
         public=app.test_client();self.assertEqual(public.get(path).status_code,302)
         self.assertEqual(public.post(path,data=dict(action='apply',preview_token=token)).status_code,302)
 

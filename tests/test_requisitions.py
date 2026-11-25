@@ -38,7 +38,7 @@ class RequisitionTests(unittest.TestCase):
         self.assertEqual(self.decide(post_token=token,approved='19').status_code,422)
         row=app.extensions['requisition_models']['request'].query.one();self.assertEqual((row.status,row.approved,row.version),('Approved',2000,2))
         self.assertEqual(self.j['journal'].query.count(),0)
-        self.assertIn(b'20.00',self.c.get('/workspace/finance/requisitions/issue').data)
+        self.assertRegex(self.c.get('/workspace/finance/requisitions/issue').data,rb'(?<![\d,.])20(?![\d,.])')
     def test_invalid_decision_and_stale_versions_do_not_mutate(self):
         self.submit()
         for change in [dict(approved='24'),dict(approved='0'),dict(version='0'),dict(decision='Paid'),dict(decision='Rejected',remarks='')]:self.assertEqual(self.decide(**change).status_code,422,change)

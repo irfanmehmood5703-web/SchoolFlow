@@ -37,7 +37,7 @@ class FeeIncrementTests(unittest.TestCase):
         self.assertEqual(self.P.query.count(),before);self.assertEqual(self.ops['audit'].query.count(),0)
     def test_preview_is_escaped_read_only_and_shows_net_calculation(self):
         before=copy.deepcopy(self.p.data);r=self.post(note='<script>bad()</script>');self.token(r)
-        self.assertIn(b'2,000.00',r.data);self.assertIn(b'200.00',r.data);self.assertIn(b'2,200.00',r.data)
+        self.assertRegex(r.data,rb'(?<![\d,.])2,000(?![\d,.])');self.assertRegex(r.data,rb'(?<![\d,.])200(?![\d,.])');self.assertRegex(r.data,rb'(?<![\d,.])2,200(?![\d,.])')
         self.assertIn(b'&lt;script&gt;',r.data);self.assertNotIn(b'<script>bad',r.data)
         self.assertEqual(self.p.data,before);self.assertEqual(self.P.query.count(),2);self.assertEqual(self.ops['audit'].query.count(),0)
     def test_apply_batch_uses_saved_net_preserves_all_metadata_and_old_bill(self):

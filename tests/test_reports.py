@@ -18,20 +18,20 @@ class ReportTests(unittest.TestCase):
     def test_day_wise_filters_receipt_date_not_bill_month(self):
         sep=self.get('fees/daily-fees?from=2026-09&to=2026-09&export=csv').data.decode()
         oct=self.get('fees/daily-fees?from=2026-10&to=2026-10&export=csv').data.decode()
-        self.assertNotIn('250.00',sep);self.assertIn('2026-10-02,Cash,1,250.00,50.00',oct)
-        self.assertNotIn('250.00',self.get('fees/daily-fees?from=2026-10&to=2026-10&account=Bank&export=csv').data.decode())
+        self.assertNotIn('2026-10-02,Cash,1,250,50',sep);self.assertIn('2026-10-02,Cash,1,250,50',oct)
+        self.assertNotIn('2026-10-02,Cash,1,250,50',self.get('fees/daily-fees?from=2026-10&to=2026-10&account=Bank&export=csv').data.decode())
     def test_bill_month_report_and_no_challan_strength(self):
         text=self.get('fees/student-fees?from=2026-09&to=2026-09&export=csv').data.decode()
-        self.assertIn('Fictional Pupil',text);self.assertIn('700.00',text);self.assertIn('No Challan Pupil',text)
-        self.assertIn('0,0.00,0.00,0.00,0.00,0,0,0,0,1',text)
+        self.assertIn('Fictional Pupil',text);self.assertIn(',700,',text);self.assertIn('No Challan Pupil',text)
+        self.assertIn('0,0,0,0,0,0,0,0,0,1',text)
     def test_particular_payments_not_guessed_for_legacy_mixed_bill(self):
         self.bill.lines=[dict(particular='Tuition',amount=80000),dict(particular='Books',amount=20000)];db.session.commit()
         text=self.get('fees/class-fees?from=2026-09&to=2026-09&export=csv').data.decode()
         self.assertIn('Books',text);self.assertIn('Allocation unavailable',text)
-        self.assertNotIn('250.00',text)
+        self.assertNotRegex(text,r'(?m)(?:^|,)250(?:,|$)')
     def test_defaulter_reminder_has_only_outstanding_students(self):
         text=self.get('fees/fee-reminder?from=2026-09&to=2026-09').data.decode()
-        self.assertIn('Fictional Pupil',text);self.assertNotIn('No Challan Pupil',text);self.assertIn('700.00',text)
+        self.assertIn('Fictional Pupil',text);self.assertNotIn('No Challan Pupil',text);self.assertRegex(text,r'(?<![\d,.])700(?![\d,.])')
         self.assertEqual(self.get('fees/defaulters?from=2026-09&to=2026-09&pending_months=2').status_code,200)
     def test_attendance_distinct_reports_and_consecutive_dates(self):
         for d in [1,2,4]:db.session.add(self.m['daily'](kind='student',person_id=self.s.id,day=date(2026,9,d),status='Absent'))
@@ -81,11 +81,14 @@ class ReportTests(unittest.TestCase):
     def test_student_fee_sheet_month_grid_and_exports_use_saved_challan_totals(self):
         import csv,io
         suffix='?from=2026-09&to=2026-10'
-        page=self.get('fees/fee-sheet'+suffix);self.assertEqual(page.status_code,200);self.assertIn(b'Sep 2026',page.data);self.assertIn(b'700.00',page.data)
+        page=self.get('fees/fee-sheet'+suffix);self.assertEqual(page.status_code,200);self.assertIn(b'Sep 2026',page.data);self.assertRegex(page.data,rb'(?<![\d,.])700(?![\d,.])')
         rows=list(csv.reader(io.StringIO(self.get('fees/fee-sheet'+suffix+'&export=csv').data.decode('utf-8-sig'))))
-        pupil=next(r for r in rows if 'Fictional Pupil' in r);self.assertEqual(pupil[-3:],['700.00','—','700.00'])
-        rows=list(csv.reader(io.StringIO(self.get('fees/fee-sheet'+suffix+'&metric=paid&export=csv').data.decode('utf-8-sig'))));self.assertEqual(next(r for r in rows if 'Fictional Pupil' in r)[-3:],['250.00','—','250.00'])
+        pupil=next(r for r in rows if 'Fictional Pupil' in r);self.assertEqual(pupil[-3:],['700','—','700'])
+        rows=list(csv.reader(io.StringIO(self.get('fees/fee-sheet'+suffix+'&metric=paid&export=csv').data.decode('utf-8-sig'))));self.assertEqual(next(r for r in rows if 'Fictional Pupil' in r)[-3:],['250','—','250'])
         export=self.get('fees/fee-sheet'+suffix+'&export=xlsx');self.assertEqual(export.status_code,200);self.assertTrue(export.data.startswith(b'PK'))
+        from openpyxl import load_workbook
+        xrows=list(load_workbook(io.BytesIO(export.data))['Report'].values)
+        xpupil=next(r for r in xrows if 'Fictional Pupil' in r);self.assertEqual(xpupil[-3:],(700,'—',700))
         only=self.get('fees/fee-sheet'+suffix+'&defaulters=1');self.assertNotIn(b'No Challan Pupil',only.data)
         for q in ['from=2025-01&to=2026-10','from=2026-09&to=2026-10&metric=bad']:
             self.assertEqual(self.get('fees/fee-sheet?'+q).status_code,422)

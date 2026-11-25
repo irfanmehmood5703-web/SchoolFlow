@@ -117,7 +117,7 @@ class ChallanAmountTests(unittest.TestCase):
         self.assertEqual(self.tenant(lambda:app.extensions['fee_ledger_models']['posting'].query.count()),0)
         event=self.tenant(lambda:copy.deepcopy(app.extensions['finance_audit_models']['event'].query.filter_by(bill_id=bid,kind='Amount increased').one().data))
         self.assertEqual(event['delta'],20000);self.assertEqual(event['before_amount'],350000)
-        printed=self.post('/workspace/fee-action',dict(ids=[str(bid)],action='branded'));self.assertEqual(printed.status_code,200);self.assertIn(b'3,700.00',printed.data);self.assertIn(b'Books Payment',printed.data)
+        printed=self.post('/workspace/fee-action',dict(ids=[str(bid)],action='branded'));self.assertEqual(printed.status_code,200);self.assertRegex(printed.data,rb'(?<![\d,.])3,700(?![\d,.])');self.assertIn(b'Books Payment',printed.data)
     def test_deleted_bill_lifetime_history_is_not_reused(self):
         bid=self.bill();d=self.data(bid);self.assertEqual(self.apply(d,self.preview(d)).status_code,200)
         self.tenant(lambda:db.session.delete(db.session.get(self.ops['bill'],bid)))

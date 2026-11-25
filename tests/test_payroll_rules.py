@@ -49,7 +49,7 @@ class PayrollRuleWorkflowTests(unittest.TestCase):
     def form(self,**changes):
         data={'_csrf':self.csrf,'employee_id':str(self.e.id),'basic':'10000','allowed_0':'1','jump_0':'2','limit_0':'150.50','type_0':'Abs','deduction_0':'100','frequency_0':'Recursive','jump_mode_0':'started_groups','cap_mode_0':'amount','preview_count_0':'6','preview_working_days':'22'};data.update(changes);return data
     def test_preview_saves_nothing_and_actual_approved_payroll_uses_the_rule(self):
-        response=self.c.post('/workspace/salary-plans',data=self.form(action='preview'));self.assertEqual(response.status_code,200);self.assertIn(b'150.50',response.data);self.assertIn(b'Unsaved attendance deduction preview',response.data)
+        response=self.c.post('/workspace/salary-plans',data=self.form(action='preview'));self.assertEqual(response.status_code,200);self.assertRegex(response.data,rb'(?<![\d,.])150\.5(?![\d,.])');self.assertIn(b'Unsaved attendance deduction preview',response.data)
         self.assertEqual(self.ops['workflow'].query.count(),0);self.assertEqual(self.ops['salary'].query.count(),0);self.assertEqual(self.ops['audit'].query.count(),0)
         self.assertEqual(self.c.post('/workspace/salary-plans',data=self.form(action='save')).status_code,302);plan=self.ops['workflow'].query.one();self.assertEqual(plan.status,'Pending');self.assertEqual(plan.data['rules'][0]['max_amount'],15050)
         self.c.post('/workspace/salary-plans',data={'_csrf':self.csrf,'action':'approve','ids':str(plan.id)})

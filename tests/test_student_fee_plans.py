@@ -33,7 +33,7 @@ class StudentFeePlanTests(unittest.TestCase):
         self.assertEqual(sum(x['discount'] for x in p.data['lines']),590000)
         self.assertEqual(sum(x['net'] for x in p.data['lines']),110000)
         page=self.c.get(f'/workspace/student-fee-plans/{self.s.id}');self.assertEqual(page.status_code,200)
-        for text in [b'Annual Charges',b'Parent',b'Principal Signature',b'1,100.00']:self.assertIn(text,page.data)
+        for text in [b'Annual Charges',b'Parent',b'Principal Signature',b'1,100']:self.assertIn(text,page.data)
         self.assertNotIn(b'Fictional Student',self.c.get('/workspace/student-fee-plans').data)
         self.assertIn(b'Fictional Student',self.c.get('/workspace/student-fee-plans?mode=update').data)
         self.assertEqual(self.c.get(f'/workspace/student-fee-plans/{self.s.id}/edit').status_code,200)

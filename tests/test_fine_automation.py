@@ -43,7 +43,7 @@ class FineAutomationTests(unittest.TestCase):
     def test_pages_and_preview_do_not_create_schedule_or_charge(self):
         for path in [self.path,self.path+'?campus=Campus+A']:
             response=self.c.get(path);self.assertEqual(response.status_code,200);ids=re.findall(rb'\bid="([^"]+)"',response.data);self.assertEqual(len(ids),len(set(ids)))
-        page=self.post('preview');self.token(page);self.assertIn(b'10.00',page.data);self.assertIsNone(self.row());self.assertEqual(self.bill.total,100000);self.assertEqual(self.Run.query.count(),0)
+        page=self.post('preview');self.token(page);self.assertRegex(page.data,rb'(?<![\d,.])10(?![\d,.])');self.assertIsNone(self.row());self.assertEqual(self.bill.total,100000);self.assertEqual(self.Run.query.count(),0)
     def test_enable_requires_exact_fresh_preview_and_active_nonzero_policy(self):
         self.assertEqual(self.post('save').status_code,422)
         token=self.token(self.post('preview'));self.assertEqual(self.post('save',preview_token=token,delay='2').status_code,422)

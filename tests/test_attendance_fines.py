@@ -60,7 +60,7 @@ class AttendanceFineTests(unittest.TestCase):
         self.assertEqual(self.policy(_csrf='').status_code,400)
         for changes in [dict(campus='Other'),dict(free_0='-1'),dict(free_0='32'),dict(rate_0='NaN'),dict(rate_0='-1'),dict(head='Tuition Fee'),dict(action='bad')]:
             self.assertEqual(self.policy(**changes).status_code,422,changes);self.assertEqual(self.Item.query.count(),0)
-        result=self.policy(action='simulate',count_0='3',count_1='3',count_2='1',count_3='2');self.assertEqual(result.status_code,200);self.assertIn(b'140.00',result.data);self.assertEqual(self.Item.query.count(),0)
+        result=self.policy(action='simulate',count_0='3',count_1='3',count_2='1',count_3='2');self.assertEqual(result.status_code,200);self.assertRegex(result.data,rb'(?<![\d,.])140(?![\d,.])');self.assertEqual(self.Item.query.count(),0)
         self.assertEqual(self.policy(action='simulate',count_0='31',count_1='1').status_code,422)
         self.assertEqual(self.policy().status_code,302);self.assertEqual(self.policy(version='0').status_code,422);self.assertEqual(self.Charge.query.count(),0)
     def test_counts_saved_days_since_admission_no_inferred_absences_or_sandwich(self):

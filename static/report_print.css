@@ -152,7 +152,7 @@
 
 .report-print-signature{display:none!important}
 @media print{
- .report-screen-signature{display:none!important}
+ .report-print-document .report-branding-footer.report-screen-signature{display:none!important}
  .report-print-tail{display:table-row-group!important;break-inside:avoid!important;page-break-inside:avoid!important}
  .report-print-tail tr:not(.report-print-signature){break-after:avoid!important;page-break-after:avoid!important}
  .report-print-tail .report-print-signature{display:table-row!important;break-before:avoid!important;page-break-before:avoid!important}

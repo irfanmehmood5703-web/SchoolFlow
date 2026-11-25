@@ -76,9 +76,9 @@ class GeneralToolsTests(unittest.TestCase):
         self.assertEqual(self.c.get('/workspace/general/widgets?period=custom&from=bad&to=2026-11-07').status_code,422)
         b=self.ops['bill'](student_id=self.sid,month=self.today.strftime('%Y-%m'),due=self.today+timedelta(days=1),lines=[{'particular':'Tuition','amount':10000}],paid=4000,discount=1000)
         db.session.add(b);db.session.flush();db.session.add(self.ops['receipt'](student_id=self.sid,bill_id=b.id,amount=4000,discount=1000,day=self.today,account='Cash',token='widget-qa'));db.session.commit()
-        page=self.c.get('/workspace/general/widgets/report/paid-amount');self.assertIn(b'40.00',page.data)
+        page=self.c.get('/workspace/general/widgets/report/paid-amount');self.assertRegex(page.data,rb'(?<![\d,.])40(?![\d,.])')
         page=self.c.get('/workspace/general/widgets/report/fee-defaulters');self.assertNotIn(b'Fictional Widget Pupil',page.data)
-        page=self.c.get('/workspace/general/widgets/report/unpaid-amount');self.assertIn(b'50.00',page.data)
+        page=self.c.get('/workspace/general/widgets/report/unpaid-amount');self.assertRegex(page.data,rb'(?<![\d,.])50(?![\d,.])')
         self.assertEqual(self.c.get('/workspace/general/widgets/report/paid-amount?export=xlsx').status_code,200)
     def test_mixed_particular_payments_are_not_invented(self):
         db.session.add(self.ops['bill'](student_id=self.sid,month=self.today.strftime('%Y-%m'),due=self.today,lines=[{'particular':'Tuition','amount':10000},{'particular':'Books','amount':2000}],paid=5000))
@@ -100,7 +100,7 @@ class GeneralToolsTests(unittest.TestCase):
         db.session.commit()
         page=self.c.get('/workspace/general/widgets/report/class-results');self.assertIn(b'80.0',page.data)
         page=self.c.get('/workspace/general/widgets/report/absent-class');self.assertIn(b'Fictional Widget Pupil',page.data)
-        page=self.c.get('/workspace/general/widgets');self.assertIn(b'2,000.00',page.data);self.assertIn(b'<svg',page.data)
+        page=self.c.get('/workspace/general/widgets');self.assertRegex(page.data,rb'(?<![\d,.])2,000(?![\d,.])');self.assertIn(b'<svg',page.data)
     def test_posted_ledger_snapshot_net_not_cash_receipt_guess(self):
         m=app.extensions['finance_models'];j=app.extensions['ledger_models']
         from datetime import datetime,timezone
@@ -119,9 +119,9 @@ class GeneralToolsTests(unittest.TestCase):
         db.session.add(j['line'](journal_id=journal.id,account_id=account.id,debit=0,credit=10000,memo='',snapshot={'account_class':'Income'}))
         db.session.add(j['line'](journal_id=journal.id,account_id=asset.id,debit=10000,credit=0,memo='',snapshot={'account_class':'Assets'}))
         db.session.commit()
-        page=self.c.get('/workspace/general/widgets/report/daily-profit');self.assertIn(b'100.00',page.data)
+        page=self.c.get('/workspace/general/widgets/report/daily-profit');self.assertRegex(page.data,rb'(?<![\d,.])100(?![\d,.])')
         group.account_class='Equity';db.session.commit()
-        page=self.c.get('/workspace/general/widgets/report/daily-profit');self.assertIn(b'100.00',page.data)
+        page=self.c.get('/workspace/general/widgets/report/daily-profit');self.assertRegex(page.data,rb'(?<![\d,.])100(?![\d,.])')
         expense_group=m['group'](**stamp,name='Fictional Expense',account_class='Expense',active=True)
         db.session.add(expense_group);db.session.flush()
         expense_account=m['account'](**stamp,name='Fictional Expense Account',code=3,group_id=expense_group.id,inactive=False)

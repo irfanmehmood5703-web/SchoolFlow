@@ -22,12 +22,14 @@ def report_xlsx(headers,rows,name,filters=None):
         if header:c.font=Font(bold=True,color='FFFFFF');c.fill=PatternFill('solid',fgColor='176B4A')
         c.alignment=Alignment(vertical='top',wrap_text=True);return c
     sheet.append([cell(sheet,h,True) for h in headers])
+    # Only monetary columns are converted: preserve IDs, roll numbers and text.
+    monetary={i for i,h in enumerate(headers) if h in CURRENCY or (name=='fee-sheet' and i>=6)}
     for row in rows:
         values=[]
         for i,value in enumerate(row):
-            if headers[i] in CURRENCY and isinstance(value,str) and re.fullmatch(r'-?\d[\d,]*\.\d{2}',value):value=float(Decimal(value.replace(',','')))
+            if i in monetary and isinstance(value,str) and re.fullmatch(r'-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?',value):value=float(Decimal(value.replace(',','')))
             c=cell(sheet,value)
-            if headers[i] in CURRENCY and isinstance(value,(int,float)):c.number_format='#,##0.##'
+            if i in monetary and isinstance(value,(int,float)):c.number_format='#,##0.##'
             values.append(c)
         sheet.append(values)
     sheet.auto_filter.ref=f'A1:{get_column_letter(len(headers))}{len(rows)+1}'

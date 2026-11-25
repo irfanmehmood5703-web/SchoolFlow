@@ -57,8 +57,8 @@ class LateFeeTests(unittest.TestCase):
     def test_scope_priority_disabled_override_and_reset(self):
         self.policy(mode='fixed',rate='100');self.policy(campus='Campus B',mode='fixed',rate='200');self.policy(campus='Campus A',mode='none',accept_formula='')
         r=self.preview();self.assertIn(b'No enabled late-fee policy',r.data);self.apply(self.token(r));self.assertFalse(self.fees())
-        self.policy(campus='Campus A',action='reset');self.assertIn(b'100.00',self.preview().data)
-        d=self.rm['student'].query.one();d.data={'campus':'Campus B'};db.session.commit();self.assertIn(b'200.00',self.preview().data)
+        self.policy(campus='Campus A',action='reset');self.assertRegex(self.preview().data,rb'(?<![\d,.])100(?![\d,.])')
+        d=self.rm['student'].query.one();d.data={'campus':'Campus B'};db.session.commit();self.assertRegex(self.preview().data,rb'(?<![\d,.])200(?![\d,.])')
         self.policy(campus='Campus B',action='reset');self.policy(action='reset');self.assertIsNone(self.policy_row());self.assertFalse(self.fees())
     def test_apply_daily_delta_is_cumulative_capped_and_replay_safe(self):
         self.policy(maximum='45');original=copy.deepcopy(self.b.lines)
@@ -128,7 +128,7 @@ class LateFeeTests(unittest.TestCase):
         self.assertEqual(response.status_code,200);self.assertIn(b'Calculate preview',response.data);self.assertFalse(self.fees())
         self.apply(self.token(self.preview()));head=db.session.get(self.Head,'Late Fee');head.label='Changed label';db.session.commit()
         page=self.c.post('/workspace/fee-action',data=dict(_csrf=self.csrf,action='branded',ids=str(self.bid)))
-        self.assertEqual(page.status_code,200);self.assertIn(b'Late Fee',page.data);self.assertNotIn(b'Changed label',page.data);self.assertIn(b'2,030.00',page.data)
+        self.assertEqual(page.status_code,200);self.assertIn(b'Late Fee',page.data);self.assertNotIn(b'Changed label',page.data);self.assertRegex(page.data,rb'(?<![\d,.])2,030(?![\d,.])')
     def test_assessed_fine_cannot_lose_history_through_installment(self):
         self.policy();self.apply(self.token(self.preview()));before=copy.deepcopy(self.b.lines)
         response=self.c.post('/workspace/installment/'+str(self.bid),data=dict(_csrf=self.csrf,month='2026-11',due='2026-11-10',amount_0='100',amount_1='0'))
@@ -136,7 +136,7 @@ class LateFeeTests(unittest.TestCase):
     def test_maximum_zero_and_overflow_simulation_are_explicit(self):
         self.policy(maximum='0');self.apply(self.token(self.preview()));self.assertFalse(self.fees())
         r=self.policy(action='simulate',due='1900-01-01',asof='9999-01-01',rate='999999999',maximum='');self.assertEqual(r.status_code,422)
-        r=self.policy(action='simulate',due='1900-01-01',asof='9999-01-01',rate='999999999',maximum='100');self.assertEqual(r.status_code,200);self.assertIn(b'100.00',r.data)
+        r=self.policy(action='simulate',due='1900-01-01',asof='9999-01-01',rate='999999999',maximum='100');self.assertEqual(r.status_code,200);self.assertRegex(r.data,rb'(?<![\d,.])100(?![\d,.])')
     def test_audit_retains_before_rows_and_only_added_difference(self):
         self.policy();self.apply(self.token(self.preview()));self.apply(self.token(self.preview(asof='2026-10-14')))
         audits=self.ops['audit'].query.filter_by(action='Apply reviewed late fees').order_by(self.ops['audit'].id).all();self.assertEqual(len(audits),2)
@@ -224,7 +224,7 @@ class LateFeeTests(unittest.TestCase):
         for changes in [dict(mode='fixed_double'),dict(mode='daily_double',expiry='0'),dict(mode='daily_double',expiry='3661'),dict(mode='percent_actual',rate='100.01')]:
             self.assertEqual(self.policy(**changes).status_code,422)
         result=self.policy(action='simulate',mode='percent_actual',rate='5',grace='0',due='2026-10-10',asof='2026-10-11',basis_actual='5000',basis_decided='3500',basis_owing='3500')
-        self.assertEqual(result.status_code,200);self.assertIn(b'250.00',result.data);self.assertIsNone(self.policy_row())
+        self.assertEqual(result.status_code,200);self.assertRegex(result.data,rb'(?<![\d,.])250(?![\d,.])');self.assertIsNone(self.policy_row())
         self.assertEqual(self.policy(mode='revoke_discount',rate='').status_code,302)
 
     def test_saved_tuition_basis_and_no_fine_on_fine(self):

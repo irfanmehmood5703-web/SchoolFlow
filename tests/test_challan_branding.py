@@ -64,7 +64,7 @@ class ChallanBrandingTests(unittest.TestCase):
         self.post(copy_1='Parent receipt',copy_2='',copy_3='',primary='#123ABC',address='Campus address',contact='Campus phone',bank_name='Fictional Bank',account_title='School account',account_no='000123',iban='PK-EXAMPLE',note='<img src=x onerror=alert(1)>')
         old=(self.bill.total,self.bill.discount,self.bill.paid,self.bill.remaining,list(self.bill.lines))
         r=self.print();self.assertEqual(r.status_code,200);self.assertIn(b'Fictional School',r.data);self.assertIn(b'Parent receipt',r.data);self.assertIn(b'--fee-primary:#123abc',r.data);self.assertIn(b'000123',r.data);self.assertIn(b'PK-EXAMPLE',r.data)
-        self.assertIn(b'Saved Tuition Name',r.data);self.assertIn(b'3,500.00',r.data);self.assertIn(b'2,000.00',r.data);self.assertIn(b'&lt;img',r.data);self.assertNotIn(b'onerror=alert(1)>',r.data)
+        self.assertIn(b'Saved Tuition Name',r.data);self.assertRegex(r.data,rb'(?<![\d,.])3,500(?![\d,.])');self.assertRegex(r.data,rb'(?<![\d,.])2,000(?![\d,.])');self.assertIn(b'&lt;img',r.data);self.assertNotIn(b'onerror=alert(1)>',r.data)
         self.assertEqual(old,(self.bill.total,self.bill.discount,self.bill.paid,self.bill.remaining,list(self.bill.lines)))
         self.assertEqual(r.data.count(b'class="sf-fee-copy"'),1);self.assertIn(b'/workspace/core/logo',r.data)
     def test_visibility_and_explicit_run_override(self):
@@ -81,7 +81,7 @@ class ChallanBrandingTests(unittest.TestCase):
         bills=[self.bill]+[self.invoice(s) for s in (s2,s3,s4,s5)];db.session.commit()
         r=self.print(action='family',ids=[str(b.id) for b in bills]);self.assertEqual(r.status_code,200)
         self.assertEqual(r.data.count(b'<article class="sf-fee-sheet'),4)
-        self.assertEqual(r.data.count(b'Selected remaining total: 4,000.00'),3)
+        self.assertEqual(r.data.count(b'Selected remaining total: 4,000'),3)
         self.assertEqual(r.data.count(b'Fictional C'),3);self.assertIn(b'Selected challans only',r.data)
         # Ordinary multi-selection prints one separate sheet per bill.
         self.assertEqual(self.print(ids=[str(b.id) for b in bills]).data.count(b'<article class="sf-fee-sheet'),5)
