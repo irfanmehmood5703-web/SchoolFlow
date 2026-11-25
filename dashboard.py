@@ -3,6 +3,7 @@ from datetime import date
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, session, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
+from school_clock import school_today
 
 # These are implemented live-data widgets, not a claim of all 37 reference tiles.
 WIDGETS = [
@@ -81,7 +82,7 @@ def configure_dashboard(app, db):
         layout,version = current()
         # Existing saved layouts can choose the new expense tile via Add Widgets.
         catalog = {w[0]:dict(key=w[0],group=w[1],label=w[2],stat=w[3],note=w[4],link=w[5],money=w[0] in MONEY) for w in WIDGETS}
-        today=date.today()
+        today=school_today()
         catalog['attendance']['link']+=f'?from={today}&to={today}'
         catalog['staff']['link']+=f'?from={today.replace(day=1)}&to={today}'
         access=app.extensions.get('general_tools_helpers')
@@ -115,7 +116,7 @@ def configure_dashboard(app, db):
                     cash_expenses[day.month]+=debit-credit
             stats['monthly_cashflow']=[dict(month=date(year,m,1).strftime('%b %Y'),received=cash_received[m],expenses=cash_expenses[m],net=cash_received[m]-cash_expenses[m]) for m in range(1,today.month+1)]
         if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
-        return render_template('dashboard.html',title='Dashboard',stats=stats,
+        return render_template('dashboard.html',title='Dashboard',stats=stats,dashboard_date=today,
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
                                personal=owner_key() is not None,legacy_quick=quick,groups=list(dict.fromkeys(w[1] for w in WIDGETS)))
 
