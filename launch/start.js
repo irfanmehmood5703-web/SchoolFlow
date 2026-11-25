@@ -1,4 +1,5 @@
-const schoolFlow = 'https://schoolflow-phase1.onrender.com';
+const reopen = document.documentElement.dataset.reopen === 'true';
+const schoolFlow = reopen ? window.location.origin : 'https://schoolflow-phase1.onrender.com';
 const next = new URLSearchParams(window.location.search).get('next');
 const destinations = new Map([
   ['sign-in', '/auth/institute'],
@@ -44,7 +45,13 @@ async function openSchoolFlow() {
     while (Date.now() < deadline) {
       if (await isReady(Math.min(24_000, deadline - Date.now()))) {
         status.textContent = 'Workspace ready. Opening SchoolFlow.';
-        window.location.replace(schoolFlow + destination);
+        if (reopen) {
+          // Let the service worker allow a longer navigation after a healthy response.
+          navigator.serviceWorker?.controller?.postMessage('schoolflow-backend-ready');
+          window.location.reload();
+        } else {
+          window.location.replace(schoolFlow + destination);
+        }
         return;
       }
       await new Promise(resolve => setTimeout(resolve, 2_500));
