@@ -13,6 +13,18 @@ class AutomaticReportTests(unittest.TestCase):
     token=fixture.ParentsPtmTests.token
     owner=fixture.ParentsPtmTests.owner
     post=fixture.ParentsPtmTests.post
+    def test_zero_fee_default_and_authentication_for_native_owner_feed(self):
+        Setting=app.extensions['school_settings_models']['setting']
+        def seed():
+            db.session.add(Setting(key='automatic-owner-reports',data={'fee-received':dict(enabled=True,frequency='daily',time='00:00')}))
+        self.tenant(seed)
+        path='/owner-app/notification-feed'
+        self.assertNotEqual(app.test_client().get(path).status_code,200)
+        r=self.c.get(path);self.assertEqual(r.status_code,200)
+        event=next(e for e in r.json['events'] if e['title']=='Fee Collection')
+        self.assertIn('No fee received',event['body'])
+        self.assertIn('Rs. 0.00',event['body'])
+        self.assertEqual(next(e for e in self.c.get(path).json['events'] if e['title']=='Fee Collection')['id'],event['id'])
     def test_configuration_owner_only_and_existing_inbox(self):
         path='/workspace/core/automatic-reports'
         self.assertEqual(self.c.get(path).status_code,200)
