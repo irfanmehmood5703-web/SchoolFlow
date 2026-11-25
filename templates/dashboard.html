@@ -12,44 +12,49 @@
   <time datetime="{{dashboard_date.isoformat()}}"><span>{{dashboard_date.strftime('%A')}}</span>{{dashboard_date.strftime('%d %B %Y').lstrip('0')}}</time>
 </header>
 {% if (layout.quick or layout.mode=='simple') and legacy_quick %}
-<section class="dashboard-summary" aria-label="School summary">
+<section class="dashboard-overview" aria-labelledby="dashboard-overview-title">
+<h2 id="dashboard-overview-title">School overview</h2>
+<div class="dashboard-summary">
   {% if 'active' in legacy_quick %}
   <a class="dashboard-metric" data-tone="admissions" href="/records/student">
     <span class="dashboard-metric-label">ACTIVE STUDENTS</span>
     <strong>{{stats.active}}</strong>
     <span class="dashboard-metric-detail">{{stats.students}} total records</span>
+    <span class="dashboard-metric-action">View students <span aria-hidden="true">→</span></span>
   </a>
   {% endif %}
   {% if 'collected' in legacy_quick %}
   <a class="dashboard-metric" data-tone="finance" href="{{url_for('ops.history')}}">
     <span class="dashboard-metric-label">THIS MONTH COLLECTED</span>
     <strong>Rs. {{stats.this_month|cash}}</strong>
-    <span class="dashboard-metric-detail">By payment date</span>
+    <span class="dashboard-metric-detail">{{dashboard_date.strftime('%B %Y')}} · By payment date</span>
     {% if 'due' in legacy_quick %}
     <span class="dashboard-metric-balance"><span>This month’s challans remaining</span><b>Rs. {{month_remaining|cash}}</b></span>
     {% endif %}
+    <span class="dashboard-metric-action">View payments <span aria-hidden="true">→</span></span>
   </a>
   {% endif %}
-  {% if 'due' in legacy_quick %}
   {% if session_dues %}
   <a class="dashboard-metric" data-tone="attendance" href="{{session_dues.url}}">
-    <span class="dashboard-metric-label">SESSION REMAINING</span>
+    <span class="dashboard-metric-label">{{'SESSION REMAINING' if session_dues.is_current else 'YEAR REMAINING'}}</span>
     <strong>Rs. {{session_dues.amount|cash}}</strong>
-    <span class="dashboard-metric-detail">{{session_dues.name or session_dues.period}}{% if session_dues.name %} · {{session_dues.period}}{% endif %}</span>
+    <span class="dashboard-metric-detail">{{session_dues.period}}{% if session_dues.name %} · {{session_dues.name}}{% endif %}</span>
+    <span class="dashboard-metric-action">View period dues <span aria-hidden="true">→</span></span>
   </a>
-  {% else %}
-  <div class="dashboard-metric" data-tone="attendance">
-    <span class="dashboard-metric-label">SESSION REMAINING</span>
-    <strong>—</strong>
-    <span class="dashboard-metric-detail">Set academic year dates in Institute Setup</span>
-  </div>
-  {% endif %}
   <a class="dashboard-metric" data-tone="staff" href="{{url_for('ops.history', view='defaulters')}}">
     <span class="dashboard-metric-label">TOTAL DUES</span>
     <strong>Rs. {{stats.due|cash}}</strong>
     <span class="dashboard-metric-detail">Unpaid challans across all sessions</span>
+    <span class="dashboard-metric-action">View all dues <span aria-hidden="true">→</span></span>
   </a>
   {% endif %}
+</div>
+{% if session_dues and session_dues.notice %}
+<aside class="dashboard-period-note" aria-label="Reporting period">
+  <div><strong>Showing the {{session_dues.year}} calendar year.</strong> {{session_dues.notice}}</div>
+  {% if personal %}<a href="{{url_for('institute_setup.index', _anchor='academic-year')}}">Academic year settings <span aria-hidden="true">→</span></a>{% endif %}
+</aside>
+{% endif %}
 </section>
 {% endif %}
 <div class="dashboard-view-heading">

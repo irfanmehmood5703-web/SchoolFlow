@@ -131,7 +131,7 @@ class DashboardTests(unittest.TestCase):
         db.session.commit()
 
         page = self.c.get('/workspace/dashboard').get_data(as_text=True)
-        cards = page.split('<section class="dashboard-summary"', 1)[1].split('</section>', 1)[0]
+        cards = page.split('<section class="dashboard-overview"', 1)[1].split('</section>', 1)[0]
         self.assertEqual(cards.count('class="dashboard-metric"'), 4)
         self.assertIn('THIS MONTH COLLECTED', cards); self.assertIn('Rs. 800', cards)
         self.assertIn('This month’s challans remaining', cards); self.assertIn('Rs. 1,000', cards)
@@ -146,6 +146,29 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn('This month’s challans remaining', limited)
         self.assertNotIn('SESSION REMAINING', limited)
         self.assertNotIn('TOTAL DUES', limited)
+
+    def test_expired_academic_year_uses_current_calendar_year_and_keeps_saved_dates(self):
+        report_date = date(2026, 11, 25)
+        profile = app.extensions['institute_setup_models']['profile']
+        db.session.add(profile(id=1, data={'current_session':'2025','year_start':'2025-01-01','year_end':'2025-12-31'}))
+        student = Student(admission_no='DASH-EXPIRED', name='Fictional Pupil', status='Active')
+        db.session.add(student)
+        db.session.flush()
+        bill = app.extensions['ops_models']['bill']
+        for month, amount in [('2025-12', 90000), ('2026-11', 500000), ('2027-01', 70000)]:
+            db.session.add(bill(student_id=student.id, month=month, due=report_date, lines=[{'amount':amount}]))
+        db.session.commit()
+        self.owner()
+
+        with patch('dashboard.school_today', return_value=report_date):
+            page = self.c.get('/workspace/dashboard').get_data(as_text=True)
+        self.assertIn('YEAR REMAINING', page)
+        self.assertIn('Rs. 5,000', page)
+        self.assertIn('Showing the 2026 calendar year.', page)
+        self.assertIn('The saved academic year ended 31 Dec 2025.', page)
+        self.assertIn('from=2026-01&amp;to=2026-12', page)
+        self.assertIn('#academic-year', page)
+        self.assertEqual(db.session.get(profile, 1).data['year_end'], '2025-12-31')
 
     def test_pending_report_and_staff_month_ignore_future_attendance(self):
         models=app.extensions['ops_models'];today=date.today()
