@@ -1743,6 +1743,9 @@ def configure_operations(app, db, Student, Employee):
 
     @bp.route('/message-log')
     def message_log():
+        if request.args.get('view')=='sms-report' and session.get('owner_id') and not session.get('demo') and not session.get('staff_id') and not getattr(g,'staff_principal',None):
+            from sms_reporting import report
+            return report(app,db,Student,Workflow,csv_response)
         return render('message_log.html',title='Communication Requests',rows=Workflow.query.filter_by(kind='message').order_by(Workflow.id.desc()).all())
 
     def csv_response(headers,rows,name):
