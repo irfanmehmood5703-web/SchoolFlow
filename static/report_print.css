@@ -149,3 +149,13 @@
  .student-attendance-report-print .report-branding-footer{display:block!important;margin-top:5pt!important;break-inside:avoid!important;page-break-inside:avoid!important;break-before:auto!important}
  .student-attendance-report-print .report-branding-footer p{margin:3pt 0!important;font-size:9pt}
 }
+
+.report-print-signature{display:none!important}
+@media print{
+ .report-screen-signature{display:none!important}
+ .report-print-tail{display:table-row-group!important;break-inside:avoid!important;page-break-inside:avoid!important}
+ .report-print-tail tr:not(.report-print-signature){break-after:avoid!important;page-break-after:avoid!important}
+ .report-print-tail .report-print-signature{display:table-row!important;break-before:avoid!important;page-break-before:avoid!important}
+ .report-print-tail .report-print-signature>td{border:0!important;background:transparent!important;padding:5pt 0 0!important;text-align:left!important;width:auto!important;white-space:normal!important}
+ .report-print-tail .report-branding-footer>div{margin:0!important;padding-top:4pt!important}
+}

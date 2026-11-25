@@ -46,3 +46,15 @@ document.addEventListener('DOMContentLoaded',()=>{
  panels.forEach(p=>p.addEventListener('toggle',update));update();
  button.addEventListener('click',()=>{full=!panels.some(p=>p.open);panels.forEach(p=>p.open=full);try{localStorage.setItem(key,full?'full':'light')}catch(e){}update()});
 });
+
+// Keep the signature with the last visible report row even after local search.
+document.addEventListener('DOMContentLoaded',()=>{
+ document.querySelectorAll('.report-table-output table:has([data-report-rows])').forEach(table=>{
+  const body=table.querySelector('[data-report-rows]'),tail=table.querySelector('.report-print-tail'),signature=tail?.querySelector('.report-print-signature');
+  if(!body||!signature)return;
+  const rows=[...body.rows,...tail.rows].filter(row=>row!==signature);
+  const place=()=>{rows.forEach(row=>body.append(row));const last=rows.filter(row=>!row.hidden).pop();if(last)tail.insertBefore(last,signature);signature.hidden=false;};
+  table.closest('.report-table-output').querySelector('.table-search')?.addEventListener('input',place);
+  window.addEventListener('beforeprint',place);
+ });
+});
