@@ -200,9 +200,9 @@ def configure_operations(app, db, Student, Employee):
         school_name=str(((profile.data or {}).get('name') if profile else '') or school_identity.get('name') or '').strip()
         if school_name:
             for item in snapshots:
-                item['text']=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school_name,str(item.get('text') or ''),flags=re.IGNORECASE)
+                item['text']=re.sub(r'(?:\{\s*school_name\s*\}|\[\s*institute_name\s*\])',lambda match:school_name,str(item.get('text') or ''),flags=re.IGNORECASE)
                 if item.get('unresolved'):
-                    item['unresolved']=[tag for tag in item['unresolved'] if str(tag).strip('{} ').lower()!='school_name']
+                    item['unresolved']=[tag for tag in item['unresolved'] if str(tag).strip('{}[] ').lower() not in ('school_name','institute_name')]
         payload=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=snapshots)
         if event=='attendance':payload.update(attendance_day=(context or {}).get('day'),attendance_statuses={str(item['person_id']):item.get('template','') for item in snapshots})
         row=Workflow(kind='message',status='Pending SMS review' if audience=='parent' and prefs['app_sms'] else 'Provider not configured',data=payload)
