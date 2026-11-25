@@ -817,9 +817,13 @@ def configure_records(app, db, Student, Employee):
         ids=list({int(sid) for sid in student_ids if sid is not None})
         result={}
         for offset in range(0,len(ids),900):
-            result.update(db.session.query(StudentDetails.student_id,RecordFamily.number).join(
+            rows=db.session.query(StudentDetails.student_id,RecordFamily.number,StudentDetails.data).outerjoin(
                 RecordFamily,StudentDetails.family_id==RecordFamily.id
-            ).filter(StudentDetails.student_id.in_(ids[offset:offset+900])).all())
+            ).filter(StudentDetails.student_id.in_(ids[offset:offset+900])).all()
+            for sid,number,data in rows:
+                # Older imported records may retain a saved family number
+                # without a linked family; prefer the canonical link when present.
+                result[sid]=number or (data or {}).get('family_no') or ''
         return result
 
     @app.context_processor
