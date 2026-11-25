@@ -3,7 +3,7 @@ import hashlib,hmac,re,secrets,time
 from flask import Blueprint,abort,flash,g,jsonify,redirect,render_template,request,session,url_for
 from sqlalchemy import select
 
-API_ENDPOINTS={'sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','sms_gateway.batch','sms_gateway.batch_status','sms_gateway.batch_stop'}
+API_ENDPOINTS={'sms_gateway.heartbeat','sms_gateway.claim','sms_gateway.start','sms_gateway.result','sms_gateway.batch','sms_gateway.batch_status','sms_gateway.batch_stop','sms_gateway.pending_list','sms_gateway.cancel_pending','sms_gateway.cancel_reviewed'}
 
 def configure_sms_gateway(app,db,Student):
     bp=Blueprint('sms_gateway',__name__)
