@@ -70,7 +70,8 @@ def configure_general_leaves(app, db, Student):
     @bp.patch('/<int:leave_id>')
     def decide(leave_id):
         scope = guard(True)
-        row = StudentLeave.query.filter_by(id=leave_id, institute_scope=scope).first_or_404()
+        app.extensions['admission_capacity']['lock']()
+        row = StudentLeave.query.filter_by(id=leave_id, institute_scope=scope).populate_existing().first_or_404()
         data = request.get_json(silent=True) or {}
         if row.status != 'Pending' or data.get('status') not in ('Approved', 'Rejected'):
             return jsonify(error='Invalid leave transition'), 409
