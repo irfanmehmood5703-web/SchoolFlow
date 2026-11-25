@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
 import android.widget.*;
+import com.schoolflow.mobile.PullToRefresh;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 import java.io.ByteArrayOutputStream;
@@ -84,7 +85,15 @@ public final class QrActivity extends Activity {
         status.setPadding(0, dp(12), 0, 0);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content.addView(status);
-        setContentView(scroll);
+        setContentView(new PullToRefresh(scroll,
+                () -> foreground && scan.isEnabled(),
+                () -> run(() -> {
+                    JSONObject gate = heartbeat(data);
+                    if (!gate.getString("scope_id").equals(data.optString("scope"))) {
+                        return "Gate identity changed. Verify the connection settings.";
+                    }
+                    return "Gate connected · #" + data.optInt("device");
+                })));
         feedback = new QrVoiceFeedback(this);
         vault = new Vault(this);
         try {

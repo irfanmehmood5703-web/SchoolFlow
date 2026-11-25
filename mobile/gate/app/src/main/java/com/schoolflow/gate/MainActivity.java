@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.*;
 import org.opencv.android.*;
 import org.opencv.core.Mat;
+import com.schoolflow.mobile.PullToRefresh;
 
 /** Attended face gate: recognizing a face never silently posts attendance. */
 public class MainActivity extends CameraActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
@@ -75,7 +76,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   confirm=button("Confirm identity & mark",this::confirmIdentity);confirm.setEnabled(false);panel.addView(confirm);
   panel.addView(button("Retry connection / pending mark",()->{try{if(vault!=null&&vault.pending()!=null)deliver();else heartbeat();}catch(Exception e){show("Cannot read protected storage.");}}));
   panel.addView(button("Cancel pending submission",()->protect(this::cancelPending)));
-  body.addView(scroll(panel),portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+  body.addView(new PullToRefresh(scroll(panel),()->visible&&vault!=null&&!busy.get(),this::heartbeat),portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
   switchAttendanceMode(BuildConfig.GATE_SCHOOL_SCOPE.isEmpty());
   if(BuildConfig.CHECK_FOR_UPDATES)AppUpdates.check(this);
   try{vault=new Vault(this);known=vault.people();status.setText(vault.lastResult());}catch(Exception e){status.setText("Protected storage cannot be opened. Attendance is disabled; do not replace it with plaintext.");start.setEnabled(false);return;}

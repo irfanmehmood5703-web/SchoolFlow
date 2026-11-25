@@ -4,11 +4,13 @@ on:
     branches: [main]
     paths:
       - mobile/gate/**
+      - mobile/android-common/**
       - scripts/publish_qr_attendance.py
       - .github/workflows/qr-attendance-release.yml
   pull_request:
     paths:
       - mobile/gate/**
+      - mobile/android-common/**
       - scripts/publish_qr_attendance.py
       - .github/workflows/qr-attendance-release.yml
       - school_apps.py

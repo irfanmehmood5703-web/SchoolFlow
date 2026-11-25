@@ -2,9 +2,9 @@ name: School-specific Android apps
 on:
   push:
     branches: [main, feature/school-app-branding]
-    paths: ['mobile/clients/**', 'school_apps.py', 'app_builder_auth.py', 'scripts/school_app_worker.py', 'scripts/verify_school_builds.py', 'tests/test_school_apps.py', '.github/workflows/school-app-builder.yml']
+    paths: ['mobile/clients/**', 'mobile/android-common/**', 'school_apps.py', 'app_builder_auth.py', 'scripts/school_app_worker.py', 'scripts/verify_school_builds.py', 'tests/test_school_apps.py', '.github/workflows/school-app-builder.yml']
   pull_request:
-    paths: ['mobile/clients/**', 'school_apps.py', 'app_builder_auth.py', 'scripts/school_app_worker.py', 'scripts/verify_school_builds.py', 'tests/test_school_apps.py', '.github/workflows/school-app-builder.yml']
+    paths: ['mobile/clients/**', 'mobile/android-common/**', 'school_apps.py', 'app_builder_auth.py', 'scripts/school_app_worker.py', 'scripts/verify_school_builds.py', 'tests/test_school_apps.py', '.github/workflows/school-app-builder.yml']
   workflow_dispatch:
   schedule:
     - cron: '7,22,37,52 * * * *'

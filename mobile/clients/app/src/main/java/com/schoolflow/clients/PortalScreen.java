@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.print.PrintManager;
 import android.webkit.*;
 import android.widget.*;
+import com.schoolflow.mobile.PullToRefresh;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -16,7 +17,7 @@ final class PortalScreen {
  private final Activity a;private WebView web;private TextView status;
  private static final int MICROPHONE_PERMISSION=91,LOCATION_PERMISSION=92;
  private GeolocationPermissions.Callback location;private String locationOrigin,locationPage;
- private PermissionRequest microphone;private boolean foreground;
+ private PermissionRequest microphone;private boolean foreground,loading;
  private ValueCallback<Uri[]> files;private String downloadUrl;private final ExecutorService io=Executors.newSingleThreadExecutor();
  PortalScreen(Activity activity){a=activity;}
  private String startUrl(){return EndpointPolicy.BASE+"/mobile/"+BuildConfig.ROLE+(BuildConfig.INSTITUTE_CODE.isEmpty()?"":"?school="+BuildConfig.INSTITUTE_CODE+"&scope="+BuildConfig.SCHOOL_SCOPE);}
@@ -26,16 +27,17 @@ final class PortalScreen {
   Button reload=new Button(a);reload.setText("Reload");reload.setOnClickListener(v->web.reload());bar.addView(reload);
   Button print=new Button(a);print.setText("Print");print.setOnClickListener(v->printPage());bar.addView(print);
   Button clear=new Button(a);clear.setText("Sign out");clear.setOnClickListener(v->new AlertDialog.Builder(a).setMessage("Clear this app’s school session?").setPositiveButton("Sign out",(d,w)->{CookieManager.getInstance().removeAllCookies(ok->{web.clearHistory();web.clearCache(true);WebStorage.getInstance().deleteAllData();web.loadUrl(startUrl());});}).setNegativeButton("Cancel",null).show());bar.addView(clear);
-  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE)))root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE)))root.addView(brand);status=new TextView(a);status.setOnClickListener(v->{if(web!=null)web.reload();});root.addView(status);web=new WebView(a);root.addView(web,new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
+  HorizontalScrollView actions=new HorizontalScrollView(a);actions.addView(bar);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE)))root.addView(actions);TextView brand=new TextView(a);brand.setText(a.getString(com.schoolflow.clients.R.string.app_name));brand.setPadding(12,4,12,4);if(!("owner".equals(BuildConfig.ROLE)||"parents".equals(BuildConfig.ROLE)||"teacher".equals(BuildConfig.ROLE)))root.addView(brand);status=new TextView(a);status.setOnClickListener(v->{if(web!=null)web.reload();});root.addView(status);web=new WebView(a);
+  root.addView(new PullToRefresh(web,this::canRefresh,this::refresh),new LinearLayout.LayoutParams(-1,0,1));a.setContentView(root);
   WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSafeBrowsingEnabled(true);settings.setJavaScriptCanOpenWindowsAutomatically(false);settings.setSupportMultipleWindows(false);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.setWebViewClient(new WebViewClient(){
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest req){if((EndpointPolicy.BASE+"/mobile/print-current").equals(req.getUrl().toString())&&EndpointPolicy.allowed(web.getUrl())){printPage();return true;}if(EndpointPolicy.allowed(req.getUrl().toString()))return false;String target=req.getUrl().toString();if(req.isForMainFrame()&&req.hasGesture()&&EndpointPolicy.external(target)){new AlertDialog.Builder(a).setTitle("Open outside the school app?").setMessage(target).setPositiveButton("Open",(d,w)->{try{a.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(target)).addCategory(Intent.CATEGORY_BROWSABLE));}catch(ActivityNotFoundException e){status.setText("No app is available to open this link.");}}).setNegativeButton("Cancel",null).show();}else status.setText("This link cannot be opened from the school app.");return true;}
    @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest req){String url=req.getUrl().toString();if(EndpointPolicy.allowed(url)||url.startsWith("data:image/"))return null;return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[0]));}
    @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler handler,android.net.http.SslError error){handler.cancel();status.setText("Secure connection failed. Check your phone date and network.");}
-   @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){denyLocation();denyMicrophone();status.setText("Loading school…");}
-   @Override public void onPageFinished(WebView view,String url){status.setText("");if(EndpointPolicy.allowed(url))web.evaluateJavascript("window.print=function(){window.location.assign('"+EndpointPolicy.BASE+"/mobile/print-current');};",null);CookieManager.getInstance().flush();}
-   @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error){if(req.isForMainFrame())status.setText("School unavailable. Check internet, then tap here to retry.");}
+   @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){loading=true;denyLocation();denyMicrophone();status.setText("Loading school…");}
+   @Override public void onPageFinished(WebView view,String url){loading=false;status.setText("");if(EndpointPolicy.allowed(url))web.evaluateJavascript("window.print=function(){window.location.assign('"+EndpointPolicy.BASE+"/mobile/print-current');};",null);CookieManager.getInstance().flush();}
+   @Override public void onReceivedError(WebView view,WebResourceRequest req,WebResourceError error){if(req.isForMainFrame()){loading=false;status.setText("School unavailable. Check internet, then tap here to retry.");}}
   });
   web.setWebChromeClient(new WebChromeClient(){
    @Override public boolean onJsPrompt(WebView view,String url,String message,String value,JsPromptResult result){if(!EndpointPolicy.allowed(url)){result.cancel();return true;}EditText field=new EditText(a);field.setText(value==null?"":value);field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(5000)});new AlertDialog.Builder(a).setMessage(message).setView(field).setPositiveButton("Save",(d,w)->result.confirm(field.getText().toString())).setNegativeButton("Cancel",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;}
@@ -55,6 +57,33 @@ final class PortalScreen {
   });
   web.setDownloadListener((url,agent,disposition,mime,length)->{if(!EndpointPolicy.allowed(url))return;downloadUrl=url;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime==null?"application/octet-stream":mime).putExtra(Intent.EXTRA_TITLE,URLUtil.guessFileName(url,disposition,mime));try{a.startActivityForResult(i,42);}catch(ActivityNotFoundException e){status.setText("File saving is unavailable on this phone.");}});
   if(state==null||web.restoreState(state)==null)web.loadUrl(startUrl());
+ }
+ private boolean canRefresh(){
+  return foreground&&!loading&&!a.isFinishing()&&!a.isDestroyed()&&EndpointPolicy.allowed(web.getUrl());
+ }
+ private void refresh(){
+  final String page=web.getUrl();
+  // Pass through to the normal WebView reload only if there is no form entry to preserve.
+  web.evaluateJavascript("""
+      (() => {
+        const focused = document.activeElement;
+        if (focused && (focused.isContentEditable || focused.matches('input, textarea, select'))) return false;
+        return !Array.from(document.querySelectorAll('input, textarea, select')).some(field => {
+          if (field.disabled || !field.form || field.type === 'hidden') return false;
+          if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
+          if (field.nodeName === 'SELECT') {
+            const options = Array.from(field.options);
+            if (!field.multiple && !options.some(option => option.defaultSelected)) return field.selectedIndex > 0;
+            return options.some(option => option.selected !== option.defaultSelected);
+          }
+          return field.type === 'file' ? field.files.length > 0 : field.value !== field.defaultValue;
+        });
+      })()
+      """,result->{
+   if(!canRefresh()||!page.equals(web.getUrl()))return;
+   if("true".equals(result)){loading=true;web.reload();}
+   else if("false".equals(result))status.setText("Finish or clear the form before refreshing.");
+  });
  }
  private void printPage(){if(!foreground||a.isFinishing()||a.isDestroyed())return;String label=a.getString(com.schoolflow.clients.R.string.app_name);((PrintManager)a.getSystemService(Context.PRINT_SERVICE)).print(label,web.createPrintDocumentAdapter(label),null);}
  void result(int code,int result,Intent data){if(code==41&&files!=null){files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));files=null;}
