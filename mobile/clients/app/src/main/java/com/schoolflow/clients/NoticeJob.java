@@ -18,7 +18,8 @@ public final class NoticeJob extends JobService {
  private static final int PERIODIC=7310, ONCE=7311, NOTICE=7312;
  private static final String CHANNEL="school_updates";
  private static final Object LOCK=new Object();
- private volatile Thread task;
+ private final java.util.concurrent.ConcurrentHashMap<Integer,Thread> tasks=new java.util.concurrent.ConcurrentHashMap<>();
+ private static final java.util.concurrent.atomic.AtomicLong SESSION_EPOCH=new java.util.concurrent.atomic.AtomicLong();
  public static boolean supported(){return Arrays.asList("owner","parents","teacher","sms").contains(BuildConfig.ROLE);}
  private static boolean permitted(Context c){return Build.VERSION.SDK_INT<33||c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;}
  public static void setup(Activity a){
@@ -44,6 +45,7 @@ public final class NoticeJob extends JobService {
   if(s.getPendingJob(ONCE)==null&&now-p.getLong("last_check",0L)>120000L)s.schedule(new JobInfo.Builder(ONCE,name).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build());
  }
  public static void clear(Context c){
+  SESSION_EPOCH.incrementAndGet();
   c.getSharedPreferences("notice_state",MODE_PRIVATE).edit().clear().commit();
   c.getSystemService(NotificationManager.class).cancel(NOTICE);
  }
@@ -51,11 +53,11 @@ public final class NoticeJob extends JobService {
   Thread worker=new Thread(()->{
    try{synchronized(LOCK){if(!Thread.currentThread().isInterrupted()&&permitted(this))check();}}
    catch(Exception ignored){/* Network unavailable or server asleep: preserve state. */}
-   finally{jobFinished(params,false);}
+   finally{tasks.remove(params.getJobId(),Thread.currentThread());if(!Thread.currentThread().isInterrupted())jobFinished(params,false);}
   },"school-notices");
-  task=worker;worker.start();return true;
+  tasks.put(params.getJobId(),worker);worker.start();return true;
  }
- @Override public boolean onStopJob(JobParameters params){Thread t=task;if(t!=null)t.interrupt();return false;}
+ @Override public boolean onStopJob(JobParameters params){Thread t=tasks.remove(params.getJobId());if(t!=null)t.interrupt();return false;}
  private JSONObject fetch()throws Exception{
   String role=BuildConfig.ROLE,path,cookie=null;
   JSONObject sms=null;
@@ -90,7 +92,8 @@ public final class NoticeJob extends JobService {
  }
  private void check()throws Exception{
   android.content.SharedPreferences state=getSharedPreferences("notice_state",MODE_PRIVATE);
-  JSONObject result=fetch();if(Thread.currentThread().isInterrupted())return;
+  long epoch=SESSION_EPOCH.get();
+  JSONObject result=fetch();if(Thread.currentThread().isInterrupted()||epoch!=SESSION_EPOCH.get())return;
   if(result==null){clear(this);return;}
   String actor=result.getString("actor");if(!actor.matches("[a-f0-9]{64}"))throw new IOException();
   boolean same=actor.equals(state.getString("actor",""));
@@ -102,20 +105,19 @@ public final class NoticeJob extends JobService {
   }
   if(!same)getSystemService(NotificationManager.class).cancel(NOTICE);
   if(seen.size()>500){seen.clear();for(int i=0;i<Math.min(events.length(),80);i++)seen.add(events.getJSONObject(i).getString("id"));}
+  if(epoch!=SESSION_EPOCH.get())return;
   if(!fresh.isEmpty()&&permitted(this)){
    JSONObject first=fresh.get(0);
    // No pupil names, marks, phone numbers or financial data on the lock screen.
-   String title="School update",body=fresh.size()+" new school update(s). Open your app for details.";
-   if("owner".equals(BuildConfig.ROLE)&&first.optString("title").equals("Fee Collection")){
-    title="Fee collection report";body=first.optString("body");
-    if(fresh.size()>1)body+=" · "+(fresh.size()-1)+" more update(s)";
-   }
+   String title=first.optString("title","School update"),body=first.optString("body","Open your app for details.");
+   if(fresh.size()>1)body+=" · "+(fresh.size()-1)+" more update(s)";
    Intent intent=new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
    PendingIntent tap=PendingIntent.getActivity(this,NOTICE,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
    Notification publicVersion=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle("School update").setContentText("Open your school app").build();
    Notification notice=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body)).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion).setContentIntent(tap).setAutoCancel(true).build();
    getSystemService(NotificationManager.class).notify(NOTICE,notice);
   }
+  if(epoch!=SESSION_EPOCH.get()){getSystemService(NotificationManager.class).cancel(NOTICE);return;}
   state.edit().putString("actor",actor).putStringSet("seen",seen).putLong("last_check",System.currentTimeMillis()).commit();
  }
 }
