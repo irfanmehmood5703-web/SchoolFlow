@@ -18,4 +18,5 @@
 <a data-core-key="attendance-acronyms" class="core-main" href="{{url_for('attendance_controls.acronyms')}}">Attendance Acronym Active/Inactive</a>
 <a data-core-key="whatsapp-service" class="core-main" href="{{url_for('whatsapp_settings.service')}}">WhatsApp Service</a>
 <a data-core-key="manage-whatsapp" class="core-main" href="{{url_for('whatsapp_settings.manager')}}">Manage WhatsApp</a>
+{% if school_identity and not school_identity.demo and session.get("owner_id") and not session.get("staff_id") and not g.staff_principal %}<a data-core-key="automatic-reports" class="core-main" href="{{url_for('automatic_reports.index')}}">Automatic Reports &amp; Notifications</a>{% endif %}
 <a data-core-key="subscription" class="core-main" href="{{url_for('client_subscription.index')}}">SchoolFlow Subscription</a>
