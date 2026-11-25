@@ -1,5 +1,7 @@
 package com.schoolflow.gate;
 import android.content.Context;
+import android.os.SystemClock;
+import com.schoolflow.mobile.PullToRefresh;
 import android.content.pm.ApplicationInfo;
 import android.security.NetworkSecurityPolicy;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -18,6 +20,48 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.*;
 @RunWith(AndroidJUnit4.class)
 public class GateDeviceTest {
+ @Test public void pullToRefreshRequiresAVerticalSwipeStartingAtTheTop() {
+  InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+   boolean[] scrolled={false},enabled={true};
+   int[] refreshes={0};
+   View content=new View(context) {
+    @Override public boolean canScrollVertically(int direction){return direction<0&&scrolled[0];}
+   };
+   PullToRefresh refresh=new PullToRefresh(content,()->enabled[0],()->refreshes[0]++);
+   int size=(int)(300*context.getResources().getDisplayMetrics().density);
+   int spec=View.MeasureSpec.makeMeasureSpec(size,View.MeasureSpec.EXACTLY);
+   refresh.measure(spec,spec);
+   refresh.layout(0,0,size,size);
+
+   swipe(refresh,size*.3f,size*.7f,size*.34f,size*.8f);
+   swipe(refresh,size*.3f,size*.7f,size*.8f,size*.99f);
+   swipe(refresh,size*.3f,size*.7f,size*.3f,size*.2f);
+   assertEquals(0,refreshes[0]);
+   scrolled[0]=true;
+   swipe(refresh,size*.3f,size*.2f,size*.3f,size*.75f);
+   scrolled[0]=false;
+   enabled[0]=false;
+   swipe(refresh,size*.3f,size*.2f,size*.3f,size*.75f);
+   assertEquals(0,refreshes[0]);
+   enabled[0]=true;
+   swipe(refresh,size*.3f,size*.2f,size*.3f,size*.75f);
+   assertEquals(1,refreshes[0]);
+  });
+ }
+
+ private static void swipe(View target,float fromX,float fromY,float toX,float toY) {
+  long time=SystemClock.uptimeMillis();
+  sendTouch(target,time,time,MotionEvent.ACTION_DOWN,fromX,fromY);
+  sendTouch(target,time,time+85,MotionEvent.ACTION_MOVE,(fromX+toX)/2,(fromY+toY)/2);
+  sendTouch(target,time,time+170,MotionEvent.ACTION_UP,toX,toY);
+ }
+
+ private static void sendTouch(View target,long down,long when,int action,float x,float y) {
+  MotionEvent event=MotionEvent.obtain(down,when,action,x,y,0);
+  try{target.dispatchTouchEvent(event);}finally{event.recycle();}
+ }
+
  private Context context;private File file;
  private final String token="FictionalGateKey_123456789012345678901234567890";
  @Before public void setup(){context=InstrumentationRegistry.getInstrumentation().getTargetContext();file=new File(context.getNoBackupFilesDir(),"gate.vault");file.delete();new File(file.getPath()+".bak").delete();}

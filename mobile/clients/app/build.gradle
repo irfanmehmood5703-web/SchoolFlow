@@ -10,6 +10,7 @@ android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
     defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 8; versionName '0.8-acceptance' }
+    sourceSets.main.java.srcDir rootProject.file('../android-common/src/main/java')
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'

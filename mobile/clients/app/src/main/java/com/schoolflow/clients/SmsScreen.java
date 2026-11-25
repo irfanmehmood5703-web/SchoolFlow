@@ -1,4 +1,5 @@
 package com.schoolflow.clients;
+import com.schoolflow.mobile.PullToRefresh;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
@@ -144,7 +145,8 @@ final class SmsScreen {
   root.setOrientation(LinearLayout.VERTICAL);
   root.setPadding(dp(14),dp(12),dp(14),dp(20));
   scroll.addView(root);
-  a.setContentView(scroll);
+  a.setContentView(new PullToRefresh(scroll,
+      () -> active && refreshButton != null && refreshButton.isEnabled(), this::refresh));
 
   LinearLayout header=card(root);
   LinearLayout schoolRow=new LinearLayout(a);
