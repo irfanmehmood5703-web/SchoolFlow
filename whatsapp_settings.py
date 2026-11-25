@@ -231,5 +231,40 @@ def configure_whatsapp(app,db):
             g.institute_engine=engine
             try:click.echo(str(cleanup())+' expired message payloads removed.')
             finally:db.session.remove()
-    app.extensions['whatsapp_helpers']=dict(cleanup=cleanup,encrypt=encrypt,decrypt=decrypt,config=config)
+    def report_options():
+        # Never expose the provider key, even on an owner configuration page.
+        enabled=bool((app.config.get('WHATSAPP_ENABLED') or os.getenv('SCHOOLFLOW_WHATSAPP_ENABLED')=='1') and (app.config.get('WHATSAPP_SEND_ENABLED') or os.getenv('SCHOOLFLOW_WHATSAPP_SEND_ENABLED')=='1'))
+        if not enabled:return []
+        _,cfg=config()
+        if cfg.get('provider')!='walink':return []
+        p=current()
+        if not p:return []
+        try:return [dict(id=str(x['id']),name=str(x.get('name') or x['id'])[:120],provider=p.id) for x in linked(state(p))]
+        except (ValueError,KeyError,TypeError):return []
+    def send_report(token,device,provider_id,mobile,message):
+        import hashlib
+        # The tenant scheduler is the only caller. Require currently linked
+        # sender and enabled integration; a changed provider invalidates consent.
+        if not any(x['id']==device and x['provider']==provider_id for x in report_options()):return 'Unavailable'
+        if not re.fullmatch('[1-9][0-9]{7,14}',mobile) or not 1<=len(message)<=4096:raise ValueError('Invalid scheduled report recipient or message.')
+        app.extensions['admission_capacity']['lock']()
+        prior=Command.query.filter_by(token=token).first()
+        if prior:
+            status=prior.status;db.session.rollback();return status
+        p=current()
+        if not p or p.id!=provider_id or not any(x['id']==device and x['provider']==provider_id for x in report_options()):db.session.rollback();return 'Unavailable'
+        fields=dict(device=device,mobile=mobile,message=message,media_url='')
+        fingerprint=hashlib.sha256(json.dumps(dict(provider=p.id,action='send',fields=fields),sort_keys=True).encode()).hexdigest()
+        claim=Command(provider_id=p.id,token=token,action='send',fingerprint=fingerprint,status='Pending',payload=encrypt(fields))
+        db.session.add(claim);db.session.flush();claim_id=claim.id;secret=decrypt(p.secret);endpoint=p.endpoint
+        commit()
+        try:
+            reply=provider_request(endpoint,secret,'send',fields)
+            outcome='Failed' if isinstance(reply,dict) and (reply.get('success') is False or reply.get('error')) else 'Submitted'
+        except ValueError:outcome='Unknown'
+        app.extensions['admission_capacity']['lock']()
+        claim=db.session.get(Command,claim_id);claim.status=outcome
+        audit('Scheduled WhatsApp report',provider_id=provider_id,command_id=claim_id,outcome=outcome);commit()
+        return outcome
+    app.extensions['whatsapp_helpers']=dict(cleanup=cleanup,encrypt=encrypt,decrypt=decrypt,config=config,report_options=report_options,send_report=send_report)
     app.register_blueprint(bp)
