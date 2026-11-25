@@ -82,6 +82,51 @@ class SmsGatewayTests(unittest.TestCase):
             self.assertEqual(self.M['job'].query.count(),2)
             row=db.session.get(ops['workflow'],wid);row.data={**row.data,'preferences':{'branded_sms':True,'father_contact':True}};db.session.commit();db.session.remove()
         self.assertEqual(self.c.post(path,data={'_csrf':token,'device_id':1,'confirm':'yes'}).status_code,422)
+    def test_blaster_direct_queue_branding_and_repeat_submit(self):
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
+            rm=app.extensions['record_models'];ops=app.extensions['ops_models']
+            s=Student(admission_no='BLASTER-QA',name='Fictional Pupil',class_name='One',status='Active',phone='+12025550123')
+            db.session.add(s);db.session.flush();sid=s.id
+            db.session.add(rm['student'](student_id=sid,data={'campus':'North','section':'A'}))
+            profile_model=app.extensions['institute_setup_models']['profile']
+            profile=db.session.get(profile_model,1)
+            if profile:profile.data={**profile.data,'name':'Fictional Campus School'}
+            else:db.session.add(profile_model(id=1,data={'name':'Fictional Campus School'}))
+            db.session.commit();db.session.remove()
+        token=self.login();path='/workspace/messages'
+        data={'_csrf':token,'action':'send_sms','send_token':'a'*43,'campus':'North','class_name':'One','section':'A','student_ids':str(sid),'father_contact':'on','app_sms':'on','message':'PTM at {school_name}.'}
+        self.assertIn(b'Send SMS',self.c.get(path).data)
+        for _ in range(2):self.assertEqual(self.c.post(path,data=data).status_code,302)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
+            row=ops['workflow'].query.filter_by(kind='message').one()
+            self.assertEqual(row.status,'Queued for SMS App')
+            self.assertEqual(row.data['messages'][0]['text'],'PTM at Fictional Campus School.')
+            job=self.M['job'].query.filter(self.M['job'].source!='fictional:1').one()
+            self.assertEqual((job.text,job.state,job.device_id),('PTM at Fictional Campus School.','queued',1))
+            db.session.remove()
+        self.assertEqual(self.c.post(path,data={**data,'send_token':'b'*43,'message':'PTM at {school_name}. Marks: {missing_marks}'}).status_code,422)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
+            self.assertEqual(self.M['job'].query.count(),2)
+            self.assertEqual(ops['workflow'].query.filter_by(kind='message').count(),1)
+            db.session.remove()
+    def test_followup_sms_uses_unique_campus_device_and_institute_name(self):
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
+            ops=app.extensions['ops_models']
+            row=ops['workflow'](kind='queries',status='Follow-up',data={'name':'Fictional Applicant','phone':'+12025550123','campus':'North','class_name':'One','sms_consent':True})
+            db.session.add(row);db.session.commit();wid=row.id;db.session.remove()
+        token=self.login();path='/workspace/admission-query-sms'
+        payload={'_csrf':token,'query_id':wid,'sms_token':'x'*43,'message':'Follow-up for {student_name} at {school_name}.'}
+        for _ in range(2):self.assertEqual(self.c.post(path,data=payload).status_code,302)
+        with app.test_request_context('/'):
+            g.institute_engine=app.extensions['identity_helpers']['engine'](self.school_id)
+            job=self.M['job'].query.filter(self.M['job'].source!='fictional:1').one()
+            self.assertEqual(job.device_id,1);self.assertEqual(job.state,'queued')
+            self.assertEqual(job.text,'Follow-up for Fictional Applicant at Fictional SMS School.')
+            db.session.remove()
     def test_cross_institute_colliding_device_ids_are_isolated(self):
         other=app.extensions['identity_helpers']['provision']('SMS-OTHER','Other Fictional School','other@example.invalid','Fictional-SMS-password-2026');other_id=other.id
         with app.test_request_context('/'):

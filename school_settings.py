@@ -209,6 +209,8 @@ def configure_school_settings(app,db,Student,Employee):
         if has_request_context() and request.method=='GET':cache[key]=rows;request.school_settings_items=cache
         return rows
     def options(category):
+        cache=getattr(request,'school_settings_options',{}) if has_request_context() and request.method=='GET' else None
+        if cache is not None and category in cache:return list(cache[category])
         values=sorted({r.value for r in rm['settings'].query.filter_by(category=category).all()})
         if category=='subject':
             # Merge the shared subject catalog with Exam Settings subject definitions.
@@ -218,6 +220,8 @@ def configure_school_settings(app,db,Student,Employee):
             values=sorted(set(values)|{r.name for r in configured})
             order={r.name:i for i,r in enumerate(configured)}
             values.sort(key=lambda v:(order.get(v,1000000),v))
+        if cache is not None:
+            cache[category]=tuple(values);request.school_settings_options=cache
         return values
     def value(key,required=False,limit=160):
         result=request.form.get(key,'').strip()

@@ -46,11 +46,11 @@ class CertificateTests(unittest.TestCase):
             r,ctx=self.capture(key=key);self.assertEqual(r.status_code,200,key);self.assertIn('Fictional School',ctx['html'])
             self.assertNotIn('[studentName]',ctx['html']);self.assertNotIn('Bint-e',ctx['html'])
         self.assertEqual(self.m['issue'].query.count(),0);self.assertEqual(self.m['batch'].query.count(),0)
-    def test_preview_previous_next_and_fallback_first_student(self):
+    def test_preview_previous_next_and_require_explicit_student(self):
         r,ctx=self.capture(student_ids=[str(self.s.id),str(self.s2.id)],index='1');self.assertEqual(r.status_code,200)
         self.assertIn('Second Fictional Pupil',ctx['html']);self.assertEqual(ctx['index'],1)
         self.assertEqual(self.action(index='-1').status_code,422)
-        self.assertEqual(self.action(student_ids=[]).status_code,200)
+        self.assertEqual(self.action(student_ids=[]).status_code,422)
         self.assertEqual(self.action('issue',student_ids=[]).status_code,422)
     def test_issue_batch_idempotency_print_and_logs(self):
         self.assertEqual(self.action('issue',student_ids=[str(self.s.id),str(self.s2.id)]).status_code,302)

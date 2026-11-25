@@ -195,14 +195,14 @@ def configure_operations(app, db, Student, Employee):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
         snapshots=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context)
         school_identity=getattr(g,'school_identity',None) or {}
-        profile_model=app.extensions.get('school_profile_model')
+        profile_model=app.extensions.get('institute_setup_models',{}).get('profile') or app.extensions.get('school_profile_model')
         profile=db.session.get(profile_model,1) if profile_model else None
         school_name=str(((profile.data or {}).get('name') if profile else '') or school_identity.get('name') or '').strip()
         if school_name:
             for item in snapshots:
-                item['text']=re.sub(r'\\{\\s*school_name\\s*\\}',lambda match:school_name,str(item.get('text') or ''),flags=re.IGNORECASE)
+                item['text']=re.sub(r'(?:\{\s*school_name\s*\}|\[\s*institute_name\s*\])',lambda match:school_name,str(item.get('text') or ''),flags=re.IGNORECASE)
                 if item.get('unresolved'):
-                    item['unresolved']=[tag for tag in item['unresolved'] if str(tag).strip('{} ').lower()!='school_name']
+                    item['unresolved']=[tag for tag in item['unresolved'] if str(tag).strip('{}[] ').lower() not in ('school_name','institute_name')]
         payload=dict(subject=subject,ids=ids,audience=audience,preferences=prefs,messages=snapshots)
         if event=='attendance':payload.update(attendance_day=(context or {}).get('day'),attendance_statuses={str(item['person_id']):item.get('template','') for item in snapshots})
         row=Workflow(kind='message',status='Pending SMS review' if audience=='parent' and prefs['app_sms'] else 'Provider not configured',data=payload)
@@ -1671,6 +1671,16 @@ def configure_operations(app, db, Student, Employee):
         audit('Import lectures',month=m,count=count);commit();flash(f'{count} lecture entries imported awaiting approval.','success');return redirect(url_for('ops.register',kind='lecture-register'))
 
     def communication_screen(fee_mode=False):
+        direct_allowed=bool(session.get('owner_id') and not session.get('demo') and not getattr(g,'staff_principal',None) and not fee_mode)
+        direct=request.method=='POST' and request.form.get('action')=='send_sms'
+        if direct:
+            if not direct_allowed:abort(403)
+            app.extensions['admission_capacity']['lock']()
+            token=request.form.get('send_token','')
+            if not re.fullmatch(r'[A-Za-z0-9_-]{32,64}',token):raise ValueError('Reload SMS Blaster before sending.')
+            if Workflow.query.filter_by(kind='message').filter(Workflow.data['blaster_token'].as_string()==token).first():
+                flash('This SMS Blaster request was already queued. No duplicate was created.','info')
+                return redirect(url_for('ops.message_log'))
         campus=request.values.get('campus','').strip()
         students=people(active=True)
         balances={}
@@ -1699,11 +1709,29 @@ def configure_operations(app, db, Student, Employee):
             ids=selected('student_ids')
             valid={s.id for s in students}
             if not ids or any(i not in valid for i in ids):raise ValueError('Select valid recipients from this filtered list.')
-            queue(body,ids,context={'type':'fee-intimation' if fee_mode else 'sms-blaster'})
-            commit()
-            flash('Communication request saved. No SMS was sent: a verified provider is required.','info')
-            return redirect(url_for('ops.message_log'))
-        return render('messages.html',sms_templates=default_templates,title='Fee Intimation' if fee_mode else 'SMS Blaster',students=students,fee_mode=fee_mode,balances=balances)
+            if direct:
+                if request.form.get('app_sms')!='on':raise ValueError('Choose App SMS to send through the registered school SIM.')
+                if request.form.get('branded_sms')=='on' or request.form.get('whatsapp_sms')=='on':raise ValueError('Use Save request for channels other than School SIM SMS.')
+                if not any(request.form.get(key)=='on' for key in ('father_contact','mother_contact','student_contact')):raise ValueError('Choose at least one recipient contact.')
+                selected_students=[s for s in students if s.id in ids]
+                details=app.extensions['record_helpers']['raw_many']('student',selected_students)
+                groups=defaultdict(list)
+                for student in selected_students:
+                    groups[details.get(student.id,{}).get('campus','')].append(student.id)
+                created=0
+                for scope,group_ids in groups.items():
+                    row=queue(body,group_ids,context={'type':'sms-blaster'})
+                    row.data={**row.data,'source':'sms-blaster-direct','blaster_token':token}
+                    db.session.flush()
+                    created+=app.extensions['direct_blaster_queue'](row,scope)
+                commit()
+                flash(f'{created} SMS added directly to the registered SMS App. Refresh the app and press Send Messages to submit.','success')
+            else:
+                queue(body,ids,context={'type':'fee-intimation' if fee_mode else 'sms-blaster'})
+                commit()
+                flash('Communication request saved for review. No SMS was sent.','info')
+            return redirect(url_for('ops.messages') if direct else url_for('ops.message_log'))
+        return render('messages.html',sms_templates=default_templates,title='Fee Intimation' if fee_mode else 'SMS Blaster',students=students,fee_mode=fee_mode,balances=balances,direct_allowed=direct_allowed,send_token=secrets.token_urlsafe(32))
 
     @bp.route('/messages',methods=['GET','POST'])
     def messages():

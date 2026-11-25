@@ -45,7 +45,7 @@ class SchoolSettingsTests(unittest.TestCase):
         db.session.commit()
         page=self.c.get('/workspace/core/exam/subjects')
         self.assertEqual(page.status_code,200)
-        self.assertIn(b'Automatically available school subjects (2)',page.data)
+        self.assertIn(b'2 automatic',page.data)
         self.assertIn(b'English',page.data)
         self.assertIn(b'Urdu',page.data)
         helper=app.extensions['school_settings_helpers']
@@ -276,9 +276,10 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertEqual(self.post('exam','grading',id=policy.id,version='1',action='delete').status_code,422)
     def test_weightage_and_test_types_are_separate_from_paper_total(self):
         self.assertEqual(self.post('exam','test-types',name='First Term',campus='Campus A').status_code,302);r=self.item('test-type')
-        self.assertEqual(self.post('exam','weightage',campus='Campus A',**{'weight_'+str(r.id):'100.01'}).status_code,422)
-        self.assertEqual(self.post('exam','weightage',campus='Campus A',**{'weight_'+str(r.id):'30'}).status_code,302)
-        self.assertEqual(self.config('exam:weightage:Campus A').data[str(r.id)],'30')
+        self.assertEqual(self.post('exam','weightage',campus='Campus A',**{'include_'+str(r.id):'on','weight_'+str(r.id):'100.01'}).status_code,422)
+        self.assertEqual(self.post('exam','weightage',campus='Campus A',**{'include_'+str(r.id):'on','weight_'+str(r.id):'30'}).status_code,422)
+        self.assertEqual(self.post('exam','weightage',campus='Campus A',**{'include_'+str(r.id):'on','weight_'+str(r.id):'100'}).status_code,302)
+        self.assertEqual(self.config('exam:weightage:Campus A').data[str(r.id)],'100')
         self.assertIn(b'value="" required',self.c.get('/workspace/examination/awards').data)
         self.assertEqual(self.post('exam','test-types',id=r.id,version='1',action='delete').status_code,422)
     def test_26_default_sms_templates_available_without_per_school_setup_or_get_writes(self):
@@ -517,7 +518,7 @@ class SchoolSettingsTests(unittest.TestCase):
         detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.data={**detail.data,'academic_session':'2026-27'};db.session.commit()
         self.post('exam','test-types',name='Term 1',campus='Campus A');self.post('exam','test-types',name='Term 2',campus='Campus A')
         types=self.m['item'].query.filter_by(kind='test-type').order_by(self.m['item'].name).all()
-        weights={'weight_'+str(types[0].id):'40','weight_'+str(types[1].id):'60'}
+        weights={'include_'+str(types[0].id):'on','include_'+str(types[1].id):'on','weight_'+str(types[0].id):'40','weight_'+str(types[1].id):'60'}
         self.post('exam','weightage',campus='Campus A',**weights)
         path='/workspace/core/exam/weighted-results?campus=Campus+A&class_name=Class+A&academic_session=2026-27'
         self.assertIn(b'Incomplete',self.c.get(path).data)
@@ -525,7 +526,9 @@ class SchoolSettingsTests(unittest.TestCase):
             a=self.ops['workflow'](kind='awards',status='Active',data={'name':typ,'exam_test_type':typ,'campus':'Campus A','class_name':'Class A','academic_session':'2026-27','papers':[{'subject':'Math','total':total}]})
             db.session.add(a);db.session.flush();db.session.add(self.ops['score'](award_id=a.id,student_id=self.s.id,paper=0,obtained=obtained,state=''))
         db.session.commit();page=self.c.get(path);self.assertEqual(page.status_code,200);self.assertIn(b'<td>80.00</td>',page.data)
-        self.post('exam','weightage',campus='Campus A',version='1',**{'weight_'+str(types[0].id):'40'})
+        self.assertEqual(self.post('exam','weightage',campus='Campus A',version='1',**{'include_'+str(types[0].id):'on','weight_'+str(types[0].id):'40'}).status_code,422)
+        self.assertEqual(self.c.get(path).status_code,200)
+        self.assertEqual(self.post('exam','weightage',campus='Campus A',version='1').status_code,302)
         self.assertEqual(self.c.get(path).status_code,422)
 
     def test_shift_copy_is_same_designation_and_campus_only(self):
@@ -711,7 +714,7 @@ class SchoolSettingsTests(unittest.TestCase):
 
     def test_weighted_results_exclude_qualitative_unmarked_papers(self):
         award=self.qualitative_award();self.post('exam','test-types',name='Term',campus='Campus A');typ=self.item('test-type')
-        self.post('exam','weightage',campus='Campus A',**{'weight_'+str(typ.id):'100'})
+        self.post('exam','weightage',campus='Campus A',**{'include_'+str(typ.id):'on','weight_'+str(typ.id):'100'})
         award.data={**award.data,'exam_test_type':'Term','academic_session':'2026'}
         detail=self.rm['student'].query.filter_by(student_id=self.s.id).one();detail.data={**detail.data,'academic_session':'2026'}
         db.session.add(self.ops['score'](award_id=award.id,student_id=self.s.id,paper=0,obtained=24));db.session.commit()
@@ -768,7 +771,7 @@ class SchoolSettingsTests(unittest.TestCase):
         with another.session_transaction() as sess:csrf=sess['record_csrf']
         self.assertEqual(another.post(path,data={'_csrf':csrf,'marks_review_token':token,f'mark_{self.s.id}_0':'40'}).status_code,422);self.assertEqual(self.ops['score'].query.count(),0)
     def test_weighted_subject_result_excludes_unenrolled_paper_maximum(self):
-        award,other,empty=self.subject_award();self.post('exam','test-types',name='Term',campus='Campus A');typ=self.item('test-type');self.post('exam','weightage',campus='Campus A',**{'weight_'+str(typ.id):'100'})
+        award,other,empty=self.subject_award();self.post('exam','test-types',name='Term',campus='Campus A');typ=self.item('test-type');self.post('exam','weightage',campus='Campus A',**{'include_'+str(typ.id):'on','weight_'+str(typ.id):'100'})
         award.data={**award.data,'exam_test_type':'Term'};db.session.add(self.ops['score'](award_id=award.id,student_id=self.s.id,paper=0,obtained=40));db.session.commit()
         page=self.c.get('/workspace/core/exam/weighted-results?campus=Campus+A&class_name=Class+A&academic_session=2026-27');self.assertEqual(page.status_code,200);self.assertIn(b'80.00',page.data)
 
