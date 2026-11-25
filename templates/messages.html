@@ -8,11 +8,17 @@
 </div>
 <form method="get" class="form-card no-print">
 <h2>Filter recipients</h2>
-<p class="muted">Leave a filter blank to include all matching students. Apply filters before writing your message.</p>
+<p class="muted">Choose All Classes to include every class in the selected campus. Use All Sections to include every section. Apply filters before writing your message.</p>
 <div class="fields-grid">
-{{m.input('campus','Campus',value=request.args.get('campus',''),options=choices('campus'))}}
-{{m.input('class_name','Class',value=request.args.get('class_name',''),options=choices('class_name'))}}
-{{m.input('section','Section',value=request.args.get('section',''),options=choices('section'))}}
+{% for key,label,all_label in [('campus','Campus','All Campuses'),('class_name','Class','All Classes'),('section','Section','All Sections')] %}
+<div class="field">
+<label for="{{key}}">{{label}}</label>
+<select id="{{key}}" name="{{key}}">
+<option value="" {{'selected' if not request.args.get(key) else ''}}>{{all_label}}</option>
+{% for value,text in choices(key) %}{% if value %}<option value="{{value}}" {{'selected' if value|string == request.args.get(key,'') else ''}}>{{text}}</option>{% endif %}{% endfor %}
+</select>
+</div>
+{% endfor %}
 </div>
 <div class="award-actions"><button type="submit">Apply filters / Load templates</button><a class="button secondary" href="{{url_for('ops.fee_intimation' if fee_mode else 'ops.messages')}}">Clear filters</a></div>
 </form>
