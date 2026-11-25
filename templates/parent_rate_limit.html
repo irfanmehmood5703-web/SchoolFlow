@@ -1,0 +1,12 @@
+{% extends 'parent_app_base.html' %}
+{% block parent_content %}
+<section class="panel" aria-labelledby="login-limit-title">
+<div class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg></div>
+<h2 id="login-limit-title">Too many login attempts</h2>
+<p>For your account's security, login attempts have been temporarily limited. Your children's records are unchanged.</p>
+<div class="metric" role="status"><span>Try again in approximately</span><strong>{{retry_minutes}} minute{{'s' if retry_minutes!=1 else ''}}</strong><small>Current limit resets at {{retry_at}} (Pakistan time).</small></div>
+<p>Please check your registered mobile number and school login code before trying again. If the problem continues, contact your school office.</p>
+<a class="button" href="{{url_for('parent_portal.login',code=school.code)}}">Back to Login</a>
+<p class="muted"><small>Returning to login does not remove the security limit. Other active security limits may still apply.</small></p>
+</section>
+{% endblock %}
