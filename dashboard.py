@@ -89,12 +89,34 @@ def configure_dashboard(app, db):
         visible=access['allowed']() if access else None
         if visible is not None:
             catalog={k:v for k,v in catalog.items() if access['legacy'].get(k) in visible}
-        quick=set(('active','collected','attendance','employees')) if visible is None else {k for k in ('active','collected','attendance','employees') if access['legacy'].get(k) in visible}
+        quick = ('active', 'collected', 'due')
+        if visible is not None:
+            quick = {key for key in quick if access['legacy'].get(key) in visible}
         selected = [catalog[k] for k in layout['widgets'] if k in catalog]
         ordered = selected+[catalog[k] for k in KEYS if k in catalog and k not in layout['widgets']]
         scope = (getattr(g,'school_identity',None) or {}).get('scope','demo')
         scope += ':'+str(session.get('owner_id','demo'))
         stats=app.extensions['operation_helpers']['dashboard']()
+        remaining = stats['remaining_months']
+        month_remaining = remaining.get(today.strftime('%Y-%m'), 0)
+        session_dues = None
+        if 'due' in quick:
+            profile = db.session.get(app.extensions['institute_setup_models']['profile'], 1)
+            setup = (profile.data or {}) if profile else {}
+            try:
+                start = date.fromisoformat(setup.get('year_start', ''))
+                end = date.fromisoformat(setup.get('year_end', ''))
+            except (TypeError, ValueError):
+                pass
+            else:
+                if start <= end:
+                    first_month, last_month = (day.strftime('%Y-%m') for day in (start, end))
+                    session_dues = dict(
+                        name=setup.get('current_session'),
+                        amount=sum(balance for month, balance in remaining.items() if first_month <= month <= last_month),
+                        url=url_for('ops.history', view='defaulters', **{'from': first_month, 'to': last_month}),
+                        period=f'{start:%b %Y} – {end:%b %Y}',
+                    )
         if any(item['key']=='expenses' for item in selected):
             models=app.extensions['ledger_models']
             J,L=models['journal'],models['line']
@@ -117,6 +139,7 @@ def configure_dashboard(app, db):
             stats['monthly_cashflow']=[dict(month=date(year,m,1).strftime('%b %Y'),received=cash_received[m],expenses=cash_expenses[m],net=cash_received[m]-cash_expenses[m]) for m in range(1,today.month+1)]
         if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
         return render_template('dashboard.html',title='Dashboard',stats=stats,dashboard_date=today,
+                               month_remaining=month_remaining,session_dues=session_dues,
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
                                personal=owner_key() is not None,legacy_quick=quick,groups=list(dict.fromkeys(w[1] for w in WIDGETS)))
 

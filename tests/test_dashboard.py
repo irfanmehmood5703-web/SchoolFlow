@@ -2,10 +2,12 @@
 import os
 import unittest
 from datetime import date,timedelta
+from unittest.mock import patch
 from werkzeug.datastructures import MultiDict
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Student
 from dashboard import KEYS, WIDGETS
+from school_clock import school_today
 
 
 class DashboardTests(unittest.TestCase):
@@ -97,6 +99,53 @@ class DashboardTests(unittest.TestCase):
         for widget in WIDGETS:
             self.assertEqual(self.c.get(widget[5]).status_code,200,widget[5])
             self.assertNotIn(b'Reference pending',self.c.get(widget[5]).data,widget[5])
+
+    def test_dashboard_summary_keeps_month_session_and_all_time_balances_distinct(self):
+        today = school_today()
+        first_of_month = today.replace(day=1)
+        last_month = first_of_month - timedelta(days=1)
+        older_month = last_month.replace(day=1) - timedelta(days=1)
+        next_month = (first_of_month + timedelta(days=32)).replace(day=1)
+        models = app.extensions['ops_models']
+        profile = app.extensions['institute_setup_models']['profile']
+        student = Student(admission_no='DASH-DUES', name='Fictional Pupil', status='Active')
+        db.session.add(student)
+        db.session.flush()
+        db.session.add(profile(id=1, data={
+            'current_session':'Fixture Session', 'year_start':last_month.replace(day=1).isoformat(),
+            'year_end':(next_month - timedelta(days=1)).isoformat(),
+        }))
+        for billing_day, amount, paid, discount in [
+            (today, 140000, 30000, 10000),
+            (last_month, 250000, 50000, 0),
+            (older_month, 400000, 0, 0),
+            (next_month, 800000, 0, 0),
+        ]:
+            bill = models['bill'](student_id=student.id, month=billing_day.strftime('%Y-%m'), due=billing_day,
+                                  lines=[{'amount':amount}], paid=paid, discount=discount)
+            db.session.add(bill)
+            db.session.flush()
+            if paid:
+                db.session.add(models['receipt'](student_id=student.id, bill_id=bill.id, amount=paid,
+                                                day=today, account='Cash', token=billing_day.isoformat(), voided=False))
+        db.session.commit()
+
+        page = self.c.get('/workspace/dashboard').get_data(as_text=True)
+        cards = page.split('<section class="dashboard-summary"', 1)[1].split('</section>', 1)[0]
+        self.assertEqual(cards.count('class="dashboard-metric"'), 4)
+        self.assertIn('THIS MONTH COLLECTED', cards); self.assertIn('Rs. 800', cards)
+        self.assertIn('This month’s challans remaining', cards); self.assertIn('Rs. 1,000', cards)
+        self.assertIn('SESSION REMAINING', cards); self.assertIn('Rs. 3,000', cards)
+        self.assertIn('TOTAL DUES', cards); self.assertIn('Rs. 15,000', cards)
+        self.assertNotIn('PRESENT TODAY', cards)
+        self.assertNotIn('ACTIVE EMPLOYEES', cards)
+
+        with patch.dict(app.extensions['general_tools_helpers'], allowed=lambda:['active-students','fee-collection']):
+            limited = self.c.get('/workspace/dashboard').get_data(as_text=True)
+        self.assertIn('THIS MONTH COLLECTED', limited)
+        self.assertNotIn('This month’s challans remaining', limited)
+        self.assertNotIn('SESSION REMAINING', limited)
+        self.assertNotIn('TOTAL DUES', limited)
 
     def test_pending_report_and_staff_month_ignore_future_attendance(self):
         models=app.extensions['ops_models'];today=date.today()
