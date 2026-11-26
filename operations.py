@@ -594,7 +594,9 @@ def configure_operations(app, db, Student, Employee):
         for k in ('campus','class_name','section'):
             v=request.args.get(k)
             if v: rows=[b for b in rows if (db.session.get(Student,b.student_id).class_name if k=='class_name' else details(db.session.get(Student,b.student_id)).get(k))==v]
-        if q: rows=[b for b in rows if q in str(b.id) or q in db.session.get(Student,b.student_id).name.lower()]
+        if q:
+            family_numbers=app.extensions['record_helpers']['family_numbers'](b.student_id for b in rows)
+            rows=[b for b in rows if q in str(b.id) or q in db.session.get(Student,b.student_id).name.lower() or q in (family_numbers.get(b.student_id) or '').lower()]
         return rows
 
     @bp.route('/fees/<mode>')
