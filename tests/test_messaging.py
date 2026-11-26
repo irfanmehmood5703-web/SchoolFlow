@@ -97,6 +97,28 @@ class MessagingTests(unittest.TestCase):
         fid=self.tenant(lambda:self.M['file'].query.order_by(self.M['file'].id.desc()).first().id)
         self.assertEqual(p.get('/parents/MSG-ONE/messages/'+blocked+'/files/'+str(fid)).status_code,404)
         self.assertIn(b'Blocked',self.c.get('/workspace/conversations/'+blocked).data)
+    def test_teacher_automatic_messages_are_assignment_scoped_even_after_revocation(self):
+        def no_matrix():
+            row=self.Staff.query.filter_by(username='teacher1').one();row.data={**row.data,'permissions':{}}
+        self.tenant(no_matrix)
+        teacher=self.login('teacher1')
+        self.assertEqual(teacher.get('/workspace/conversations').status_code,200)
+        directory=teacher.get('/workspace/conversations/recipients?campus=North&category=Parent').get_json()['people']
+        self.assertTrue(any(r['value']=='parent:1|1' for r in directory),directory)
+        self.assertFalse(any(r['value']=='parent:2|2' for r in directory),directory)
+        response=self.post('/workspace/conversations/new',self.new(),teacher)
+        self.assertEqual(response.status_code,302,response.data[:300])
+        thread=response.location
+        self.assertEqual(teacher.get(thread).status_code,200)
+        parent=self.parent();cid=thread.rsplit('/',1)[-1]
+        reply=self.post('/parents/MSG-ONE/messages/'+cid+'/reply',{'token':secrets.token_urlsafe(32),'body':'Fictional parent reply'},parent)
+        self.assertEqual(reply.status_code,302)
+        self.assertIn('Fictional progress',teacher.get('/workspace/notifications').text)
+        self.assertEqual(self.post('/workspace/conversations/new',self.new(recipient='parent:2|2'),teacher).status_code,422)
+        self.tenant(lambda:setattr(self.ops['workflow'].query.filter_by(kind='teacher-classes').one(),'status','Voided'))
+        self.assertEqual(teacher.get(thread).status_code,403)
+        self.assertNotIn(b'Fictional progress',teacher.get('/workspace/conversations').data)
+        self.assertNotIn('Fictional progress',teacher.get('/workspace/notifications').text)
     def test_exact_retry_payload_binding_and_missing_csrf(self):
         data=self.new();r=self.post('/workspace/conversations/new',data);self.assertEqual(r.status_code,302)
         self.assertEqual(self.post('/workspace/conversations/new',data).location,r.location)

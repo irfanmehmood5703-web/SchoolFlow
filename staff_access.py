@@ -80,6 +80,21 @@ def configure_staff_access(app,db,Student,Employee):
         return dict(id=row.id,version=row.version,username=row.username,role=row.data.get('role'))
     def grant(row,code):
         return set(row.data.get('campuses',[]))&set(row.data.get('permissions',{}).get(code,[]))&set(campuses())
+    # These are app capabilities, not campus-wide web permissions. Every
+    # class operation must still validate an active assignment and roster.
+    TEACHER_APP_DEFAULTS=frozenset(('attendance.view','attendance.update','attendance.own','student_extras.view','student_extras.create','student_extras.update','exam.view','exam.create','exam.update','fees.view','teacher.leave_view','teacher.leave_approve','ptm.view','ptm.update','payroll.self','hrm.self_requests','messages.view','messages.create','messages.update'))
+    def teacher_app_grant(row,code):
+        if row and row.active and row.data.get('role')=='Teacher' and code in TEACHER_APP_DEFAULTS:
+            employee=db.session.get(Employee,row.employee_id)
+            if employee and employee.status=='Active':
+                return set(row.data.get('campuses',[]))&set(campuses())
+        return grant(row,code) if row else set()
+    def request_grant(row,code):
+        # Shared messaging endpoints already verify participants and the
+        # assigned student. Never apply automatic grants to other web routes.
+        if request.blueprint=='messages' and code in ('messages.view','messages.create','messages.update'):
+            return teacher_app_grant(row,code)
+        return grant(row,code)
     def is_owner():return bool(session.get('owner_id')) and getattr(g,'staff_principal',None) is None
     def can_manage():
         principal=getattr(g,'staff_principal',None)
@@ -328,7 +343,7 @@ def configure_staff_access(app,db,Student,Employee):
         rows=Workflow.query.filter_by(kind='staff-payment-approval').order_by(Workflow.id.desc()).all()
         if principal:rows=[r for r in rows if r.data.get('requester')==principal.id or set(r.data.get('campuses',[]))<=grant(principal,'fees.approve')]
         return render_template('staff_payment_requests.html',title='Challan Payment Approvals',rows=rows,principal=principal)
-    app.extensions['staff_access_helpers']=dict(resolve=resolve,authenticate=authenticate,grant=grant,campuses=campuses,permissions=PERMISSIONS,grid_preferences=grid_preferences)
+    app.extensions['staff_access_helpers']=dict(resolve=resolve,authenticate=authenticate,grant=grant,teacher_app_grant=teacher_app_grant,campuses=campuses,permissions=PERMISSIONS,grid_preferences=grid_preferences)
     app.register_blueprint(bp)
 
     def required_permission():
@@ -440,15 +455,15 @@ def configure_staff_access(app,db,Student,Employee):
         if request.blueprint == 'how_to' and request.method in ('GET', 'HEAD'):return
         if request.endpoint in ('staff_access.my_password','staff_access.my_grids','home','favicon','health','static') or request.blueprint in ('identity','mobile_clients'):return
         code=required_permission()
-        if not code or not grant(p,code):abort(403,'This action is not granted to this staff account.')
+        if not code or not request_grant(p,code):abort(403,'This action is not granted to this staff account.')
         if request.method=='POST':
             if not request.form.get('_csrf') or not hmac.compare_digest(request.form['_csrf'],session.get('record_csrf','')):abort(400,'Reload this form.')
             # Adjustment previews are read-only. Applies lock the selected bill
             # rows, matching receipt updates without a reversed lock order.
             if request.blueprint!='challan_amounts':app.extensions['admission_capacity']['lock']()
             db.session.refresh(p)
-            if not resolve(p.id,session.get('staff_version')) or not grant(p,code):abort(403,'Your access changed. Sign in again.')
-        allowed=grant(p,code);g.access_campuses=allowed
+            if not resolve(p.id,session.get('staff_version')) or not request_grant(p,code):abort(403,'Your access changed. Sign in again.')
+        allowed=request_grant(p,code);g.access_campuses=allowed
         if (code.split('.')[0] in ('core','access','finance') or (request.blueprint=='certificate_manager' and request.method=='POST') or request.endpoint=='whatsapp_settings.command') and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
         if request.values.get('campus') and request.values['campus'] not in allowed:abort(403,'This campus is not granted for this action.')
         if code.endswith(('.pay','.reverse')):

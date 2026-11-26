@@ -125,11 +125,11 @@ def configure_messaging(app,db,Student,Employee):
     def can_campus(actor,campus):
         if actor['role']=='Owner':return True
         if actor['role']=='Parent':return any(d.get('campus','')==campus for s,d in family_children(actor['id']))
-        return campus in app.extensions['staff_access_helpers']['grant'](actor['staff'],'messages.view')
+        return campus in app.extensions['staff_access_helpers']['teacher_app_grant'](actor['staff'],'messages.view')
     def teacher_child(actor,student,details):
         if actor['role']!='Teacher':return True
         if not hasattr(g,'message_teacher_assignments'):g.message_teacher_assignments=Workflow.query.filter_by(kind='teacher-classes',status='Active').all()
-        return any(str(r.data.get('employee_id'))==str(actor['staff'].employee_id) and r.data.get('campus')==details.get('campus') and r.data.get('class_name')==student.class_name and (not r.data.get('section') or r.data.get('section')==details.get('section')) for r in g.message_teacher_assignments)
+        return any(str(r.data.get('employee_id'))==str(actor['staff'].employee_id) and r.data.get('campus')==details.get('campus') and r.data.get('class_name')==student.class_name and r.data.get('section') and r.data.get('section')==details.get('section') for r in g.message_teacher_assignments)
     def can_manage():
         actor=g.message_actor
         if actor['role']=='Owner':return True
@@ -137,7 +137,7 @@ def configure_messaging(app,db,Student,Employee):
         return p is not None and set(app.extensions['staff_access_helpers']['grant'](p,'messages.manage'))==set(app.extensions['staff_access_helpers']['campuses']()) and bool(app.extensions['staff_access_helpers']['campuses']())
     def can_create():
         if g.message_actor['role'] in ('Owner','Parent'):return True
-        return bool(app.extensions['staff_access_helpers']['grant'](g.staff_principal,'messages.create'))
+        return bool(app.extensions['staff_access_helpers']['teacher_app_grant'](g.staff_principal,'messages.create'))
     def path(endpoint,**kw):
         parent=request.blueprint=='parent_messages'
         return url_for(('parent_messages.' if parent else 'messages.')+endpoint,**({'code':g.parent_school.code} if parent else {}),**kw)
@@ -171,7 +171,7 @@ def configure_messaging(app,db,Student,Employee):
     def render(template,**kw):
         parent=request.blueprint=='parent_messages'
         p=getattr(g,'staff_principal',None)
-        has=lambda code: g.message_actor['role']=='Owner' or (p is not None and bool(app.extensions['staff_access_helpers']['grant'](p,code)))
+        has=lambda code: g.message_actor['role']=='Owner' or (p is not None and bool(app.extensions['staff_access_helpers']['teacher_app_grant'](p,code) if code in ('messages.view','messages.create','messages.update') else app.extensions['staff_access_helpers']['grant'](p,code)))
         accept=','.join((['image/jpeg','image/png','image/webp','image/gif'] if config()['photos'] else [])+(['application/pdf'] if config()['pdf'] else [])+(['audio/*'] if config()['audio'] else []))
         return render_template(template,title=kw.pop('title','Messages'),parent_mode=parent,school=getattr(g,'parent_school',None),actor=g.message_actor,cfg=config(),msg_url=path,manage=not parent and can_manage(),can_create=can_create(),report_access=not parent and has('messages.report'),export_access=not parent and has('messages.export'),can_update=parent or has('messages.update'),media_accept=accept,can_start=can_create() and (not parent or config()['parents_start']),**kw)
     def check_student(sid,campus,actor=None):
@@ -181,6 +181,7 @@ def configure_messaging(app,db,Student,Employee):
         if key in checked:return
         student=db.session.get(Student,sid);details=rm['student'].query.filter_by(student_id=sid).first()
         if not student or student.status!='Active' or not details or details.data.get('campus','')!=campus:abort(403,'The student scope has changed.')
+        if actor and actor['role']=='Teacher' and not teacher_child(actor,student,details.data):abort(403,'This student is not in your assigned classes.')
         if actor and actor['role']=='Parent':
             if details.family_id!=actor['id']:abort(404)
             if app.extensions['parent_helpers']['access'](sid,campus,'messages')['effective']=='block':abort(403,'Parent message access is restricted. Contact the school office.')
@@ -261,7 +262,7 @@ def configure_messaging(app,db,Student,Employee):
         if q:query=query.filter(Conversation.subject.contains(q,autoescape=True))
         rows=query.order_by(Conversation.updated.desc()).limit(100).all();visible=[]
         for r in rows:
-            if actor['role']=='Parent':
+            if actor['role'] in ('Parent','Teacher'):
                 try:check_student(r.student_id,r.campus,actor)
                 except Exception as error:
                     from werkzeug.exceptions import HTTPException
@@ -310,7 +311,7 @@ def configure_messaging(app,db,Student,Employee):
             if not chosen:raise ValueError('Choose an available recipient in the selected campus. Search again if their access changed.')
             key,_,student_key=selected.partition('|');sid=int(student_key) if student_key else sid
             target=active_actor(key)
-            check_student(sid,campus,actor if actor['role']=='Parent' else target if target and target['role']=='Parent' else None)
+            check_student(sid,campus,actor if actor['role'] in ('Parent','Teacher') else target if target and target['role']=='Parent' else None)
         send_allowed(row,target,audience)
         media=uploads(cfg)
         if not body and not media:raise ValueError('Enter a message or attach a file.')
