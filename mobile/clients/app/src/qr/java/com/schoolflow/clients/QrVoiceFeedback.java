@@ -109,10 +109,10 @@ final class QrVoiceFeedback {
         return QrVoicePolicy.rank(voice.getName(), voice.getLocale().getCountry());
     }
 
-    void confirm(String name, boolean test) {
+    void confirm(String name, boolean test, boolean alreadyMarked) {
         if (closed) return;
         stop();
-        waitingMessage = QrVoicePolicy.message(name);
+        waitingMessage = QrVoicePolicy.message(name, alreadyMarked);
         testRequest = test;
         attempt = 0;
         voiceIndex = 0;

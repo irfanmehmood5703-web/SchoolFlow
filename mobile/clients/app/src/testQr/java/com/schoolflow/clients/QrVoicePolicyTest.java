@@ -16,4 +16,12 @@ public class QrVoicePolicyTest {
         assertEquals("Attendance marked. Thank you.", QrVoicePolicy.message(""));
         assertEquals("Imran Ali. Attendance marked. Thank you.", QrVoicePolicy.message("Imran\nAli"));
     }
+    @Test public void announcesAlreadyMarkedSeparatelyFromNewAttendance() {
+        assertTrue(QrVoicePolicy.shouldAnnounce("Marked"));
+        assertTrue(QrVoicePolicy.shouldAnnounce("Already marked"));
+        assertFalse(QrVoicePolicy.shouldAnnounce("Not marked"));
+        assertFalse(QrVoicePolicy.shouldAnnounce(null));
+        assertEquals("Imran Ali. Your attendance is already marked.", QrVoicePolicy.message("Imran Ali", true));
+        assertEquals("Your attendance is already marked.", QrVoicePolicy.message("", true));
+    }
 }

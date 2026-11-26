@@ -299,10 +299,17 @@ class AttendanceDeviceTests(unittest.TestCase):
         body={'event_id':'student_qr_001','qr_token':qr('student',1,'D1'),'direction':'in','occurred_at':self.stamp.isoformat()}
         response=self.c.post('/api/attendance/devices/1/events',json=body,headers=self.headers());self.assertEqual(response.status_code,201,response.data);self.assertEqual(response.json['outcome'],'Marked');self.assertEqual(response.json['person_name'],self.tenant(lambda:db.session.get(Student,1).name))
         replay=self.c.post('/api/attendance/devices/1/events',json=body,headers=self.headers()).json;self.assertTrue(replay['replayed']);self.assertEqual(replay['person_name'],response.json['person_name'])
-        duplicate=self.c.post('/api/attendance/devices/1/events',json={**body,'event_id':'student_qr_duplicate'},headers=self.headers()).json;self.assertEqual(duplicate['outcome'],'Already marked');self.assertNotIn('person_name',duplicate)
-        body.update(event_id='other_campus_qr',qr_token=qr('student',2,'D2'));self.assertEqual(self.c.post('/api/attendance/devices/1/events',json=body,headers=self.headers()).json['outcome'],'Not marked')
+        duplicate_body={**body,'event_id':'student_qr_duplicate'}
+        before=self.daily()
+        duplicate=self.c.post('/api/attendance/devices/1/events',json=duplicate_body,headers=self.headers()).json;self.assertEqual(duplicate['outcome'],'Already marked');self.assertEqual(duplicate['person_name'],response.json['person_name'])
+        duplicate_replay=self.c.post('/api/attendance/devices/1/events',json=duplicate_body,headers=self.headers()).json;self.assertTrue(duplicate_replay['replayed']);self.assertEqual(duplicate_replay['person_name'],response.json['person_name']);self.assertEqual(self.daily(),before)
+        body.update(event_id='other_campus_qr',qr_token=qr('student',2,'D2'));refused=self.c.post('/api/attendance/devices/1/events',json=body,headers=self.headers()).json;self.assertEqual(refused['outcome'],'Not marked');self.assertNotIn('person_name',refused)
         body.update(event_id='employee_qr_001',qr_token=qr('employee',1,'E1'));self.assertEqual(self.c.post('/api/attendance/devices/1/events',json=body,headers=self.headers()).json['outcome'],'Marked');self.assertEqual(len(self.daily()),2)
         self.assertEqual(self.c.post('/api/attendance/devices/1/events',json={**body,'person_id':1},headers=self.headers()).status_code,422)
+        out_body={**body,'event_id':'employee_qr_out','direction':'out'}
+        out=self.c.post('/api/attendance/devices/1/events',json=out_body,headers=self.headers()).json;self.assertEqual(out['outcome'],'Marked');self.assertTrue(out['person_name'])
+        before=self.daily()
+        duplicate_out=self.c.post('/api/attendance/devices/1/events',json={**out_body,'event_id':'employee_qr_out_duplicate'},headers=self.headers()).json;self.assertEqual(duplicate_out['outcome'],'Already marked');self.assertEqual(duplicate_out['person_name'],out['person_name']);self.assertEqual(self.daily(),before)
         self.assertNotIn(body['qr_token'],self.tenant(lambda:json.dumps([s.fingerprint for s in self.models['scan'].query.all()])))
     def test_no_shift_off_day_and_exact_late_boundary(self):
         self.stamp=self.stamp.replace(hour=3,minute=30)

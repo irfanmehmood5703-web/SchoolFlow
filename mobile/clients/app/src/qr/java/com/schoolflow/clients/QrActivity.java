@@ -40,8 +40,9 @@ public final class QrActivity extends Activity {
     private String scanningDirection;
     private QrVoiceFeedback feedback;
     private boolean foreground;
-    private String pendingAnnouncement;
-    private String savedScanName;
+    private record Announcement(String name, boolean alreadyMarked) {}
+    private Announcement pendingAnnouncement;
+    private Announcement savedScanAnnouncement;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -78,7 +79,7 @@ public final class QrActivity extends Activity {
         scan = button(content, "Scan QR card", this::openScanner);
         retry = button(content, "Retry pending scan", () -> run(this::deliver));
         connect = button(content, "Connection settings", this::unlock);
-        button(content, "Test voice / sound", () -> feedback.confirm("", true));
+        button(content, "Test voice / sound", () -> feedback.confirm("", true, false));
         setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC);
         status = new TextView(this);
         status.setTextColor(Color.DKGRAY);
@@ -109,7 +110,10 @@ public final class QrActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
-        if (pendingAnnouncement != null) { feedback.confirm(pendingAnnouncement, false); pendingAnnouncement = null; }
+        if (pendingAnnouncement != null) {
+            announce(pendingAnnouncement);
+            pendingAnnouncement = null;
+        }
         updates.resume();
     }
 
@@ -254,7 +258,10 @@ public final class QrActivity extends Activity {
             store(state);
             if (reply.code == 200 || reply.code == 201) {
                 String outcome = reply.body.getString("outcome");
-                if ("Marked".equals(outcome)) savedScanName = reply.body.optString("person_name", "");
+                if (QrVoicePolicy.shouldAnnounce(outcome)) {
+                    savedScanAnnouncement = new Announcement(reply.body.optString("person_name", ""),
+                            "Already marked".equals(outcome));
+                }
                 return outcome + ": " + reply.body.optString("reason");
             }
             return "Scan refused (" + reply.code + "). Check attendance history.";
@@ -318,6 +325,10 @@ public final class QrActivity extends Activity {
         data = next;
     }
 
+    private void announce(Announcement announcement) {
+        feedback.confirm(announcement.name(), false, announcement.alreadyMarked());
+    }
+
     private interface Work { String execute() throws Exception; }
 
     private void run(Work work) {
@@ -327,22 +338,22 @@ public final class QrActivity extends Activity {
         buttons();
         worker.execute(() -> {
             String message;
-            savedScanName = null;
+            savedScanAnnouncement = null;
             try { message = work.execute(); }
             catch (IllegalStateException error) { message = error.getMessage(); }
             catch (Exception error) { message = "Could not confirm the request. Check the connection and retry any pending scan."; }
             String result = message;
-            String confirmedName = savedScanName;
+            Announcement confirmed = savedScanAnnouncement;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 busy = false;
-                status.setText(confirmedName != null && !confirmedName.isEmpty() ? confirmedName + "\n" + result : result);
+                status.setText(confirmed != null && !confirmed.name().isEmpty() ? confirmed.name() + "\n" + result : result);
                 buttons();
                 // The scanner activity can return a result before onResume.
                 // Retain one confirmed announcement until the activity is visible.
-                if (confirmedName != null && feedback != null) {
-                    if (foreground) feedback.confirm(confirmedName, false);
-                    else pendingAnnouncement = confirmedName;
+                if (confirmed != null && feedback != null) {
+                    if (foreground) announce(confirmed);
+                    else pendingAnnouncement = confirmed;
                 }
             });
         });
