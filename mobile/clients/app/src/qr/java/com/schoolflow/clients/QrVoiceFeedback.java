@@ -130,7 +130,7 @@ final class QrVoiceFeedback {
     }
 
     private void playNext() {
-        if (closed || waitingMessage == null || initializing) return;
+        if (closed || waitingMessage == null || initializing || activeUtterance != null) return;
         if (speech == null) { unavailable(); return; }
         while (voiceIndex < voices.size()) {
             Voice voice = voices.get(voiceIndex++);
