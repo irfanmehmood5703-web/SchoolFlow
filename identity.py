@@ -303,12 +303,12 @@ def configure_identity(app, db):
                 return redirect(url_for('owner_app.home') if bound and bound.get('kind')=='owner' else url_for('ops.dashboard'))
             helper=app.extensions.get('staff_access_helpers',{})
             staff=helper.get('authenticate',lambda *args:None)(school,email,password)
-            if staff and app.extensions.get('mobile_client_helpers',{}).get('role_allowed',lambda role:True)('teacher'):
+            bound=app.extensions.get('mobile_client_helpers',{}).get('binding',lambda:None)()
+            if staff and (not bound or (bound['kind']=='teacher' and staff['role']=='Teacher')):
                 session.clear();session.permanent=True
                 session.update(staff_id=staff['id'],staff_version=staff['version'],institute_id=school.id,signed_in_at=time.time(),record_csrf=secrets.token_urlsafe(32))
-                bound=app.extensions.get('mobile_client_helpers',{}).get('binding',lambda:None)()
                 return redirect(url_for('teacher_app.home') if bound and bound.get('kind')=='teacher' else url_for('ops.dashboard'))
-            error = 'Email or password is incorrect.'
+            error = 'Teacher username, email, mobile or password is incorrect, or your teacher account is inactive.' if bound and bound['kind']=='teacher' else 'Email or password is incorrect.'
         return render_template('identity.html', step='login', school=school, error=error)
 
     @bp.route('/forgot-password')

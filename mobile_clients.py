@@ -78,6 +78,11 @@ def configure_mobile_clients(app):
                 if session.get('pending_institute')!=school.id:abort(403,'Reopen the school app home screen.')
         school=getattr(g,'school_identity',None)
         if school and (school.get('scope')!=bound['scope'] or bound['kind']=='parents'):abort(403,'Sign in with the account for this school app.')
+        # Recover any old session issued to a non-teacher before the login role check.
+        principal=getattr(g,'staff_principal',None)
+        if school and bound['kind']=='teacher' and (not principal or principal.data.get('role')!='Teacher'):
+            session.clear()
+            return redirect(url_for('identity.institute'))
 
     @bp.route('/mobile/<kind>',methods=['GET','POST'])
     def entry(kind):
@@ -86,12 +91,25 @@ def configure_mobile_clients(app):
         preset=request.args.get('school','').strip().upper()
         scope=request.args.get('scope','')
         bound=binding()
+        if request.method=='POST' and kind=='teacher' and not preset and not scope:
+            if not hmac.compare_digest(request.form.get('_csrf',''),token):abort(400)
+            preset=request.form.get('code','').strip().upper()
+            if bound and bound['kind']=='teacher' and preset!=bound['code']:abort(403,'This app belongs to '+bound['code']+'.')
+            if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',preset) or preset=='DEMO':
+                return render_template('mobile_entry.html',kind=kind,error='Enter the Institute Code provided by your school.',title='SchoolFlow Teacher')
         if preset and re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',preset):
             School=app.extensions['identity_models']['institute']
-            school=School.query.filter_by(code=preset,active=True).first_or_404()
+            school=School.query.filter_by(code=preset,active=True).first()
+            if not school:
+                if kind=='teacher' and not scope:
+                    return render_template('mobile_entry.html',kind=kind,error='Institute code not recognised. Check the code supplied by your school.',title='SchoolFlow Teacher')
+                abort(404)
             if scope and scope!=school.storage_key:abort(403,'The installed school app identity does not match.')
-            # Old generic clients only prefill a code; new branded clients pin the immutable scope.
-            if scope:
+            # The generic Teacher App also needs a teacher binding to reach the
+            # correct login and dashboard; the school-specific scope is still verified above.
+            if scope or kind=='teacher':
+                if kind=='teacher' and not scope and bound and bound['kind']=='teacher' and bound['code']!=preset:
+                    abort(403,'This app belongs to '+bound['code']+'.')
                 value=dict(code=school.code,scope=school.storage_key,kind=kind)
                 if bound!=value:
                     session.clear();session['record_csrf']=secrets.token_urlsafe(32)
@@ -104,7 +122,7 @@ def configure_mobile_clients(app):
             if kind=='parents':return redirect(url_for('parent_portal.login',code=preset))
             return redirect(url_for('identity.institute',school=preset))
         if scope:abort(400)
-        if bound:
+        if bound and (kind!='teacher' or bound['kind']=='teacher'):
             return redirect(url_for('mobile_clients.entry',kind=bound['kind'],school=bound['code'],scope=bound['scope']))
         if request.method=='POST':
             if not hmac.compare_digest(request.form.get('_csrf',''),token):abort(400)
