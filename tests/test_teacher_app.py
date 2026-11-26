@@ -13,6 +13,83 @@ class TeacherAppTests(unittest.TestCase):
     login=fixture.StaffAccessTests.login
     tenant=fixture.StaffAccessTests.tenant
     password=fixture.StaffAccessTests.password
+    def teacher_entry(self):
+        school=db.session.get(self.M['institute'],self.school)
+        return '/mobile/teacher?school='+school.code+'&scope='+school.storage_key
+    def app_login(self,login='teacher.one',password=None,client=None):
+        c=client or self.c
+        with c.session_transaction() as session:token=session['record_csrf']
+        return c.post('/auth/login',data={'_csrf':token,'email':login,'password':password if password is not None else self.password})
+    def test_teacher_login_generic_school_selection_and_existing_session(self):
+        self.assertEqual(self.c.get('/mobile/teacher').status_code,200)
+        self.assertEqual(self.c.post('/mobile/teacher',data={'code':'STAFF-TEST'}).status_code,400)
+        r=self.c.post('/mobile/teacher',data={'_csrf':self.token(),'code':'NOT-A-SCHOOL'})
+        self.assertIn(b'Institute code not recognised',r.data)
+        r=self.c.post('/mobile/teacher',data={'_csrf':self.token(),'code':'staff-test'})
+        self.assertTrue(r.location.endswith('/auth/login'))
+        page=self.c.get(r.location)
+        self.assertIn(b'Fictional school',page.data)
+        self.assertIn(b'Use the active Teacher account',page.data)
+        self.assertIn(b'teacher password',self.c.get('/auth/forgot-password').data)
+        for login in ('teacher.one','teacher@example.invalid'):
+            r=self.app_login(login)
+            self.assertTrue(r.location.endswith('/teacher-app'))
+            self.assertEqual(self.c.get(r.location).status_code,200)
+            r=self.c.get('/mobile/teacher',follow_redirects=True)
+            self.assertEqual(r.request.path,'/teacher-app')
+            r=self.c.post('/auth/logout',data={'_csrf':self.token()},follow_redirects=True)
+            self.assertEqual(r.request.path,'/auth/login')
+            with self.c.session_transaction() as session:self.assertNotIn('staff_id',session)
+    def test_teacher_login_wrong_password_owner_non_teacher_and_inactive_rejected(self):
+        entry=self.teacher_entry()
+        self.assertEqual(self.c.get(entry).status_code,302)
+        for username,password in [('teacher.one','wrong'),('owner@example.invalid',self.password)]:
+            r=self.app_login(username,password)
+            self.assertEqual(r.status_code,200)
+            self.assertIn(b'Teacher username, email, mobile or password is incorrect',r.data)
+            with self.c.session_transaction() as session:
+                self.assertNotIn('staff_id',session);self.assertNotIn('owner_id',session)
+        def change():
+            r=db.session.get(self.Staff,self.sid)
+            r.data={**r.data,'role':'Admin'}
+        self.tenant(change)
+        self.assertEqual(self.app_login().status_code,200)
+        with self.c.session_transaction() as session:self.assertNotIn('staff_id',session)
+        # The same authorized account can still sign in on the normal desktop site.
+        desktop=app.test_client();desktop.get('/auth/institute')
+        with desktop.session_transaction() as session:token=session['record_csrf']
+        desktop.post('/auth/institute',data={'_csrf':token,'code':'STAFF-TEST'})
+        self.assertTrue(self.app_login(client=desktop).location.endswith('/workspace/dashboard'))
+        def inactive():
+            r=db.session.get(self.Staff,self.sid);r.data={**r.data,'role':'Teacher'};r.active=False
+        self.tenant(inactive)
+        self.assertEqual(self.app_login().status_code,200)
+        with self.c.session_transaction() as session:self.assertNotIn('staff_id',session)
+    def test_teacher_login_phone_and_revoked_session_recovery(self):
+        from app import Employee
+        def contact():
+            r=db.session.get(self.Staff,self.sid)
+            r.data={**r.data,'contact':'03001234567'}
+        self.tenant(contact)
+        self.c.get(self.teacher_entry())
+        self.assertTrue(self.app_login('+92 300 1234567').location.endswith('/teacher-app'))
+        self.assertEqual(self.c.get('/teacher-app').status_code,200)
+        def deactivate():
+            staff=db.session.get(self.Staff,self.sid);db.session.get(Employee,staff.employee_id).status='Inactive'
+        self.tenant(deactivate)
+        r=self.c.get('/teacher-app',follow_redirects=True)
+        self.assertEqual(r.request.path,'/auth/login')
+        self.assertEqual(self.app_login().status_code,200)
+        with self.c.session_transaction() as session:self.assertNotIn('staff_id',session)
+    def test_teacher_login_school_binding_and_csrf(self):
+        school=db.session.get(self.M['institute'],self.school)
+        self.assertEqual(self.c.get('/mobile/teacher?school='+school.code+'&scope='+'0'*32).status_code,403)
+        self.c.get(self.teacher_entry())
+        self.assertEqual(self.c.post('/auth/login',data={'email':'teacher.one','password':self.password}).status_code,400)
+        other=app.extensions['identity_helpers']['provision']('OTHER-SCHOOL','Other school','owner@example.invalid',self.password)
+        self.assertEqual(self.c.post('/auth/institute',data={'_csrf':self.token(),'code':other.code}).status_code,403)
+        self.assertEqual(self.c.get('/mobile/teacher?school=OTHER-SCHOOL').status_code,403)
+        self.assertTrue(self.app_login().location.endswith('/teacher-app'))
     def seed(self):
         def make():
             staff=db.session.get(self.Staff,self.sid);codes=('attendance.view','attendance.update','attendance.own','payroll.self','hrm.self_requests','student_extras.view','student_extras.create','student_extras.update','exam.view','exam.update','exam.create','fees.view')

@@ -77,7 +77,7 @@ def configure_staff_access(app,db,Student,Employee):
         except OperationalError:db.session.rollback();check_password_hash(dummy,password[:129]);return None
         valid=check_password_hash(row.password_hash if row else dummy,password[:129])
         if not row or not valid or len(password)>128 or not resolve(row.id,row.version):return None
-        return dict(id=row.id,version=row.version,username=row.username)
+        return dict(id=row.id,version=row.version,username=row.username,role=row.data.get('role'))
     def grant(row,code):
         return set(row.data.get('campuses',[]))&set(row.data.get('permissions',{}).get(code,[]))&set(campuses())
     def is_owner():return bool(session.get('owner_id')) and getattr(g,'staff_principal',None) is None
