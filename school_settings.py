@@ -14,6 +14,7 @@ from certificates import clean_html as clean_base_html
 from branding_values import make_branding_values, expand_tags, missing_tags
 from record_schema import EMPLOYEE_SECTIONS
 from exam_enrollment import included,recorded
+from school_clock import normalize_clock,attendance_clock
 
 def clean_html(value):
     return clean_base_html(value,report_assets=True)
@@ -294,9 +295,9 @@ def configure_school_settings(app,db,Student,Employee):
             for key in ('in','out') if value('schedule_type')=='combined' else ('time',):
                 key_off=off or request.form.get(f'{key}_off_{i}')=='1'
                 row[key+'_off']=key_off
-                time=value(f'{key}_{i}')
-                if not key_off and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',time):raise ValueError('Enter a time or mark '+label+' off.')
-                row[key]='' if key_off else time
+                time='' if key_off else normalize_clock(value(f'{key}_{i}'))
+                if not key_off and not time:raise ValueError('Enter a time or mark '+label+' off.')
+                row[key]=time
             if value('schedule_type')=='combined':row['off']=row['in_off'] and row['out_off']
             result[str(i)]=row
         return result
@@ -934,7 +935,7 @@ def configure_school_settings(app,db,Student,Employee):
                 day=context.get('day');current=attendance_rows.get(person.id)
                 name=current.status if current else ''
                 if staff and name=='Leave':name='Full Day Leave'
-                values.update(date=day,todayDate=day,time=current.time_in if current else '',qr_status=current.status if current else '',qr_att_status=current.status if current else '',qr_in_status=current.time_in if current else '')
+                values.update(date=day,todayDate=day,time=attendance_clock(current.time_in) if current else '',qr_status=current.status if current else '',qr_att_status=current.status if current else '',qr_in_status=attendance_clock(current.time_in) if current else '')
             append(person,values,name)
         return result
 

@@ -2,7 +2,7 @@
 import calendar,csv,io,json
 from collections import Counter,defaultdict
 from datetime import date,timedelta
-from school_clock import school_today
+from school_clock import school_today,attendance_clock
 from decimal import Decimal,InvalidOperation
 from flask import Blueprint,abort,redirect,render_template,request,url_for
 from module_catalog import TITLES
@@ -202,7 +202,7 @@ def configure_reports(app,db,Student,Employee):
             campus=raw.get('campus','');values=app.extensions['branding_values'][person_kind](focus,raw)
             summary=Counter(r.status for r in records)
             values.update(attendance='; '.join(f'{status}: {summary[status]}' for status in statuses if summary[status]))
-            if len(records)==1:values.update(time=records[0].time_in,qr_att_status=records[0].status,qr_in_status=records[0].time_in,qr_status=records[0].status)
+            if len(records)==1:values.update(time=attendance_clock(records[0].time_in),qr_att_status=records[0].status,qr_in_status=attendance_clock(records[0].time_in),qr_status=records[0].status)
         values.update(date=start.isoformat() if start==end else f'{start.isoformat()} – {end.isoformat()}',salary_month=start.strftime('%Y-%m') if start.strftime('%Y-%m')==end.strftime('%Y-%m') else f'{start:%Y-%m} – {end:%Y-%m}')
         request.report_branding_context=dict(values=values,campus=campus,person=focus)
         counts={id:Counter() for id in persons};byday=defaultdict(Counter);lookup={}

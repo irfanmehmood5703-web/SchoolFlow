@@ -22,7 +22,7 @@ class ParentAppTests(unittest.TestCase):
         def seed():
             s=Student(admission_no='S3',name='Fictional Sibling',class_name='One',status='Active');db.session.add(s);db.session.flush();db.session.add(self.rm['student'](student_id=s.id,family_id=1,data=dict(campus='North',section='A',roll_no='003')))
             db.session.add(self.ops['daily'](kind='student',person_id=1,day=day,status='Absent'))
-            db.session.add(self.ops['daily'](kind='student',person_id=1,day=day-timedelta(days=1),status='Late',time_in='08:35'))
+            db.session.add(self.ops['daily'](kind='student',person_id=1,day=day-timedelta(days=1),status='Late',time_in='08:35',time_out='14:30'))
             bill=self.ops['bill'](student_id=1,month=day.strftime('%Y-%m'),due=day,lines=[dict(particular='Tuition',amount=170000),dict(particular='Books',amount=30000)],paid=50000,discount=10000);db.session.add(bill);db.session.flush()
             db.session.add(self.ops['receipt'](student_id=1,bill_id=bill.id,day=day,amount=50000,discount=10000,account='Cash',token='parent-fixture'))
             db.session.add(self.ops['receipt'](student_id=1,bill_id=bill.id,day=day,amount=990000,account='Cash',token='void-fixture',voided=True))
@@ -72,7 +72,7 @@ class ParentAppTests(unittest.TestCase):
         self.assertIn(b'Absent',self.page(p,'attendance').data)
 
     def test_attendance_real_counts_and_unmarked(self):
-        self.seed_app();p=self.parent();r=self.page(p,'attendance');self.assertIn(b'50%',r.data);self.assertIn(b'08:35',r.data);self.assertIn(b'Absent',r.data)
+        self.seed_app();p=self.parent();r=self.page(p,'attendance');self.assertIn(b'50%',r.data);self.assertIn(b'08:35 AM',r.data);self.assertIn(b'02:30 PM',r.data);self.assertIn(b'Absent',r.data)
         self.assertIn(b'Not marked',self.page(p,'attendance',3).data)
         self.assertEqual(p.get(self.base+'/app/attendance?sid=1&month=2026-99').status_code,422)
         self.assertEqual(p.get(self.base+'/app/attendance?sid=1&month=bad').status_code,422)
