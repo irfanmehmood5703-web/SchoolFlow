@@ -10,6 +10,7 @@ import android.text.InputType;
 import android.view.View;
 import android.widget.*;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.PasswordVisibility;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 import java.io.ByteArrayOutputStream;
@@ -229,7 +230,7 @@ public final class QrActivity extends Activity {
         field.setInputType(type);
         field.setSaveEnabled(false);
         field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        form.addView(field, new LinearLayout.LayoutParams(-1, -2));
+        PasswordVisibility.addField(form, field, Color.rgb(20,92,70));
         return field;
     }
 

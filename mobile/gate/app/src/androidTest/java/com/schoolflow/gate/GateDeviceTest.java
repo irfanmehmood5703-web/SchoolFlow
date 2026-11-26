@@ -2,6 +2,9 @@ package com.schoolflow.gate;
 import android.content.Context;
 import android.os.SystemClock;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.PasswordVisibility;
+import android.text.InputType;
+import android.text.method.PasswordTransformationMethod;
 import android.content.pm.ApplicationInfo;
 import android.security.NetworkSecurityPolicy;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -47,6 +50,33 @@ public class GateDeviceTest {
    enabled[0]=true;
    swipe(refresh,size*.3f,size*.2f,size*.3f,size*.75f);
    assertEquals(1,refreshes[0]);
+  });
+ }
+
+ @Test public void inlinePasswordEyePreservesCredentialAndSecureInputType() {
+  InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+   Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+   LinearLayout layout=new LinearLayout(context);
+   EditText input=new EditText(context);
+   int type=InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD;
+   input.setInputType(type);
+   input.setText("Fictional-only");
+   input.setSelection(3);
+   PasswordVisibility.addField(layout,input,0xff176b4a);
+   FrameLayout row=(FrameLayout)layout.getChildAt(0);
+   ImageButton eye=(ImageButton)row.getChildAt(1);
+   assertTrue(input.getTransformationMethod() instanceof PasswordTransformationMethod);
+   assertEquals("Show password",eye.getContentDescription());
+   eye.performClick();
+   assertNull(input.getTransformationMethod());
+   assertEquals("Hide password",eye.getContentDescription());
+   assertEquals(type,input.getInputType());
+   assertEquals("Fictional-only",input.getText().toString());
+   assertEquals(3,input.getSelectionStart());
+   row.onWindowFocusChanged(false);
+   assertTrue(input.getTransformationMethod() instanceof PasswordTransformationMethod);
+   assertEquals("Show password",eye.getContentDescription());
+   assertEquals("Fictional-only",input.getText().toString());
   });
  }
 

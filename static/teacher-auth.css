@@ -1,0 +1,76 @@
+:root {
+  color-scheme: light;
+  --teacher-green: #176b4a;
+  --teacher-ink: #18392f;
+  --teacher-muted: #566e64;
+  --teacher-border: #bfd0c8;
+  --teacher-soft: #e8f3ed;
+}
+* { box-sizing: border-box; }
+html { min-height: 100%; background: #f3f7f4; }
+body.teacher-auth {
+  margin: 0;
+  color: var(--teacher-ink);
+  background: linear-gradient(155deg, #e5f2ea 0, #f3f7f4 280px);
+  font: 14px/1.45 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  min-height: 100vh;
+}
+.teacher-auth p, .teacher-auth h1, .teacher-auth h2 { margin: 0; }
+.teacher-auth a { color: var(--teacher-green); text-decoration: none; }
+.teacher-auth a:hover { text-decoration: underline; }
+.teacher-auth button, .teacher-auth input { font: inherit; }
+.teacher-auth button { cursor: pointer; }
+.teacher-auth :focus-visible { outline: 3px solid #71aa8c; outline-offset: 2px; }
+.teacher-auth-skip { position: absolute; left: 12px; top: -100px; z-index: 5; background: white; padding: 10px; }
+.teacher-auth-skip:focus { top: 0; }
+.teacher-auth-shell { width: 100%; max-width: 440px; padding: 24px 18px 14px; margin: 0 auto; }
+.teacher-auth-brand { display: flex; align-items: center; gap: 13px; margin: 0 0 18px; padding: 3px 2px; }
+.teacher-auth-logo { flex: 0 0 62px; width: 62px; height: 62px; padding: 7px; background: #fff; border: 1px solid #d1e3d8; border-radius: 15px; display: grid; place-items: center; color: var(--teacher-green); overflow: hidden; }
+.teacher-auth-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.teacher-auth-school { min-width: 0; }
+.teacher-auth-overline { font-size: 11px; line-height: 1.3; font-weight: 750; color: var(--teacher-green); letter-spacing: 1.1px; text-transform: uppercase; }
+.teacher-auth-school h1 { margin: 3px 0 4px; font-size: 19px; line-height: 1.25; font-weight: 780; letter-spacing: -.35px; overflow-wrap: anywhere; }
+.teacher-auth-code { display: inline-block; color: var(--teacher-muted); font-weight: 600; font-size: 11px; }
+.teacher-auth-card { border: 1px solid #d6e3db; border-radius: 18px; padding: 22px 20px 18px; background: white; box-shadow: 0 8px 28px #123d2510; }
+.teacher-auth-card h2 { font-size: 23px; font-weight: 760; line-height: 1.2; letter-spacing: -.4px; margin-bottom: 5px; }
+.teacher-auth-description { color: var(--teacher-muted); font-size: 13px; margin-bottom: 17px !important; }
+.teacher-auth-form { display: flex; flex-direction: column; gap: 14px; }
+.teacher-auth-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.teacher-auth-field label { font-size: 12px; font-weight: 700; }
+.teacher-auth-field input { width: 100%; min-width: 0; min-height: 46px; border: 1px solid var(--teacher-border); border-radius: 9px; color: var(--teacher-ink); background: #fbfdfb; padding: 10px 12px; font-size: 16px; }
+.teacher-auth-field input::placeholder { color: #788a81; font-size: 13px; }
+.teacher-auth-field input:focus { background: #fff; border-color: var(--teacher-green); }
+.teacher-auth-password { position: relative; }
+.teacher-auth-password input { padding-right: 46px; }
+.teacher-auth-eye { display: grid; place-items: center; position: absolute; top: 1px; right: 1px; bottom: 1px; min-width: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--teacher-green); padding: 0; }
+.teacher-auth-eye:hover { background: var(--teacher-soft); }
+.password-eye-slash { display: none; }
+.teacher-auth-eye[aria-pressed=true] .password-eye-slash { display: block; }
+.teacher-auth-options { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; font-size: 12px; font-weight: 650; margin: -5px 0 -4px; }
+.teacher-auth-options a, .teacher-auth-remember { min-height: 36px; display: inline-flex; align-items: center; }
+.teacher-auth-remember { gap: 6px; color: var(--teacher-muted); cursor: pointer; }
+.teacher-auth-remember input { accent-color: var(--teacher-green); margin: 0; width: 17px; height: 17px; flex-shrink: 0; }
+.teacher-auth-primary, .teacher-auth-qr { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; border-radius: 9px; font-size: 14px; font-weight: 750; text-align: center; padding: 10px 12px; line-height: 1.3; }
+.teacher-auth .teacher-auth-primary { font-weight: 750; border: 1px solid var(--teacher-green); background: var(--teacher-green); color: #fff !important; }
+.teacher-auth-primary:hover { background: #12583d; text-decoration: none !important; }
+.teacher-auth-divider { display: flex; align-items: center; gap: 10px; color: var(--teacher-muted); font-size: 11px; margin: 10px 0; }
+.teacher-auth-divider::before, .teacher-auth-divider::after { content: ""; flex: 1; height: 1px; background: #dce7df; }
+.teacher-auth-qr { border: 1px solid #afcabc; background: var(--teacher-soft); color: var(--teacher-green); min-height: 42px; font-size: 12px; }
+.teacher-auth-qr svg { flex-shrink: 0; }
+.teacher-auth-qr:hover { background: #dcece2; text-decoration: none !important; }
+.teacher-auth-help { color: var(--teacher-muted); font-size: 11px; text-align: center; line-height: 1.45; margin-top: 13px !important; }
+.teacher-auth-error { padding: 10px 12px; background: #fff0f0; color: #9c2626; border: 1px solid #f0cccc; border-radius: 8px; font-size: 12px; margin-bottom: 13px; }
+.teacher-auth-footer { color: var(--teacher-muted); text-align: center; font-size: 11px; margin-top: 15px; }
+.teacher-auth-footer strong { color: var(--teacher-green); }
+@media (min-width: 650px) {
+  .teacher-auth-shell { padding-top: 48px; }
+  .teacher-auth-card { padding: 26px 25px 22px; }
+}
+@media (max-width: 350px) {
+  .teacher-auth-shell { padding: 14px 12px 10px; }
+  .teacher-auth-brand { gap: 10px; margin-bottom: 12px; }
+  .teacher-auth-logo { width: 54px; height: 54px; flex-basis: 54px; }
+  .teacher-auth-school h1 { font-size: 17px; }
+  .teacher-auth-card { padding: 18px 15px 15px; }
+  .teacher-auth-options { font-size: 11px; }
+}
