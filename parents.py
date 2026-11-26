@@ -93,7 +93,12 @@ def configure_parents(app,db,Student):
         return bool(cfg.get('enabled') and cfg.get('hash'))
     def matches_contact(raw):
         if not re.fullmatch(r'[0-9]{10,15}',raw):return []
-        return [f for f in rm['family'].query.all() if raw in {phone(f.data.get(k)) for k in ('phone','mother_phone','whatsapp')}]
+        # Reassignment can leave an old family record with no linked pupils.
+        # Preserve its history but do not let an empty family block login.
+        # Still reject a contact shared by two families that have pupils,
+        # including inactive pupils, rather than guessing which family owns it.
+        linked=db.session.query(rm['student'].family_id).join(Student,Student.id==rm['student'].student_id).filter(rm['student'].family_id.isnot(None)).distinct()
+        return [f for f in rm['family'].query.filter(rm['family'].id.in_(linked)).all() if raw in {phone(f.data.get(k)) for k in ('phone','mother_phone','whatsapp')}]
     def active_family_match(raw):
         matches=matches_contact(raw)
         if len(matches)!=1:return None
@@ -441,10 +446,10 @@ def configure_parents(app,db,Student):
                 db.session.commit();error='The registered mobile number or school login code is invalid. Contact the school office.'
             elif action=='request':
                 raw=phone(request.form.get('phone',''));rate('phone:'+raw,5)
-                matches=[f for f in rm['family'].query.all() if len(raw)>=10 and raw in {phone(f.data.get(k)) for k in ('phone','mother_phone','whatsapp')}]
+                f=active_family_match(raw)
                 challenge=secrets.token_urlsafe(32)
-                if len(matches)==1 and rm['student'].query.join(Student,Student.id==rm['student'].student_id).filter(rm['student'].family_id==matches[0].id,Student.status=='Active').first():
-                    row,_=issue(matches[0].id,'otp');challenge=row.id;audit('Parent requested login code',family_id=row.family_id,challenge_id=row.id)
+                if f:
+                    row,_=issue(f.id,'otp');challenge=row.id;audit('Parent requested login code',family_id=row.family_id,challenge_id=row.id)
                 db.session.commit();error='If your contact matches one active family, the school office can verify your identity and provide the code. No automatic SMS is sent.'
             elif action=='verify':
                 challenge=request.form.get('challenge','')[:43];row=consume(challenge,request.form.get('otp','')[:10],'otp')
