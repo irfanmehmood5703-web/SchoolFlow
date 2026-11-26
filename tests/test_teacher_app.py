@@ -157,6 +157,36 @@ class TeacherAppTests(unittest.TestCase):
         self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],self.cid),'status','Voided'))
         self.assertEqual(self.c.get(root+'/attendance').status_code,403)
         self.assertEqual(self.c.get(root+'/diary?subject=Math').status_code,403)
+    def test_compact_exam_views_keep_all_subjects_and_saved_marks(self):
+        self.seed()
+        names=('English','Urdu','Science','Computer','Islamiyat','General Knowledge','Social Studies')
+        def make():
+            row=db.session.get(self.ops['workflow'],self.cid)
+            row.data={**row.data,'subject':''}
+            for name in names:
+                db.session.add(self.rm['settings'](category='subject',value=name,class_name='One'))
+            award=self.ops['workflow'](kind='awards',status='Active',data=dict(name='Fictional compact test',campus='Campus A',class_name='One',section='A',papers=[dict(subject='Math',grading='Marks',total=50,date=str(school_today()))]))
+            db.session.add(award);db.session.flush()
+            db.session.add(self.ops['score'](award_id=award.id,student_id=self.pupil,paper=0,obtained=35,state=''))
+            return award.id
+        aid=self.tenant(make);root=f'/teacher-app/classes/{self.cid}'
+        page=self.c.get(root+'/subjects/exam_list')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'class="teacher-exam-compact"',page.data)
+        self.assertEqual(page.data.count(b'class="button secondary" href="'),8)
+        for name in (*names,'Math'):self.assertIn(name.encode(),page.data)
+        page=self.c.get(root+'/exams?subject=Math&q=compact')
+        self.assertIn(b'name="subject" value="Math"',page.data)
+        self.assertIn(b'class="panel exam-search"',page.data)
+        path=root+f'/marks/{aid}/0?subject=Math'
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'class="panel exam-marks"',page.data)
+        self.assertRegex(page.data,rb'name="mark_\d+"[^>]+max="50"[^>]+value="35\.0"')
+        self.assertNotIn(b'Pupil Campus B',page.data)
+        self.assertNotIn(b'class="teacher-exam-compact"',self.c.get(root+'/attendance').data)
+        self.assertEqual(self.c.post(path,data={'_csrf':self.token(),'review':self.review(path),f'mark_{self.pupil}':'42',f'state_{self.pupil}':''}).status_code,302)
+        self.tenant(lambda:self.assertEqual(self.ops['score'].query.one().obtained,42))
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})
