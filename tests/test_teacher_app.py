@@ -615,6 +615,35 @@ class TeacherAppTests(unittest.TestCase):
         def check():
             rows=app.extensions['parent_study_models']['item'].query.all();self.assertEqual(len(rows),1);self.assertEqual((rows[0].campus,rows[0].section,rows[0].subject,rows[0].published),('Campus A','A','Math',True));self.assertNotIn('<script>',rows[0].body)
         self.tenant(check)
+    def test_vacation_word_file_retry_save_and_download(self):
+        import io
+        from tests.word_attachment_fixture import word_attachment
+        from student_extras import DOCX_MIME
+        self.seed()
+        path=f'/teacher-app/classes/{self.cid}/materials?kind=vacation'
+        page=self.c.get(path);self.assertIn(b'.docx',page.data)
+        token=re.search(rb'name="token" value="([^"]+)"',page.data).group(1).decode()
+        start=str(school_today());end=str(school_today()+timedelta(days=3))
+        data={'_csrf':self.token(),'action':'create','token':token,'kind':'vacation','title':'Fictional worksheet','body':'Read chapter one','starts':start,'ends':end,'due':end,'published':'1'}
+        wrong=self.c.post(path,data={**data,'attachments':(io.BytesIO(b'not a Word document'),'fake.docx')})
+        self.assertEqual(wrong.status_code,422)
+        for expected in (b'Your text and dates are kept',b'Fictional worksheet',b'Read chapter one',b'value="vacation" selected',b'name="published" value="1" checked'):
+            self.assertIn(expected,wrong.data)
+        M=app.extensions['parent_study_models']
+        self.tenant(lambda:self.assertEqual(M['item'].query.count(),0))
+        content=word_attachment()
+        saved=self.c.post(path,data={**data,'attachments':(io.BytesIO(content),'چھٹیوں کا کام.docx','application/octet-stream')})
+        self.assertEqual(saved.status_code,302);self.assertIn('kind=vacation',saved.location)
+        def check():
+            row=M['item'].query.one();file=M['file'].query.one()
+            self.assertEqual((row.kind,row.published,file.mime,file.content),('vacation',True,DOCX_MIME,content))
+            self.assertTrue(file.filename.endswith('.docx'))
+            return row.id,file.id
+        iid,fid=self.tenant(check)
+        downloaded=self.c.get(f'/teacher-app/classes/{self.cid}/materials/{iid}/files/{fid}')
+        self.assertEqual(downloaded.status_code,200);self.assertEqual(downloaded.data,content)
+        self.assertIn('attachment',downloaded.headers['Content-Disposition'])
+        self.assertIn(DOCX_MIME,downloaded.headers['Content-Type'])
     def test_student_leave_scope_and_review(self):
         self.seed()
         def make():

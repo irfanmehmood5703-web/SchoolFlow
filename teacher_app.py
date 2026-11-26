@@ -209,12 +209,17 @@ def configure_teacher_app(app,db,Student,Employee):
             if action=='create':
                 kind=request.form.get('kind','');title=request.form.get('title','').strip();body=clean_work(request.form.get('body',''));start=parse_day(request.form.get('starts',''));end=parse_day(request.form.get('ends',''));due=parse_day(request.form['due']) if request.form.get('due') else None;token=request.form.get('token','')
                 if kind not in STUDY or not 1<=len(title)<=180 or end<start or (end-start).days>1096 or due and not start<=due<=end or not re.fullmatch(r'[A-Za-z0-9_-]{43}',token):raise ValueError('Check the resource title, type, dates and deadline.')
-                files=app.extensions['student_extra_uploads']();published=request.form.get('published')=='1'
+                published=request.form.get('published')=='1'
                 if published and c.data['campus'] not in grants('student_extras.update'):abort(403)
+                try:files=app.extensions['student_extra_uploads']()
+                except ValueError as error:
+                    db.session.rollback()
+                    draft={key:request.form.get(key,'') for key in ('token','kind','title','body','starts','ends','due','published')}
+                    return material_page(c,M,material_draft=draft,upload_error=str(error)),422
                 value=dict(assignment=c.data,kind=kind,title=title,body=body,starts=str(start),ends=str(end),due=str(due),published=published,files=[(n,m,hashlib.sha256(b).hexdigest()) for n,m,b in files]);stamp=digest(value);old=M['item'].query.filter_by(token=token).first()
                 if old:
                     if old.data.get('teacher_id')!=g.staff_principal.id or old.data.get('submission_digest')!=stamp:abort(409)
-                    return redirect(url_for('teacher_app.materials',cid=cid))
+                    return redirect(url_for('teacher_app.materials',cid=cid,kind=kind))
                 row=M['item'](kind=kind,title=title,body=body,campus=c.data['campus'],class_name=c.data['class_name'],section=c.data['section'],subject=c.data['subject'],starts=start,ends=end,due=due,published=published,token=token,data=dict(teacher_id=g.staff_principal.id,submission_digest=stamp));db.session.add(row);db.session.flush()
                 for n,m,b in files:db.session.add(M['file'](item_id=row.id,filename=n,mime=m,content=b))
                 audit('Teacher created study resource',c,item_id=row.id,published=published)
@@ -232,9 +237,11 @@ def configure_teacher_app(app,db,Student,Employee):
                     if len(marks)>40 or len(feedback)>2000:raise ValueError('Marks or feedback are too long.')
                     sub.marks=marks;sub.feedback=feedback;audit('Teacher graded assignment response',c,submission_id=sub.id,student_id=sub.student_id)
             else:abort(422)
-            db.session.commit();flash('Study material saved. Published items appear in the Parent App.','success');return redirect(url_for('teacher_app.materials',cid=cid))
+            db.session.commit();flash('Study material saved. Published items appear in the Parent App.','success');return redirect(url_for('teacher_app.materials',cid=cid,kind=kind if action=='create' else request.args.get('kind','')))
+        return material_page(c,M)
+    def material_page(c,M,**values):
         items=M['item'].query.filter_by(campus=c.data['campus'],class_name=c.data['class_name'],subject=c.data['subject']).filter(M['item'].section.in_(['',c.data['section']]),M['item'].kind.in_(list(STUDY))).order_by(M['item'].id.desc()).limit(100).all();ids=[i.id for i in items];pupils={s.id:s for s,d in roster(c)}
-        return render('materials',cohort=c,items=items,pupils=pupils,files={i.id:M['file'].query.filter_by(item_id=i.id).all() for i in items},responses=M['submission'].query.filter(M['submission'].item_id.in_(ids),M['submission'].student_id.in_(pupils)).order_by(M['submission'].id.desc()).limit(100).all())
+        return render('materials',cohort=c,items=items,pupils=pupils,files={i.id:M['file'].query.filter_by(item_id=i.id).all() for i in items},responses=M['submission'].query.filter(M['submission'].item_id.in_(ids),M['submission'].student_id.in_(pupils)).order_by(M['submission'].id.desc()).limit(100).all(),**values)
     @bp.get('/classes/<int:cid>/materials/<int:iid>/files/<int:fid>')
     def study_file(cid,iid,fid):
         c=cohort(cid,'student_extras.view',subject_required=True);study_item(c,iid);f=app.extensions['parent_study_models']['file'].query.filter_by(id=fid,item_id=iid).first_or_404();return attachment(f)
