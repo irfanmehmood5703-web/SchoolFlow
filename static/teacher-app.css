@@ -78,3 +78,31 @@
 /* Keep class-section counts separate from subject responsibilities. */
 .teacher-assignment-metric .teacher-assignment-link{color:var(--green);font-weight:650;margin-top:6px}
 .teacher-assignment-metric:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+/* Combined award lists: one horizontally scrollable grid per exam.
+   Keep the student column visible while entering marks for distant subjects. */
+.class-award-card .section-heading{gap:8px;align-items:flex-start}
+.class-award-card .section-heading h2{overflow-wrap:anywhere}
+.award-subjects{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}
+.award-subjects span{background:var(--mint);color:var(--green);padding:5px 8px;border-radius:8px;font-size:12px}
+.class-award-card>.button{margin:4px 5px 4px 0;font-size:13px}
+.combined-marks{min-width:0;max-width:100%}
+.combined-marks .section-heading{flex-wrap:wrap;gap:5px}
+.award-table-scroll{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:8px;max-height:65vh;overscroll-behavior:contain}
+.award-entry-table{border-collapse:separate;border-spacing:0;width:100%;min-width:max-content;font-size:13px;text-align:left}
+.award-entry-table th,.award-entry-table td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:8px;vertical-align:middle}
+.award-entry-table thead th{background:#e4f2e9;color:var(--green);min-width:126px;max-width:170px}
+.award-entry-table thead{position:sticky;top:0;z-index:3}
+.award-entry-table .award-student{position:sticky;left:0;z-index:2;background:#f4faf6;min-width:106px;max-width:130px;overflow-wrap:anywhere}
+.award-entry-table thead .award-student{z-index:4;background:#e4f2e9}
+.award-entry-table small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:3px}
+.award-cell{display:grid;grid-template-columns:1fr;gap:4px;width:116px}
+.award-entry-table input,.award-entry-table select{width:100%;margin:0!important;padding:7px 6px;font-size:14px;min-height:42px}
+.award-entry-table select{font-size:12px}
+.award-total{font-variant-numeric:tabular-nums;font-weight:600}
+.combined-marks>button{margin-top:12px;width:100%}
+.award-create-subjects{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-bottom:14px}
+.award-create-paper{padding:10px;border:1px solid var(--line);border-radius:8px}
+.award-create-paper label{font-size:13px;margin:4px 0}
+.award-create-paper input[type=number]{font-size:14px;margin-bottom:0}
+@media(max-width:600px){.combined-marks .marks-help{font-size:12px}.award-entry-table th,.award-entry-table td{padding:6px}.award-entry-table .award-student{min-width:94px;max-width:105px}.award-entry-table thead th{min-width:105px}.award-cell{width:100px}}

@@ -25,5 +25,21 @@ const check=async label=>{if(await page.evaluate(()=>document.documentElement.sc
 for(const [key,path] of [['attendance',`/classes/${entry.cid}/attendance`],['diary',`/classes/${entry.cid}/diary`],['materials',`/classes/${entry.cid}/materials`],['exams',`/classes/${entry.cid}/exams`],['salary','/my-salary'],['leave','/requests/leave'],['reminders','/reminders'],['profile','/profile']]){await page.goto(base+'/teacher-app'+path);await check(key);if(key==='attendance'){await page.locator(`[name=status_${entry.pupil}]`).selectOption(width===390?'Absent':'Present');await page.getByRole('button',{name:'Save attendance',exact:true}).click();await page.waitForLoadState('networkidle');await page.reload();if(await page.locator(`[name=status_${entry.pupil}]`).inputValue()!==(width===390?'Absent':'Present'))throw Error('Attendance not persisted')}
 if(key==='leave'&&width===390){await page.locator('[name=type]').selectOption('Leave');await page.locator('[data-leave-from]').fill('2026-11-21');await page.locator('[data-leave-to]').fill('2026-11-21');await page.locator('[name=reason]').fill('Fictional browser leave');await page.getByRole('button',{name:'Submit request',exact:true}).click();await page.waitForLoadState('networkidle');if(!(await page.textContent('body')).includes('Fictional browser leave'))throw Error('Leave not saved')}
 await check(key);await page.screenshot({path:`${output}/${key}-${width}.png`})}
+// Check the shared award sheet at phone and desktop widths, including
+// horizontal scrolling without moving the student column and a real save.
+await page.goto(base+'/teacher-app/classes/'+entry.cid+'/exams');
+await page.getByRole('link',{name:'Open award list ›',exact:true}).click();
+await page.getByRole('button',{name:'Save all marks',exact:true}).waitFor();
+await check('combined-award');const mark=page.locator('[data-award-mark]');
+if(await mark.count()!==5)throw Error('Combined award missing assigned columns');
+await mark.nth(0).fill('35');await mark.nth(1).fill('24');
+if(await page.locator('[data-award-total]').textContent()!=='59')throw Error('Entered total incorrect');
+const scroller=page.locator('.award-table-scroll');
+if(width===390){if(!await scroller.evaluate(el=>el.scrollWidth>el.clientWidth))throw Error('Award grid does not scroll on phone');await scroller.evaluate(el=>el.scrollLeft=el.scrollWidth);const col=await page.locator('tbody .award-student').boundingBox();if(!col||col.x<0)throw Error('Student column left the viewport');await scroller.evaluate(el=>el.scrollLeft=0)}
+await page.getByRole('button',{name:'Save all marks',exact:true}).click();await page.waitForLoadState('networkidle');await page.reload();await check('combined-award-saved');
+if(Number(await mark.nth(0).inputValue())!==35||Number(await mark.nth(1).inputValue())!==24)throw Error('Combined marks not persisted');
+await page.screenshot({path:output+'/combined-award-'+width+'.png'});
+await page.goto(base+'/teacher-app/classes/'+entry.cid+'/exams/new');await check('combined-award-create');
+const subjects=page.locator('[data-award-include]');if(await subjects.count()!==5)throw Error('Create award missing assigned subjects');await subjects.first().uncheck();if(!await page.locator('[data-award-maximum]').first().isDisabled())throw Error('Unselected subject total not disabled');await subjects.first().check();await page.screenshot({path:output+'/combined-award-create-'+width+'.png'});
 console.log('PASS Teacher '+width+'px: login, assigned class isolation, persisted attendance, personal records, leave and reminders');await context.close()}
 await browser.close()})().catch(async e=>{console.error(e);if(current&&!current.isClosed())try{await current.screenshot({path:output+'/failure.png'});fs.writeFileSync(output+'/failure.html',await current.content())}catch{}process.exit(1)});
