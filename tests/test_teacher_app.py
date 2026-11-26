@@ -120,6 +120,39 @@ class TeacherAppTests(unittest.TestCase):
         for path in ('','/classes','/profile','/my-attendance','/my-salary','/requests/advance','/requests/leave','/diaries','/settings','/reminders',f'/classes/{self.cid}/attendance',f'/classes/{self.cid}/diary',f'/classes/{self.cid}/materials',f'/classes/{self.cid}/exams',f'/classes/{self.cid}/exams/new',f'/classes/{self.cid}/absentees',f'/classes/{self.cid}/fee-defaulters'):
             r=self.c.get('/teacher-app'+path);self.assertEqual(r.status_code,200,(path,r.data[:500]));self.assertNotIn(b'Pupil Campus B',r.data)
         self.assertEqual(self.c.get('/teacher-app/classes/999/attendance').status_code,403)
+    def test_my_attendance_title_range_and_own_records(self):
+        self.seed()
+        today=school_today();month=today.strftime('%Y-%m')
+        path='/teacher-app/my-attendance'
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'<h1>My Attendance</h1>',page.data)
+        self.assertIn(b'0 recorded days in this range',page.data)
+        self.assertIn(b'No staff attendance in this range',page.data)
+        def make():
+            staff=db.session.get(self.Staff,self.sid)
+            Daily=self.ops['daily']
+            other=fixture.Employee(employee_no='E2',name='Other fictional employee',role='Teacher',status='Active')
+            db.session.add(other);db.session.flush()
+            db.session.add_all([
+                Daily(kind='staff',person_id=staff.employee_id,day=today,status='Present',time_in='08:05',time_out='14:10'),
+                Daily(kind='staff',person_id=staff.employee_id,day=today+timedelta(days=1),status='Absent'),
+                Daily(kind='staff',person_id=other.id,day=today,status='Present',time_in='07:12',time_out='15:22'),
+            ])
+        self.tenant(make)
+        page=self.c.get(path+'?from_month='+month+'&to_month='+month)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'1 recorded days in this range',page.data)
+        self.assertIn(b'<span>Present</span><strong>1</strong>',page.data)
+        self.assertIn(b'<span>Absent</span><strong>0</strong>',page.data)
+        self.assertIn(b'In 08:05',page.data)
+        self.assertIn(b'Out 14:10',page.data)
+        self.assertNotIn(b'07:12',page.data)
+        self.assertNotIn(b'No staff attendance in this range',page.data)
+        previous=(today.replace(day=1)-timedelta(days=1)).strftime('%Y-%m')
+        page=self.c.get(path+'?from_month='+previous+'&to_month='+previous)
+        self.assertIn(b'0 recorded days in this range',page.data)
+        self.assertNotIn(b'08:05',page.data)
     def test_fee_visibility_owner_publish_hide_and_employee_permissions(self):
         self.seed()
         settings='/workspace/core/teacher-app-settings';path=f'/teacher-app/classes/{self.cid}/fee-defaulters'
