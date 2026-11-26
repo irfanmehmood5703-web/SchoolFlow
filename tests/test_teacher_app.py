@@ -20,6 +20,11 @@ class TeacherAppTests(unittest.TestCase):
         c=client or self.c
         with c.session_transaction() as session:token=session['record_csrf']
         return c.post('/auth/login',data={'_csrf':token,'email':login,'password':password if password is not None else self.password})
+    def test_public_mobile_entry_documents_are_marked(self):
+        for path in ('/','/mobile/teacher','/mobile/parents','/mobile/owner'):
+            page=app.test_client().get(path)
+            self.assertEqual(page.status_code,200,path)
+            self.assertIn(b'<meta name="schoolflow-document" content="1">',page.data,path)
     def test_teacher_login_generic_school_selection_and_existing_session(self):
         self.assertEqual(self.c.get('/mobile/teacher').status_code,200)
         self.assertEqual(self.c.post('/mobile/teacher',data={'code':'STAFF-TEST'}).status_code,400)

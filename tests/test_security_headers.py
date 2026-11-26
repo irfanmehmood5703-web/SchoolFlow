@@ -20,10 +20,6 @@ class SecurityHeadersTests(unittest.TestCase):
         self.assertEqual(health.json['status'],'ok')
         self.assertTrue(health.json['build'].startswith('schoolflow-'))
         self.assertIn('no-store',health.headers['Cache-Control'])
-        for path in ('/','/mobile/teacher','/mobile/parents','/mobile/owner'):
-            page=self.client.get(path)
-            self.assertEqual(page.status_code,200,path)
-            self.assertIn(b'<meta name="schoolflow-document" content="1">',page.data,path)
     def test_baseline_policy_preserves_capture_and_same_origin_print(self):
         response=self.client.get('/healthz');h=response.headers
         self.assertEqual(h['X-Content-Type-Options'],'nosniff')
