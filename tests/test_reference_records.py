@@ -69,6 +69,36 @@ class ReferenceRecordTests(unittest.TestCase):
         data.update(changes)
         return data
 
+    def test_left_student_can_be_filtered_and_reenrolled_on_same_record(self):
+        self.assertEqual(self.client.post("/records/student/new", data=self.student(status="Left")).status_code, 302)
+        student = Student.query.one()
+        family = self.models["family"].query.one()
+        report = "/records/student?status=left-students&roll_no=R-100&family_no=F-TEST&academic_session=2026-27"
+        page = self.client.get(report)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Fictional Student", page.data)
+        self.assertIn(b"Re-enrol", page.data)
+        self.assertNotIn(b"Fictional Student", self.client.get(report.replace("R-100", "UNKNOWN")).data)
+        reopen = f"/records/student/{student.id}/edit?reenrol=1"
+        self.assertIn(b"then save to re-enrol", self.client.get(reopen).data)
+        self.assertEqual(student.status, "Left")
+        self.assertEqual(self.client.post(reopen, data=self.student(family_mode="existing", family_id=str(family.id))).status_code, 302)
+        self.assertEqual(Student.query.one().id, student.id)
+        self.assertEqual(student.status, "Active")
+
+    def test_inquiry_filters_combine_without_changing_saved_rows(self):
+        models = app.extensions["ops_models"]
+        db.session.add_all([
+            models["workflow"](kind="queries", status="Active", data={"name":"Matching Pupil","roll_no":"17","class_name":"Demo Class","session":"2026-27","campus":"Demo Campus"}),
+            models["workflow"](kind="queries", status="Active", data={"name":"Other Pupil","roll_no":"18","class_name":"Demo Class","session":"2026-27","campus":"Demo Campus"}),
+        ])
+        db.session.commit()
+        page = self.client.get("/workspace/register/queries?campus=Demo+Campus&session=2026-27&roll_no=17")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Matching Pupil", page.data)
+        self.assertNotIn(b"Other Pupil", page.data)
+        self.assertEqual(models["workflow"].query.filter_by(kind="queries").count(), 2)
+
     def test_full_student_roundtrip_and_profile(self):
         r = self.client.post("/records/student/new", data=self.student())
         self.assertEqual(r.status_code, 302)

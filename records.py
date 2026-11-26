@@ -380,7 +380,7 @@ def configure_records(app, db, Student, Employee):
                 mapping={'name':'name','father':'father','phone':'phone','class_name':'class_name',
                          'mother_name':'mother_name','mother_phone':'mother_phone',
                          'gender':'gender','date_of_birth':'date_of_birth',
-                         'address':'address','academic_session':'session','section':'section'}
+                         'address':'address','academic_session':'session','section':'section','campus':'campus','group_name':'group_name','roll_no':'roll_no'}
                 for dest,src in mapping.items():
                     if inquiry.data.get(src):data[dest]=inquiry.data[src]
                 data['admission_inquiry_id']=str(inquiry.id)
@@ -609,12 +609,18 @@ def configure_records(app, db, Student, Employee):
             abort(404)
         return save_record(kind) if request.method == "POST" else render_form(kind)
 
+    former_student_statuses = ("Left", "Withdrawn", "Struck Off")
+
     @bp.route("/<kind>/<int:id>/edit", methods=["GET", "POST"])
     def edit_record(kind, id):
         if kind not in ("student", "employee"):
             abort(404)
         obj = get_obj(kind, id)
-        return save_record(kind, obj) if request.method == "POST" else render_form(kind, obj)
+        if request.method == "POST":
+            return save_record(kind, obj)
+        if kind == "student" and request.args.get("reenrol") == "1" and obj.status in former_student_statuses:
+            return render_form(kind, obj, data={**read_data(kind, obj), "status": "Active"})
+        return render_form(kind, obj)
 
     def filtered_query(kind):
         model = Student if kind == "student" else Employee
@@ -636,9 +642,31 @@ def configure_records(app, db, Student, Employee):
         status = request.args.get("status", "Active")
         if status == 'non-active':
             query = query.filter(or_(model.status != 'Active', model.status.is_(None)))
+        elif status == 'left-students' and kind == 'student':
+            query = query.filter(model.status.in_(former_student_statuses))
         elif status:
             query = query.filter(model.status == status)
         query = query.outerjoin(detail_model,detail_key==model.id)
+        if kind == 'student':
+            sid = request.args.get('sid', '').strip()
+            if sid:
+                query = query.filter(model.id == int(sid)) if sid.isascii() and sid.isdecimal() and len(sid) <= 9 else query.filter(False)
+            filters = {
+                'admission_no': model.admission_no, 'roll_no': detail_model.data['roll_no'].as_string(),
+                'student_name': model.name, 'father': model.father, 'mobile': model.phone,
+            }
+            for key, column in filters.items():
+                value = request.args.get(key, '').strip()[:160]
+                if value:
+                    pattern = "%" + value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                    query = query.filter(column.ilike(pattern, escape="\\"))
+            family_no = request.args.get('family_no', '').strip()[:160]
+            if family_no:
+                family_ids = db.session.query(RecordFamily.id).filter(RecordFamily.number == family_no)
+                query = query.filter(detail_model.family_id.in_(family_ids))
+            for key in ('academic_session', 'group_name'):
+                if value := request.args.get(key, '').strip()[:160]:
+                    query = query.filter(detail_model.data[key].as_string()==value)
         for key in ("campus", "class_name", "section", "gender", "role"):
             value = request.args.get(key, "")
             if value:
@@ -667,8 +695,9 @@ def configure_records(app, db, Student, Employee):
         return render_template("record_list.html", title="Manage "+("Students" if kind == "student" else "Employees"),
             kind=kind, rows=result, total=total, page=page, limit=limit,
             photos={row.owner_id: row.id for row in RecordFile.query.with_entities(RecordFile.owner_id, RecordFile.id).filter(RecordFile.owner_kind==kind, RecordFile.photo.is_(True), RecordFile.owner_id.in_([obj.id for obj, _ in result])).order_by(RecordFile.id.desc()).all()},
-            pages=max(1, (total+limit-1)//limit), choices=setup_choices(),
-            active=model.query.filter_by(status="Active").count(), all_count=model.query.count())
+            pages=max(1, (total+limit-1)//limit), choices=setup_choices(), former_student_statuses=former_student_statuses,
+            active=model.query.filter_by(status="Active").count(), all_count=model.query.count(),
+            left_count=model.query.filter(model.status.in_(former_student_statuses)).count() if kind=="student" else 0)
 
     @bp.route("/<kind>/<int:id>")
     def record_detail(kind, id):

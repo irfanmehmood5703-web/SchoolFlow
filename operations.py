@@ -331,13 +331,16 @@ def configure_operations(app, db, Student, Employee):
             commit()
             flash(f'{saved} class assignment(s) saved. {len(classes)-saved} already assigned; no duplicates created.','success')
             return redirect(url_for('ops.register',kind=kind))
-        query_extra_fields=('mother_name','mother_phone','guardian_name','guardian_relation','alternate_phone','gender','date_of_birth','address','previous_school','visitor_name','source','remarks','section','session')
-        def query_extras():
+        query_extra_fields=('mother_name','mother_phone','guardian_name','guardian_relation','alternate_phone','gender','date_of_birth','address','previous_school','visitor_name','source','remarks','section','session','campus','group_name','roll_no')
+        def query_extras(existing=None):
             extras={}
+            existing=existing or {}
             for key in query_extra_fields:
-                value=request.form.get(key,'').strip()
+                value=request.form.get(key,str(existing.get(key) or '')).strip()
                 if len(value)>500:raise ValueError('Inquiry detail is too long.')
                 if key=='date_of_birth' and value:day(value)
+                if key in ('campus','group_name') and value and value not in dict(choices(key)):
+                    raise ValueError('Choose a configured '+key.replace('_',' ')+'.')
                 extras[key]=value
             return extras
         if kind=='queries' and request.method=='POST' and request.form.get('action')=='prepare_admission':
@@ -463,12 +466,12 @@ def configure_operations(app, db, Student, Employee):
             if status not in ('Active','Follow-up','Converted','Closed'): raise ValueError('Invalid inquiry status.')
             if (row.data or {}).get('student_id') and status!='Converted':raise ValueError('This inquiry already created a student. Its status must remain Converted.')
             before=dict(row.data)
-            data.update(query_extras())
+            data.update(query_extras(before))
             data['sms_consent']=request.form.get('sms_consent')=='on'
             data['followup_history']=list(row.data.get('followup_history',[]))
             data['status_history']=list(row.data.get('status_history',[]))
             # Preserve immutable conversion linkage when editing public inquiry fields.
-            for key in ('student_id','admission_no','converted_date'):
+            for key in ('student_id','admission_no','converted_date','query_date'):
                 if key in before:data[key]=before[key]
             row.data=data
             row.status=status
@@ -526,6 +529,7 @@ def configure_operations(app, db, Student, Employee):
                 obj=Workflow(kind=kind,data=data,status=state);db.session.add(obj)
                 if kind=='queries':
                     data.update(query_extras())
+                    data['query_date']=school_today().isoformat()
                     data['sms_consent']=request.form.get('sms_consent')=='on'
                     db.session.flush()
                     # Admission inquiries never send SMS automatically.
@@ -568,6 +572,19 @@ def configure_operations(app, db, Student, Employee):
             status=request.args.get('status','').strip()
             if q:rows=[r for r in rows if q in ' '.join(str(r.data.get(k,'')) for k in ('name','father','phone','class_name')).casefold()]
             if status:rows=[r for r in rows if r.status==status]
+            inquiry_id=request.args.get('sid','').strip()
+            if inquiry_id:
+                rows=[r for r in rows if str(r.id)==inquiry_id]
+            for key in ('name','father','phone','address','roll_no'):
+                value=request.args.get(key,'').strip()[:160].casefold()
+                if value:rows=[r for r in rows if value in str(r.data.get(key) or '').casefold()]
+            for key in ('campus','class_name','section','group_name','session','gender'):
+                value=request.args.get(key,'').strip()[:160]
+                if value:rows=[r for r in rows if r.data.get(key)==value]
+            query_date=request.args.get('query_date','')
+            if query_date:
+                selected_date=day(query_date).isoformat()
+                rows=[r for r in rows if (r.data.get('query_date') or (r.created.date().isoformat() if r.created else ''))==selected_date]
             followup=request.args.get('followup','')
             if followup in ('due','upcoming','today'):
                 now=school_today().isoformat()
