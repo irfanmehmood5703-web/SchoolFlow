@@ -6,7 +6,7 @@ No provider delivery is performed by template previews or configuration saves.
 import calendar, hmac, re, io
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for, has_request_context
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, session, url_for, has_request_context
 from markupsafe import Markup, escape
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -450,6 +450,22 @@ def configure_school_settings(app,db,Student,Employee):
                 data[key]=(date.fromisoformat(data[key]+'-01')-timedelta(days=1)).strftime('%Y-%m')
         else:raise ValueError('Choose a valid lock action.')
         save_config('hrm:attendance-lock',data);audit('Change attendance cutoff',before=old,after=data,action=action)
+
+    @bp.route('/teacher-app-settings',methods=['GET','POST'])
+    def teacher_app_settings():
+        # This setting governs confidential student fee data in the Teacher App.
+        # Even a staff administrator with Core Settings privileges cannot change it.
+        if not session.get('owner_id') or session.get('staff_id') or session.get('demo') or getattr(g,'staff_principal',None) or not getattr(g,'school_identity',None):abort(403)
+        key='teacher-app-visibility';row=setting(key);data=config(key)
+        mode=data.get('fee_defaulters','show')
+        if request.method=='POST':
+            choice=request.form.get('fee_defaulters')
+            if choice not in ('show','hide','selected'):raise ValueError('Choose a valid fee defaulter visibility option.')
+            save_config(key,{**data,'fee_defaulters':choice})
+            audit('Change Teacher App fee defaulter visibility',before=mode,after=choice)
+            commit();flash('Teacher App fee visibility saved.','success')
+            return redirect(url_for('school_settings.teacher_app_settings'))
+        return render_template('teacher_app_settings.html',title='Teacher App Settings',version=row.version if row else 0,mode=mode)
 
     @bp.route('/<module>',defaults={'page':None},methods=['GET','POST'])
     @bp.route('/<module>/<page>',methods=['GET','POST'])

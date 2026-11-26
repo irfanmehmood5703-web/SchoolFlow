@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="form-card">
+  <h1>Teacher App Settings</h1>
+  <p class="muted">Control student fee information shown in the Teacher App. These settings apply to this school only, across its campuses.</p>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{record_csrf}}">
+    <input type="hidden" name="version" value="{{version}}">
+    <fieldset class="form-card">
+      <legend><strong>Fee Defaulters visibility</strong></legend>
+      <p>Current setting: <strong>{{'Published' if mode=='show' else 'Selected teachers only' if mode=='selected' else 'Hidden'}}</strong></p>
+      <label class="check"><input type="radio" name="fee_defaulters" value="show" required {{'checked' if mode=='show' else ''}}> <strong>Publish / Show to all assigned teachers</strong></label>
+      <p class="muted">Teachers can view generated unpaid challans and outstanding balances for their assigned classes only.</p>
+      <hr>
+      <label class="check"><input type="radio" name="fee_defaulters" value="hide" required {{'checked' if mode=='hide' else ''}}> <strong>Hide from all teachers</strong></label>
+      <p class="muted">Removes Fee Defaulters from Teacher Home and class menus, and blocks direct access to the report.</p>
+      <hr>
+      <label class="check"><input type="radio" name="fee_defaulters" value="selected" required {{'checked' if mode=='selected' else ''}}> <strong>Selected teachers only (HRM permissions)</strong></label>
+      <p class="muted">Use HRM → Manage Employees → Edit employee → Teacher App Credentials → Access Fee Defaulter Information. Only teachers with Show Fee Defaulters access will see this read-only report.</p>
+    </fieldset>
+    <p class="muted">No challans, receipts or fees are changed by this setting. Parent App, Owner App and separately granted desktop finance permissions are unaffected. The new setting applies on the next Teacher App request.</p>
+    <button type="submit">Save Teacher App Settings</button>
+  </form>
+</section>
+{% endblock %}

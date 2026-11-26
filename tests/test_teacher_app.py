@@ -120,6 +120,67 @@ class TeacherAppTests(unittest.TestCase):
         for path in ('','/classes','/profile','/my-attendance','/my-salary','/requests/advance','/requests/leave','/diaries','/settings','/reminders',f'/classes/{self.cid}/attendance',f'/classes/{self.cid}/diary',f'/classes/{self.cid}/materials',f'/classes/{self.cid}/exams',f'/classes/{self.cid}/exams/new',f'/classes/{self.cid}/absentees',f'/classes/{self.cid}/fee-defaulters'):
             r=self.c.get('/teacher-app'+path);self.assertEqual(r.status_code,200,(path,r.data[:500]));self.assertNotIn(b'Pupil Campus B',r.data)
         self.assertEqual(self.c.get('/teacher-app/classes/999/attendance').status_code,403)
+    def test_fee_visibility_owner_publish_hide_and_employee_permissions(self):
+        self.seed()
+        settings='/workspace/core/teacher-app-settings';path=f'/teacher-app/classes/{self.cid}/fee-defaulters'
+        # Existing behavior is preserved until the owner chooses a policy.
+        self.assertIn(b'Fee Defaulters',self.c.get('/teacher-app').data)
+        self.assertIn(b'Pupil Campus A',self.c.get(path+'?future=1').data)
+        self.assertNotIn(b'Pupil Campus B',self.c.get(path+'?future=1').data)
+        self.assertEqual(self.c.get(settings).status_code,403)
+        self.assertEqual(self.c.post(settings,data={'_csrf':self.token(),'version':'0','fee_defaulters':'hide'}).status_code,403)
+        # Maintain a simultaneously signed-in Teacher App session so that we
+        # test revocation without requiring a teacher to sign out or reinstall.
+        teacher=self.c;owner=app.test_client();self.c=owner
+        self.assertEqual(self.login('owner@example.invalid').status_code,302)
+        page=owner.get(settings);self.assertEqual(page.status_code,200)
+        self.assertIn(b'Publish / Show to all assigned teachers',page.data)
+        self.assertEqual(owner.post(settings,data={'version':'0','fee_defaulters':'hide'}).status_code,400)
+        self.assertEqual(owner.post(settings,data={'_csrf':self.token(),'version':'0','fee_defaulters':'invalid'}).status_code,422)
+        original=self.tenant(lambda:[(b.id,b.total,b.remaining) for b in self.ops['bill'].query.order_by(self.ops['bill'].id).all()])
+        def change(mode,version):
+            return owner.post(settings,data={'_csrf':self.token(),'version':str(version),'fee_defaulters':mode})
+        self.assertEqual(change('hide',0).status_code,302)
+        self.assertNotIn(b'Fee Defaulters',teacher.get('/teacher-app').data)
+        self.assertNotIn(b'Fee defaulters',teacher.get('/teacher-app/classes').data)
+        self.assertEqual(teacher.get('/teacher-app/classes?feature=fee_defaulters').status_code,403)
+        for url in (path,path+'?future=1',path+'?q=Pupil'):
+            response=teacher.get(url);self.assertEqual(response.status_code,403);self.assertNotIn(b'Pupil Campus A',response.data)
+            self.assertIn('no-store',response.headers.get('Cache-Control',''))
+        self.assertEqual(teacher.get(f'/teacher-app/classes/{self.cid}/attendance').status_code,200)
+        self.assertEqual(change('show',0).status_code,422)
+        self.assertEqual(change('show',1).status_code,302)
+        self.assertIn(b'Fee Defaulters',teacher.get('/teacher-app').data)
+        self.assertEqual(teacher.get(path+'?future=1').status_code,200)
+        self.assertEqual(change('selected',2).status_code,302)
+        self.assertEqual(teacher.get(path+'?future=1').status_code,403)
+        def access(value):
+            detail=self.rm['employee'].query.filter_by(employee_id=db.session.get(self.Staff,self.sid).employee_id).one()
+            detail.data={**detail.data,'fee_access':value}
+        self.tenant(lambda:access('view'))
+        self.assertIn(b'Fee Defaulters',teacher.get('/teacher-app').data)
+        self.assertEqual(teacher.get(path+'?future=1').status_code,200)
+        self.tenant(lambda:access('not_allowed'))
+        self.assertEqual(teacher.get(path).status_code,403)
+        self.assertNotIn(b'Fee Defaulters',teacher.get('/teacher-app').data)
+        self.assertEqual(change('show',3).status_code,302)
+        self.assertEqual(teacher.get(path+'?future=1').status_code,200)
+        self.assertEqual(self.tenant(lambda:[(b.id,b.total,b.remaining) for b in self.ops['bill'].query.order_by(self.ops['bill'].id).all()]),original)
+
+    def test_fee_visibility_settings_isolated_between_schools(self):
+        self.seed();self.login('owner@example.invalid')
+        settings='/workspace/core/teacher-app-settings'
+        self.assertEqual(self.c.post(settings,data={'_csrf':self.token(),'version':'0','fee_defaulters':'hide'}).status_code,302)
+        other=app.extensions['identity_helpers']['provision']('FEE-VISIBILITY-OTHER','Another fictional school','other@example.invalid',self.password)
+        c=app.test_client();c.get('/auth/institute')
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        c.post('/auth/institute',data={'_csrf':csrf,'code':'FEE-VISIBILITY-OTHER'})
+        with c.session_transaction() as session:csrf=session['record_csrf']
+        self.assertEqual(c.post('/auth/login',data={'_csrf':csrf,'email':'other@example.invalid','password':self.password}).status_code,302)
+        page=c.get(settings);self.assertEqual(page.status_code,200)
+        self.assertIn(b'Current setting: <strong>Published</strong>',page.data)
+        original=self.c.get(settings);self.assertIn(b'Current setting: <strong>Hidden</strong>',original.data)
+
     def test_home_separates_distinct_classes_from_subject_assignments(self):
         self.seed()
         def assign():
