@@ -33,7 +33,7 @@ public final class QrActivity extends Activity {
     private final AppUpdates updates = new AppUpdates(this);
     private JSONObject data;
     private Vault vault;
-    private TextView status;
+    private TextView status, voiceStatus;
     private Spinner direction;
     private Button scan, retry, connect;
     private boolean busy;
@@ -80,12 +80,19 @@ public final class QrActivity extends Activity {
         retry = button(content, "Retry pending scan", () -> run(this::deliver));
         connect = button(content, "Connection settings", this::unlock);
         button(content, "Test voice / sound", () -> feedback.confirm("", true, false));
+        button(content, "Voice settings", this::voiceSettings);
         setVolumeControlStream(android.media.AudioManager.STREAM_MUSIC);
         status = new TextView(this);
         status.setTextColor(Color.DKGRAY);
         status.setPadding(0, dp(12), 0, 0);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content.addView(status);
+        voiceStatus = new TextView(this);
+        voiceStatus.setTextColor(0xff164e3d);
+        voiceStatus.setTextSize(13);
+        voiceStatus.setPadding(0, dp(8), 0, 0);
+        voiceStatus.setText("Voice: ready to test");
+        content.addView(voiceStatus);
         setContentView(new PullToRefresh(scroll,
                 () -> foreground && scan.isEnabled(),
                 () -> run(() -> {
@@ -95,7 +102,7 @@ public final class QrActivity extends Activity {
                     }
                     return "Gate connected · #" + data.optInt("device");
                 })));
-        feedback = new QrVoiceFeedback(this);
+        feedback = new QrVoiceFeedback(this, voiceStatus::setText);
         vault = new Vault(this);
         try {
             data = new JSONObject(vault.read());
@@ -148,6 +155,18 @@ public final class QrActivity extends Activity {
         new IntentIntegrator(this).setCaptureActivity(QrCaptureActivity.class)
                 .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setOrientationLocked(true).setBeepEnabled(false)
                 .setPrompt(getString(R.string.qr_scan_prompt)).initiateScan();
+    }
+
+    private void voiceSettings() {
+        try {
+            startActivity(new Intent("com.android.settings.TTS_SETTINGS"));
+        } catch (android.content.ActivityNotFoundException | SecurityException ignored) {
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            } catch (android.content.ActivityNotFoundException | SecurityException error) {
+                voiceStatus.setText("Open phone Settings and search for Text-to-speech.");
+            }
+        }
     }
 
     private void unlock() {
