@@ -20,6 +20,7 @@ public final class NoticeJob extends JobService {
  private static final Object LOCK=new Object();
  private final java.util.concurrent.ConcurrentHashMap<Integer,Thread> tasks=new java.util.concurrent.ConcurrentHashMap<>();
  private static final java.util.concurrent.atomic.AtomicLong SESSION_EPOCH=new java.util.concurrent.atomic.AtomicLong();
+ static long sessionEpoch(){return SESSION_EPOCH.get();}
  public static boolean supported(){return Arrays.asList("owner","parents","teacher","sms").contains(BuildConfig.ROLE);}
  private static boolean permitted(Context c){return Build.VERSION.SDK_INT<33||c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;}
  public static void setup(Activity a){
@@ -42,10 +43,11 @@ public final class NoticeJob extends JobService {
   if(s.getPendingJob(PERIODIC)==null)s.schedule(new JobInfo.Builder(PERIODIC,name).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPeriodic(15*60*1000L).setPersisted(true).build());
   android.content.SharedPreferences p=c.getSharedPreferences("notice_state",MODE_PRIVATE);
   long now=System.currentTimeMillis();
-  if(s.getPendingJob(ONCE)==null&&now-p.getLong("last_check",0L)>120000L)s.schedule(new JobInfo.Builder(ONCE,name).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build());
+  if(s.getPendingJob(ONCE)==null&&now-p.getLong("last_check",0L)>("teacher".equals(BuildConfig.ROLE)?30000L:120000L))s.schedule(new JobInfo.Builder(ONCE,name).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build());
  }
  public static void clear(Context c){
   SESSION_EPOCH.incrementAndGet();
+  LectureAlerts.clear(c);
   c.getSharedPreferences("notice_state",MODE_PRIVATE).edit().clear().commit();
   c.getSystemService(NotificationManager.class).cancel(NOTICE);
  }
@@ -87,7 +89,7 @@ public final class NoticeJob extends JobService {
    if(status==401||status==403||status==409||(status>=300&&status<400))return null;
    if(status!=200)throw new IOException("Notice feed unavailable");
    if(conn.getContentType()==null||!conn.getContentType().contains("application/json"))throw new IOException("Unexpected response");
-   try(InputStream in=conn.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] bytes=new byte[2048];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>131072)throw new IOException("Notice response too large");out.write(bytes,0,n);}return new JSONObject(out.toString("UTF-8"));}
+   try(InputStream in=conn.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] bytes=new byte[2048];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>("teacher".equals(role)?1048576:131072))throw new IOException("Notice response too large");out.write(bytes,0,n);}return new JSONObject(out.toString("UTF-8"));}
   }finally{conn.disconnect();}
  }
  private void check()throws Exception{
@@ -98,13 +100,16 @@ public final class NoticeJob extends JobService {
   String actor=result.getString("actor");if(!actor.matches("[a-f0-9]{64}"))throw new IOException();
   boolean same=actor.equals(state.getString("actor",""));
   Set<String> prior=same?new HashSet<>(state.getStringSet("seen",Collections.emptySet())):new HashSet<>();
+  JSONArray alerts=result.optJSONArray("lecture_alerts");
+  Set<String> scheduled="teacher".equals(BuildConfig.ROLE)&&alerts!=null?LectureAlerts.sync(this,actor,alerts,prior,epoch):Collections.emptySet();
+  if(epoch!=SESSION_EPOCH.get())return;
   JSONArray events=result.getJSONArray("events");Set<String> seen=new HashSet<>(prior);List<JSONObject> fresh=new ArrayList<>();
   for(int i=0;i<Math.min(events.length(),80);i++){
    JSONObject event=events.getJSONObject(i);String id=event.getString("id");if(!id.matches("[a-f0-9]{64}"))continue;
-   if(seen.add(id))fresh.add(event);
+   if(!scheduled.contains(id)&&seen.add(id))fresh.add(event);
   }
   if(!same)getSystemService(NotificationManager.class).cancel(NOTICE);
-  if(seen.size()>500){seen.clear();for(int i=0;i<Math.min(events.length(),80);i++)seen.add(events.getJSONObject(i).getString("id"));}
+  if(seen.size()>500){seen.clear();for(int i=0;i<Math.min(events.length(),80);i++){String id=events.getJSONObject(i).getString("id");if(!scheduled.contains(id))seen.add(id);}}
   if(epoch!=SESSION_EPOCH.get())return;
   if(!fresh.isEmpty()&&permitted(this)){
    JSONObject first=fresh.get(0);

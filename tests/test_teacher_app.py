@@ -276,6 +276,42 @@ class TeacherAppTests(unittest.TestCase):
         self.assertNotIn(b'timetable-full-class',page.data)
         self.assertIn(b'English',page.data)
         self.assertNotIn(b'9:00 AM',page.data)
+    def test_background_lecture_feed_dated_scope_and_sync(self):
+        from datetime import datetime
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from school_clock import SCHOOL_TIMEZONE
+        self.seed()
+        self.login('owner@example.invalid')
+        path='/workspace/core/automatic-reports/periods'
+        data={'_csrf':self.token(),'action':'add','assignment_id':str(self.cid),'time':'10:30','lead':'5'}
+        for day in ('0','1'):
+            self.assertEqual(self.c.post(path,data={**data,'weekday':day}).status_code,302)
+        self.login()
+        feed_path='/teacher-app/notification-feed'
+        now=datetime(2026,11,23,10,20,tzinfo=SCHOOL_TIMEZONE)
+        holidays=app.extensions['holiday_calendar_helpers']
+        with patch('automatic_reports.datetime') as clock, patch('teacher_app.school_today',return_value=now.date()), patch.dict(holidays,{'rows':lambda:[]}):
+            clock.now.return_value=now
+            response=self.c.get(feed_path)
+            self.assertEqual(response.status_code,200)
+            future=response.get_json()
+            alerts=future['lecture_alerts']
+            self.assertEqual(len(alerts),2)
+            self.assertEqual(alerts[0]['due_at'],int(now.replace(minute=25).timestamp()*1000))
+            self.assertEqual(alerts[0]['starts_at'],int(now.replace(minute=30).timestamp()*1000))
+            self.assertNotEqual(alerts[0]['id'],alerts[1]['id'])
+            self.assertNotIn(alerts[0]['id'],[e['id'] for e in future['events']])
+            clock.now.return_value=now.replace(minute=25)
+            due=self.c.get(feed_path).get_json()
+            self.assertIn(alerts[0]['id'],[e['id'] for e in due['events']])
+            self.assertEqual(due['lecture_alerts'][0]['id'],alerts[0]['id'])
+            holiday=SimpleNamespace(scope='Campus A',data={'date':'2026-11-24','repeats':False})
+            with patch.dict(holidays,{'rows':lambda:[holiday]}):
+                self.assertEqual(len(self.c.get(feed_path).get_json()['lecture_alerts']),1)
+            self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],self.cid),'status','Voided'))
+            self.assertEqual(self.c.get(feed_path).get_json()['lecture_alerts'],[])
+        self.assertNotEqual(app.test_client().get(feed_path).status_code,200)
     def test_weekly_lecture_multiple_days_preserve_full_class_and_reject_conflicts(self):
         self.seed();path='/workspace/core/automatic-reports/periods'
         def setup():

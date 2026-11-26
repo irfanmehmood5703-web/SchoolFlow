@@ -363,6 +363,24 @@ def configure_automatic_reports(app,db,Student,Employee):
             if start<minute:continue
             out.append(dict(p,due=minute>=start-p['lead']))
         return out
+    def teacher_lecture_alerts(cohorts,now=None):
+        """Next two days of authorised, dated lecture alerts for device alarms."""
+        now=now or datetime.now(SCHOOL_TIMEZONE)
+        horizon=now+timedelta(days=2)
+        holidays=app.extensions['holiday_calendar_helpers']['rows']()
+        timetable=teacher_timetable(cohorts)
+        alerts=[]
+        for offset in range(3):
+            day=now.date()+timedelta(days=offset)
+            for p in timetable:
+                if p['mode']!='lecture' or p['weekday']!=day.weekday():continue
+                if any(h.scope in ('',p['campus']) and (h.data['date'][5:]==day.strftime('%m-%d') if h.data.get('repeats') else h.data['date']==day.isoformat()) for h in holidays):continue
+                hour,minute=map(int,p['time'].split(':'))
+                start=now.replace(hour=hour,minute=minute,second=0,microsecond=0)+timedelta(days=offset)
+                due=start-timedelta(minutes=p['lead'])
+                if start+timedelta(minutes=5)<now or due>horizon:continue
+                alerts.append(dict(p,day=str(day),due_at=int(due.timestamp()*1000),starts_at=int(start.timestamp()*1000)))
+        return sorted(alerts,key=lambda p:(p['due_at'],p['starts_at'],p['campus'],p['class_name'],p['section'],p['subject']))[:200]
     @bp.post('/periods')
     def periods():
         if not owner():abort(403)
@@ -508,5 +526,5 @@ def configure_automatic_reports(app,db,Student,Employee):
     def private(response):
         response.headers['Cache-Control']='no-store';return response
     app.extensions['automatic_report_events']=events
-    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all,teacher_periods=teacher_periods,teacher_timetable=teacher_timetable,wa_send=wa_send)
+    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all,teacher_periods=teacher_periods,teacher_timetable=teacher_timetable,teacher_lecture_alerts=teacher_lecture_alerts,wa_send=wa_send)
     app.register_blueprint(bp)

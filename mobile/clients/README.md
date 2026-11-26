@@ -147,3 +147,18 @@ geofence flow. Permission is not retained across navigations; pausing or leaving
 the page denies pending requests. Android installation, real GPS accuracy,
 precise-location permission denial and real campus check-in/out still require
 physical-device acceptance. Do not create real attendance as part of CI.
+
+### Teacher lecture reminders when the app is closed
+
+The authenticated Teacher notification feed supplies dated lecture occurrences
+for the next 48 hours, excluding holidays and inactive assignments. The
+teacher client caches them privately and schedules the next alarm using
+Android AlarmManager. Normal app closure does not cancel the alarm; it can
+deliver a notification locally without contacting the server at alarm time.
+The client restores the cache after reboot and refreshes it through normal
+background jobs and foreground navigation. Logout clears the cached alarms.
+Android 12+ needs the Alarms & reminders access for exact timing and Android
+13+ needs notification permission; without exact access, timing is best
+effort. Device force-stop and manufacturer battery restrictions can prevent or
+delay delivery. Schedule changes become effective at the next successful
+sync, and offline cache expires after 48 hours. This is not a push service.

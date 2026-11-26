@@ -106,11 +106,13 @@ def configure_teacher_app(app,db,Student,Employee):
             rows=roster(c,False);ids=[s.id for s,d in rows];marked=Daily.query.filter_by(kind='student',day=today).filter(Daily.person_id.in_(ids)).count() if c.data['campus'] in grants('attendance.view') else None
             details.append(dict(row=c,count=len(rows),marked=marked))
         return render('home',cards=details)
+    def period_notice(row,day):
+        return dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(day),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time_label'])
     def teacher_notification_events():
         events=list(app.extensions['notice_events']())
         for row in app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()):
             if row['due']:
-                events.append(dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(school_today()),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time_label']))
+                events.append(period_notice(row,school_today()))
         if own_access('attendance.own','attendance.view','attendance.self'):
             for row in Daily.query.filter_by(kind='staff',person_id=g.teacher_employee.id).order_by(Daily.day.desc()).limit(5):
                 events.append(dict(key='attendance:'+str(row.id),revision=digest([row.status,row.time_in,row.time_out]),title='Your attendance',detail=str(row.day)+' · '+row.status))
@@ -126,7 +128,9 @@ def configure_teacher_app(app,db,Student,Employee):
     @bp.get('/notification-feed')
     def native_notification_feed():
         from mobile_notices import feed
-        return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events())
+        alerts=app.extensions['automatic_report_helpers']['teacher_lecture_alerts'](cohorts())
+        notices=[dict(period_notice(row,row['day']),due_at=row['due_at'],starts_at=row['starts_at']) for row in alerts]
+        return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events(),lecture_alerts=notices)
     @bp.get('/classes')
     def classes():return render('classes')
     @bp.get('/timetable')
