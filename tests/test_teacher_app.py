@@ -311,6 +311,42 @@ class TeacherAppTests(unittest.TestCase):
         self.assertIn(b'5 lectures',page.data)
         self.assertEqual(page.data.count(b'class="timetable-time">10:00'),5)
         self.assertEqual(self.c.post(path,data={'_csrf':self.token(),**data,'weekdays':['5']}).status_code,403)
+    def test_multiple_subject_lectures_saved_atomically_with_individual_times(self):
+        self.seed();path='/workspace/core/automatic-reports/periods'
+        def setup():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid);row.data={**row.data,'subject':''}
+            for subject in ('Urdu','Computer'):
+                db.session.add(self.rm['settings'](category='subject',value=subject,class_name='One'))
+            other=W(kind='teacher-classes',status='Active',data={**row.data,'class_name':'Two','subject':'English'})
+            db.session.add(other);db.session.flush();return other.id
+        other=self.tenant(setup);self.login('owner@example.invalid')
+        page=self.c.get('/workspace/core/automatic-reports')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'data-add-lecture',page.data)
+        self.assertIn(b'automatic-reports.js',page.data)
+        csrf=self.token()
+        def post(**fields):return self.c.post(path,data={'_csrf':csrf,**fields})
+        self.assertEqual(post(action='add_full_class',assignment_id=str(self.cid),weekdays=['0','1']).status_code,302)
+        data=dict(action='add',assignment_id=[f'{self.cid}:Math',f'{self.cid}:Urdu',str(other)],time=['09:00','10:00','11:00'],lead='5',weekdays=['0','1','2'])
+        self.assertEqual(post(**{**data,'time':['09:00','09:00','11:00']}).status_code,409)
+        self.assertEqual(post(**{**data,'time':['09:00','10:00']}).status_code,422)
+        self.assertEqual(post(**{**data,'assignment_id':[f'{self.cid}:Math',f'{self.cid}:Unauthorized',str(other)]}).status_code,422)
+        self.tenant(lambda:self.assertEqual(self.ops['workflow'].query.filter_by(kind='automatic-period-reminder',status='Active').count(),2))
+        self.assertEqual(post(**data).status_code,302)
+        self.assertEqual(post(**data).status_code,302)
+        # Conflicting batch cannot insert even the otherwise-free third lecture.
+        self.assertEqual(post(**{**data,'time':['08:00','09:00','12:00']}).status_code,409)
+        def check():
+            W=self.ops['workflow'];records=W.query.filter_by(kind='automatic-period-reminder',status='Active').all()
+            self.assertEqual(len(records),11)
+            tt=app.extensions['automatic_report_helpers']['teacher_timetable']([db.session.get(W,self.cid),db.session.get(W,other)])
+            monday=[(r['subject'],r['time']) for r in tt if r['weekday']==0]
+            self.assertEqual(monday,[('Full Class','All day'),('Math','09:00'),('Urdu','10:00'),('English','11:00')])
+        self.tenant(check);self.login()
+        page=self.c.get('/teacher-app/timetable')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'2 full-class days',page.data);self.assertIn(b'9 lectures',page.data)
+        for subject in (b'Math',b'Urdu',b'English'):self.assertEqual(page.data.count(b'<strong>'+subject+b'</strong>'),3)
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})
