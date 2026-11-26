@@ -155,6 +155,31 @@ class ParentsPtmTests(unittest.TestCase):
         self.assertEqual(self.post(path,{'version':'2','action':'disable'}).status_code,302)
         self.assertEqual(p.get('/parents/PARENT-TEST').status_code,302)
         self.assertIn(b'Request a login code',app.test_client().get(login).data)
+    def test_shared_login_after_moving_siblings_ignores_empty_historical_families(self):
+        code='58312694'
+        path='/workspace/general/parents/login-settings'
+        self.assertEqual(self.post(path,{'version':'0','action':'enable','login_code':code,'confirm_code':code,'acknowledge':'yes'}).status_code,302)
+        def regroup():
+            F=self.rm['family'];D=self.rm['student']
+            old=db.session.get(F,2);old.data={**old.data,'phone':'03000000001'}
+            D.query.filter_by(student_id=2).one().family_id=1
+            for n in (3,4):
+                f=F(number='F'+str(n),data={'phone':'03000000001'});db.session.add(f)
+                s=Student(admission_no='S'+str(n),name='Fictional Child '+str(n),class_name='One',status='Active');db.session.add(s);db.session.flush()
+                db.session.add(D(student_id=s.id,family_id=1,data={'campus':'North','section':'A'}))
+            f=F(number='F5',data={'phone':'03000000005'});db.session.add(f);db.session.flush()
+            s=Student(admission_no='S5',name='Fictional Child 5',class_name='One',status='Active');db.session.add(s);db.session.flush()
+            db.session.add(D(student_id=s.id,family_id=f.id,data={'campus':'North','section':'A'}))
+        self.tenant(regroup)
+        p=app.test_client();login='/parents/PARENT-TEST/login';self.token(p,login)
+        self.assertEqual(self.post(login,{'action':'shared','phone':'0300-0000001','login_code':code},p).status_code,302)
+        page=p.get('/parents/PARENT-TEST')
+        self.assertEqual(page.status_code,200)
+        for n in (1,2,3,4):self.assertIn(('Fictional Child '+str(n)).encode(),page.data)
+        self.assertNotIn(b'Fictional Child 5',page.data)
+        self.assertEqual(p.get('/parents/PARENT-TEST/students/5/fees').status_code,404)
+        self.assertEqual(self.tenant(lambda:self.rm['family'].query.count()),5)
+
     def test_school_shared_code_rejects_ambiguous_registered_number(self):
         path='/workspace/general/parents/login-settings'
         code='58312694'
