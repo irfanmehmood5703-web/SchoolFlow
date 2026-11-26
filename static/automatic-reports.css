@@ -10,3 +10,24 @@
 .timetable-lecture-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
 .timetable-assignment-hint{margin:8px 0 0;font-size:12px;line-height:1.4}
 @media(max-width:480px){.timetable-lecture-fields{grid-template-columns:minmax(0,1fr)}}
+.timetable-saved-list{display:grid;gap:10px}
+.timetable-saved-group{border:1px solid var(--line);border-radius:10px;background:#f7faf8;padding:14px}
+.timetable-saved-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.timetable-saved-heading p{margin:4px 0}
+.timetable-saved-clock{display:grid;text-align:right;gap:3px;color:var(--green);white-space:nowrap}
+.timetable-saved-clock small{color:var(--muted);font-size:12px}
+.timetable-saved-days{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0}
+.timetable-saved-days span{padding:3px 9px;background:#e7f3eb;color:#195d47;border-radius:5px;border:1px solid #c7dfd1;font-size:12px;font-weight:600}
+.timetable-saved-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.timetable-saved-actions form{margin:0}
+.timetable-day-details{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.timetable-day-details summary{cursor:pointer;color:var(--green);font-weight:600;font-size:13px}
+.timetable-saved-day{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.timetable-saved-day:last-child{border:0}
+.timetable-edit-card{max-width:720px}
+.timetable-edit-summary{margin:14px 0;padding:12px;background:#f7faf8;border:1px solid var(--line);border-radius:8px}
+.timetable-edit-summary p{margin:6px 0 0}
+.timetable-time-fields{margin:12px 0;padding:12px}
+.timetable-time-fields>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.timetable-time-fields label{min-width:0}
+.timetable-time-fields select{margin-top:4px}

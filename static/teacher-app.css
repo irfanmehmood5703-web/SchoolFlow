@@ -69,8 +69,8 @@
 .teacher-timetable-home small{font-size:12px;color:var(--muted)}
 .teacher-timetable-home>span:last-child{font-size:22px;color:var(--green)}
 .timetable-day .section-heading{margin:0 0 8px}
-.timetable-period{display:grid;grid-template-columns:60px minmax(0,1fr);gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.timetable-period{display:grid;grid-template-columns:86px minmax(0,1fr);gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
 .timetable-period small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
-.timetable-time{color:var(--green);font-variant-numeric:tabular-nums}
+.timetable-time{color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px}
 .timetable-full-class{background:#edf7f1;border-radius:8px;padding:9px 8px;margin:3px 0;border:1px solid #dbe9e0}
 .timetable-full-class .badge{font-size:10px;padding:2px 6px;display:inline-block}

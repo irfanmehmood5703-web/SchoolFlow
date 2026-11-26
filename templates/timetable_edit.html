@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block page_styles %}<link rel="stylesheet" href="{{asset_url('automatic-reports.css')}}">{% endblock %}
+{% block content %}
+<section class="form-card timetable-edit-card">
+<a href="{{url_for('automatic_reports.index',_anchor='saved-timetable')}}">‹ Back to saved timetable</a>
+<h1>{{'Edit individual day' if single else 'Edit weekly timetable'}}</h1>
+<div class="timetable-edit-summary">
+<strong>{{teacher}} · {{subject}}</strong>
+<p>{{assignment.campus}} · Class {{assignment.class_name}} / {{assignment.section}}</p>
+<p>Current time: <strong>{{time_label}}</strong></p>
+</div>
+<form method="post">
+<input type="hidden" name="_csrf" value="{{record_csrf}}"><input type="hidden" name="revision" value="{{revision}}">
+{% if not full %}
+<fieldset class="timetable-time-fields"><legend>Lecture starts (Pakistan time)</legend><div>
+<label>Hour<select name="hour" required>{% for h in range(1,13) %}<option value="{{h}}" {{'selected' if h==hour}}>{{'%02d'|format(h)}}</option>{% endfor %}</select></label>
+<label>Minute<select name="minute" required>{% for m in range(60) %}<option value="{{m}}" {{'selected' if m==minute}}>{{'%02d'|format(m)}}</option>{% endfor %}</select></label>
+<label>AM / PM<select name="meridiem" required><option value="AM" {{'selected' if meridiem=='AM'}}>AM</option><option value="PM" {{'selected' if meridiem=='PM'}}>PM</option></select></label>
+</div><p class="muted">AM means before noon; PM means noon or later. Midnight is 12 AM; noon is 12 PM.</p></fieldset>
+<label>Remind before<select name="lead" required>{% for n in (0,5,10,15,30) %}<option value="{{n}}" {{'selected' if n==lead}}>{{n}} minutes</option>{% endfor %}</select></label>
+{% endif %}
+<fieldset><legend>{{'Teaching day' if single else 'Teaching days (weekly)'}}</legend><div class="check-grid">{% for name in weekdays %}<label><input type="{{'radio' if single else 'checkbox'}}" name="weekdays" value="{{loop.index0}}" {{'checked' if loop.index0 in days}} {{'required' if single}}> {{name}}</label>{% endfor %}</div></fieldset>
+<p class="muted">{{'Only this occurrence in the weekly timetable will be updated.' if single else 'The selected days will replace the current weekly days for this schedule.'}} Teacher, class and subject access will not be changed.</p>
+<div class="timetable-saved-actions"><button type="submit">Save changes</button><a class="button secondary" href="{{url_for('automatic_reports.index',_anchor='saved-timetable')}}">Cancel</a></div>
+</form>
+</section>
+{% endblock %}
