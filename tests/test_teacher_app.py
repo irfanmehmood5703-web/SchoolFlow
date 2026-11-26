@@ -347,6 +347,49 @@ class TeacherAppTests(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertIn(b'2 full-class days',page.data);self.assertIn(b'9 lectures',page.data)
         for subject in (b'Math',b'Urdu',b'English'):self.assertEqual(page.data.count(b'<strong>'+subject+b'</strong>'),3)
+    def test_direct_cross_class_lecture_assignment_and_timetable(self):
+        self.seed();root='/workspace/core/automatic-reports';path=root+'/periods'
+        def setup():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid);row.data={**row.data,'subject':''}
+            staff=db.session.get(self.Staff,self.sid)
+            staff.data={**staff.data,'permissions':{},'campuses':['Campus A']}
+            for category,value,cls in [('class_name','One',''),('class_name','Two',''),('class_name','Nine',''),('section','B',''),('subject','English','Two'),('subject','Urdu','Nine'),('subject','Computer','Nine')]:
+                db.session.add(self.rm['settings'](category=category,value=value,class_name=cls))
+            Map=app.extensions['institute_setup_models']['mapping']
+            for cls,section in [('One','A'),('Two','B'),('Nine','A')]:
+                db.session.add(Map(campus='Campus A',class_name=cls,active=True,data=dict(sections=[section],academic_session='2027')))
+            return str(staff.employee_id)
+        eid=self.tenant(setup);self.login('owner@example.invalid')
+        page=self.c.get(root);self.assertEqual(page.status_code,200)
+        for field in (b'lecture_teacher',b'lecture_campus',b'lecture_class',b'lecture_section',b'lecture_subject'):
+            self.assertIn(b'name="'+field+b'"',page.data)
+        self.assertIn(b'Two',page.data);self.assertIn(b'Nine',page.data)
+        csrf=self.token()
+        def post(**fields):return self.c.post(path,data={'_csrf':csrf,**fields})
+        self.assertEqual(post(action='add_full_class',assignment_id=str(self.cid),weekdays=['0','1','2','3','4']).status_code,302)
+        data=dict(action='add',lecture_teacher=[eid,eid],lecture_campus=['Campus A']*2,lecture_class=['Two','Nine'],lecture_section=['B','A'],lecture_subject=['subject:English','subject:Urdu'],time=['09:00','10:00'],lead='5',weekdays=['0','1','2','3','4'])
+        for bad in ({'lecture_campus':['Campus A','Campus B']},{'lecture_section':['A','A']},{'lecture_subject':['subject:English','subject:Math']},{'lecture_subject':['class-period','subject:Urdu']},{'lecture_teacher':[eid,'987654']},{'lecture_class':['Two','Unconfigured']},{'time':['09:00','09:00']}):
+            self.assertIn(post(**{**data,**bad}).status_code,(409,422))
+            self.tenant(lambda:self.assertEqual(self.ops['workflow'].query.filter_by(kind='teacher-classes',status='Active').count(),1))
+            self.tenant(lambda:self.assertEqual(self.ops['workflow'].query.filter_by(kind='automatic-period-reminder',status='Active').count(),5))
+        self.assertEqual(post(**data).status_code,302)
+        self.assertEqual(post(**data).status_code,302)
+        # A conflict with an existing period must not create a new subject assignment.
+        self.assertEqual(post(**{**data,'lecture_subject':['subject:English','subject:Computer'],'time':['09:00','09:00']}).status_code,409)
+        def check():
+            W=self.ops['workflow'];cohorts=W.query.filter_by(kind='teacher-classes',status='Active').all()
+            self.assertEqual({(r.data['class_name'],r.data['section'],r.data.get('subject')) for r in cohorts},{('One','A',''),('Two','B','English'),('Nine','A','Urdu')})
+            rows=W.query.filter_by(kind='automatic-period-reminder',status='Active').all();self.assertEqual(len(rows),15)
+            tt=app.extensions['automatic_report_helpers']['teacher_timetable'](cohorts)
+            self.assertEqual([(r['class_name'],r['section'],r['subject'],r['time']) for r in tt if r['weekday']==0],[('One','A','Full Class','All day'),('Two','B','English','09:00'),('Nine','A','Urdu','10:00')])
+            return next(r.id for r in cohorts if r.data['class_name']=='Nine')
+        nine=self.tenant(check);self.login()
+        page=self.c.get('/teacher-app/timetable');self.assertEqual(page.status_code,200)
+        self.assertIn(b'5 full-class days',page.data);self.assertIn(b'10 lectures',page.data)
+        self.assertIn(b'Nine',page.data);self.assertIn(b'Two',page.data)
+        self.assertEqual(self.c.get(f'/teacher-app/classes/{nine}/diary?subject=Computer').status_code,403)
+        self.assertEqual(self.c.get(f'/teacher-app/classes/{nine}/diary?subject=Urdu').status_code,200)
+        self.assertEqual(self.c.post(path,data={'_csrf':self.token(),**data}).status_code,403)
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})

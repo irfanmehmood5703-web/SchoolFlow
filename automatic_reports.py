@@ -205,6 +205,35 @@ def configure_automatic_reports(app,db,Student,Employee):
         allowed=app.extensions['school_settings_helpers']['subject_allowed']
         Catalog=app.extensions['record_models']['settings'];cls=assignment['class_name']
         return sorted({r.value for r in Catalog.query.filter_by(category='subject').all() if (not r.class_name or r.class_name==cls) and allowed(assignment['campus'],cls,r.value)},key=str.casefold)
+    def lecture_catalog(active_assignments):
+        """Owner's configured academic scopes, not just existing teacher assignments."""
+        Catalog=app.extensions['record_models']['settings']
+        config=app.extensions['institute_setup_helpers']['payload'](refresh=request.method=='POST')
+        rows=Catalog.query.order_by(Catalog.value).all()
+        values=lambda category:{r.value for r in rows if r.category==category}
+        order={v:i for i,v in enumerate(('Montessori','Play','Nursery','KG-I','KG-II','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Tenth'))}
+        schools=[];allowed=app.extensions['school_settings_helpers']['subject_allowed']
+        for campus in sorted(values('campus'),key=str.casefold):
+            if config['campuses'].get(campus) is False:continue
+            mapped=config['maps'].get(campus)
+            scopes={c['class_name']:c.get('sections',[]) for c in mapped} if mapped is not None else {c:values('section') for c in values('class_name')}
+            classes=[]
+            for cls,sections in sorted(scopes.items(),key=lambda x:(order.get(x[0],1000),x[0].casefold())):
+                sections=sorted(set(sections)&values('section'),key=str.casefold)
+                if not sections or cls not in values('class_name'):continue
+                subjects=sorted({r.value for r in rows if r.category=='subject' and (not r.class_name or r.class_name==cls) and allowed(campus,cls,r.value)},key=str.casefold)
+                classes.append(dict(name=cls,sections=sections,subjects=subjects))
+            if classes:schools.append(dict(name=campus,classes=classes))
+        Staff=app.extensions['staff_account_model']
+        accounts={str(r.employee_id):r for r in Staff.query.all()}
+        teachers=[]
+        for employee in Employee.query.filter_by(status='Active').order_by(Employee.name,Employee.id):
+            if 'teacher' not in (employee.role or '').lower():continue
+            eid=str(employee.id);account=accounts.get(eid)
+            campuses=[c['name'] for c in schools if account is None or c['name'] in account.data.get('campuses',[])]
+            teachers.append(dict(id=eid,name=employee.name,campuses=campuses))
+        full=[dict(teacher=str(a.data['employee_id']),campus=a.data['campus'],class_name=a.data['class_name'],section=a.data['section']) for a in active_assignments if not a.data.get('subject')]
+        return dict(teachers=teachers,campuses=schools,full_classes=full)
     def period_rows():
         return W.query.filter_by(kind='automatic-period-reminder',status='Active').order_by(W.id).all()
     def teacher_timetable(cohorts):
@@ -259,6 +288,9 @@ def configure_automatic_reports(app,db,Student,Employee):
                 if not employee or employee.status!='Active':abort(422,'Choose an active teacher.')
                 return aid,assignment,separator,subject
             raw_assignments=request.form.getlist('assignment_id')
+            direct_fields=('lecture_teacher','lecture_campus','lecture_class','lecture_section','lecture_subject')
+            direct=any(field in request.form for field in direct_fields)
+            if direct and (action!='add' or raw_assignments):abort(422,'Choose lecture details or an existing assignment, not both.')
             rows=period_rows()
             if action=='add_full_class':
                 if len(raw_assignments)!=1:abort(422,'Choose one full-class assignment.')
@@ -288,8 +320,45 @@ def configure_automatic_reports(app,db,Student,Employee):
             if not supplied or any(day not in ('0','1','2','3','4','5','6') for day in supplied) or (legacy and len(supplied)!=1):abort(422,'Select at least one valid weekday.')
             days=sorted(set(map(int,supplied)))
             lead=request.form.get('lead',type=int);clocks=request.form.getlist('time')
-            if not raw_assignments or len(raw_assignments)!=len(clocks) or len(raw_assignments)>12 or (legacy and len(raw_assignments)!=1):abort(422,'Choose one to twelve lectures, each with its own assignment and start time.')
+            count=len(clocks)
+            if not 1<=count<=12 or (legacy and count!=1) or (not direct and len(raw_assignments)!=count):abort(422,'Choose one to twelve lectures, each with its own assignment and start time.')
+            if direct and (legacy or any(len(request.form.getlist(f))!=count for f in direct_fields)):abort(422,'Complete the teacher, campus, class, section and subject for every lecture.')
             if lead not in (0,5,10,15,30) or any(not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock) for clock in clocks):abort(422,'Choose a valid start time for every lecture and reminder lead time.')
+            if direct:
+                # Resolve existing whole-class or subject assignments first.
+                # A new lecture grants only its selected subject, never the whole
+                # class or a new campus. The same tenant transaction saves access
+                # and timetable together; a rejected batch rolls both back.
+                catalog=lecture_catalog(active_rows.values())
+                teachers={t['id']:t for t in catalog['teachers']}
+                campuses={c['name']:c for c in catalog['campuses']}
+                def assignment_key(a):
+                    return (str(a.get('employee_id')),a.get('campus'),a.get('class_name'),a.get('section'),a.get('subject') or '')
+                by_scope={}
+                for a in active_rows.values():by_scope.setdefault(assignment_key(a.data),a)
+                selections=[]
+                for eid,campus,cls,section,selection in zip(*(request.form.getlist(f) for f in direct_fields)):
+                    teacher=teachers.get(eid);school=campuses.get(campus)
+                    cohort=next((c for c in school['classes'] if c['name']==cls),None) if school else None
+                    if not teacher or campus not in teacher['campuses'] or not cohort or section not in cohort['sections']:abort(422,'Choose an active teacher and a configured campus, class and section within their campus access.')
+                    whole=by_scope.get((eid,campus,cls,section,''))
+                    if selection=='class-period':
+                        if not whole:abort(422,'A class period without a subject requires existing whole-class access.')
+                        subject=''
+                    elif selection.startswith('subject:') and selection[8:] in cohort['subjects']:
+                        subject=selection[8:]
+                    else:abort(422,'Choose a subject configured for this class.')
+                    selections.append((eid,campus,cls,section,subject))
+                for eid,campus,cls,section,subject in selections:
+                    scope=(eid,campus,cls,section,subject)
+                    whole=by_scope.get((eid,campus,cls,section,''))
+                    assignment=by_scope.get(scope) or whole
+                    if assignment is None:
+                        assignment=W(kind='teacher-classes',status='Active',data=dict(employee_id=eid,campus=campus,class_name=cls,section=section,subject=subject))
+                        db.session.add(assignment);db.session.flush()
+                        by_scope[scope]=assignment;active_rows[assignment.id]=assignment
+                        db.session.add(ops['audit'](action='Create teacher-classes from timetable',data={'assignment_id':assignment.id,**assignment.data}))
+                    raw_assignments.append(str(assignment.id)+(':'+subject if subject and not assignment.data.get('subject') else ''))
             # Validate every selected subject and weekday before inserting any
             # timetable entry, including collisions inside the submitted batch.
             def key(data):
@@ -341,7 +410,7 @@ def configure_automatic_reports(app,db,Student,Employee):
             flash('Automatic report settings saved.','success')
             return redirect(url_for('automatic_reports.index'))
         row,rules=settings();active_assignments=assignments()
-        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=active_assignments,assignment_subjects={a.id:period_subjects(a.data) for a in active_assignments if not a.data.get('subject')},employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
+        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=active_assignments,lecture_catalog=lecture_catalog(active_assignments),assignment_subjects={a.id:period_subjects(a.data) for a in active_assignments if not a.data.get('subject')},employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
     @bp.after_request
     def private(response):
         response.headers['Cache-Control']='no-store';return response
