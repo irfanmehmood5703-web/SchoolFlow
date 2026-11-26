@@ -396,6 +396,8 @@ def configure_parents(app,db,Student):
         return response
     @public.before_request
     def public_scope():
+        if request.method=='POST' and request.endpoint=='parent_portal.app_action' and (request.view_args or {}).get('action')=='submission' and request.content_length and request.content_length>20*1024*1024:
+            abort(413,'Assignment response upload exceeds 20 MB.')
         code=(request.view_args or {}).get('code','').upper();School=app.extensions['identity_models']['institute']
         school=School.query.filter_by(code=code,active=True).first_or_404()
         g.parent_school=school;g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()

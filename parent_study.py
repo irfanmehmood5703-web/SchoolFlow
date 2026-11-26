@@ -50,26 +50,73 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
         version=db.Column(db.Integer,nullable=False,default=1)
         __mapper_args__={'version_id_col':version}
         __table_args__=(db.UniqueConstraint('item_id','student_id'),)
-    app.extensions['parent_study_models']=dict(item=Item,file=File,submission=Submission)
+    class SubmissionFile(db.Model):
+        __tablename__='parent_study_submission_file'
+        id=db.Column(db.Integer,primary_key=True)
+        submission_id=db.Column(db.Integer,db.ForeignKey(Submission.id),nullable=False,index=True)
+        filename=db.Column(db.String(180),nullable=False)
+        mime=db.Column(db.String(100),nullable=False)
+        content=db.deferred(db.Column(db.LargeBinary,nullable=False))
+    app.extensions['parent_study_models']=dict(item=Item,file=File,submission=Submission,submission_file=SubmissionFile)
+    def response_files(submissions):
+        groups={r.id:[] for r in submissions}
+        if groups:
+            for file in SubmissionFile.query.filter(SubmissionFile.submission_id.in_(groups)).order_by(SubmissionFile.id).all():
+                groups[file.submission_id].append(file)
+        return groups
+    def response_download(file):
+        response=send_file(io.BytesIO(file.content),mimetype=file.mime,download_name=file.filename,as_attachment=True)
+        response.headers['Content-Security-Policy']="default-src 'none'; sandbox"
+        response.headers['Cache-Control']='private, no-store'
+        return response
     def choices(key):return sorted({r.value for r in rm['settings'].query.filter_by(category=key).all()})
     def visible(row,s,d):
         return row.published and row.starts<=school_today()<=row.ends and row.campus==d.get('campus','') and row.class_name==s.class_name and (not row.section or row.section==d.get('section','')) and (not row.subject or not d.get('subjects') or row.subject in d['subjects']) and (not row.data.get('students') or str(s.id) in row.data['students']) and (not row.data.get('academic_session') or row.data['academic_session']==d.get('academic_session',''))
     def allowed(row,s,d):return access(s.id,d.get('campus',''),'dates' if row.kind=='dates' else 'rollslip' if row.kind=='rollslip' else 'quizzes' if row.kind=='vacation' else 'diary')['effective']!='block'
     def listing(kind,s,d):return [r for r in Item.query.filter_by(kind=kind).order_by(Item.starts.desc(),Item.id.desc()).all() if visible(r,s,d) and allowed(r,s,d)]
-    def parent_page(kind,s,d,renderer):
+    def parent_page(kind,s,d,renderer,**values):
         items=listing(kind,s,d);f=principal()
-        return renderer(kind,s,d,study=items,files={r.id:File.query.filter_by(item_id=r.id).all() for r in items},submissions={r.item_id:r for r in Submission.query.filter_by(student_id=s.id,family_id=f.id).all()})
+        submissions=Submission.query.filter_by(student_id=s.id,family_id=f.id).filter(Submission.item_id.in_([r.id for r in items])).all()
+        return renderer(kind,s,d,study=items,files={r.id:File.query.filter_by(item_id=r.id).all() for r in items},submissions={r.item_id:r for r in submissions},response_files=response_files(submissions),**values)
     def submit(f,s,d,save_action,link):
         raw=request.form.get('item','');body=request.form.get('body','').strip()
-        if not raw.isdigit() or not 1<=len(body)<=10000:abort(422,'Enter your assignment response.')
+        if not raw.isascii() or not raw.isdigit() or len(raw)>18:abort(422,'Choose the assignment.')
         row=db.get_or_404(Item,int(raw))
         if row.kind!='assignments' or not visible(row,s,d):abort(404)
         if not allowed(row,s,d):abort(403)
         if row.due and row.due<school_today():abort(422,'The submission deadline has passed. Contact the school.')
+        def retry(message):
+            db.session.rollback()
+            return parent_page('assignments',s,d,render,response_error_item=row.id,response_error=message,response_draft=body),422
+        if len(body)>10000:return retry('Keep your written response within 10,000 characters.')
+        try:files=app.extensions['student_extra_uploads']()
+        except ValueError as error:return retry(str(error))
+        if not body and not files:return retry('Write a response or attach at least one file.')
         def create():
             if Submission.query.filter_by(item_id=row.id,student_id=s.id).first():abort(409,'A response is already submitted. Contact the school to revise it.')
-            return Submission(item_id=row.id,student_id=s.id,family_id=f.id,body=body)
-        save_action(f,s,'submission',dict(item=row.id,body=body),create);flash('Assignment response sent to the school.','success');return redirect(link('assignments',s.id))
+            submission=Submission(item_id=row.id,student_id=s.id,family_id=f.id,body=body)
+            db.session.add(submission);db.session.flush()
+            for name,mime,content in files:
+                db.session.add(SubmissionFile(submission_id=submission.id,filename=name,mime=mime,content=content))
+            return submission
+        # Preserve the historical fingerprint for text-only submissions; a file
+        # retry must include identical bytes, not just matching filenames.
+        values=dict(item=row.id,body=body)
+        if files:values['files']=[(name,mime,hashlib.sha256(content).hexdigest()) for name,mime,content in files]
+        save_action(f,s,'submission',values,create)
+        flash('Assignment response sent to the school.','success')
+        return redirect(link('assignments',s.id))
+    @public.get('/app/students/<int:sid>/study/responses/<int:rid>/files/<int:fid>')
+    def assignment_response_file(code,sid,rid,fid):
+        f,rows=family_rows()
+        if not f:abort(403)
+        s,d=selected(rows,sid)
+        sub=Submission.query.filter_by(id=rid,student_id=s.id,family_id=f.id).first_or_404()
+        row=db.get_or_404(Item,sub.item_id)
+        if row.kind!='assignments' or not visible(row,s,d):abort(404)
+        if not allowed(row,s,d):abort(403)
+        file=SubmissionFile.query.filter_by(id=fid,submission_id=sub.id).first_or_404()
+        return response_download(file)
     @public.get('/app/students/<int:sid>/study/files/<int:fid>')
     def study_file(code,sid,fid):
         f,rows=family_rows()
@@ -84,6 +131,11 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
         if request.method=='POST':
             if not session.get('record_csrf') or not hmac.compare_digest(request.form.get('_csrf',''),session['record_csrf']):abort(400)
             app.extensions['admission_capacity']['lock']()
+    @bp.get('/responses/<int:rid>/files/<int:fid>')
+    def assignment_response_file_admin(rid,fid):
+        db.get_or_404(Submission,rid)
+        file=SubmissionFile.query.filter_by(id=fid,submission_id=rid).first_or_404()
+        return response_download(file)
     @bp.errorhandler(ValueError)
     def invalid(e):db.session.rollback();return render_template('operation_error.html',title='Check parent publication',error=str(e)),422
     @bp.errorhandler(IntegrityError)
@@ -209,6 +261,7 @@ def configure_parent_study(app,db,Student,public,principal,access,render,link,se
             for name,mime,content in files:db.session.add(File(item_id=row.id,filename=name,mime=mime,content=content))
             db.session.add(ops['audit'](action='Publish parent study resource',data=dict(item_id=row.id,campus=campus,kind=kind,published=row.published)));db.session.commit();return redirect(url_for('parent_study.publisher'))
         items=Item.query.order_by(Item.id.desc()).limit(100).all()
-        return render_template('parent_study_admin.html',title='Parent Study & Documents',kinds=KINDS,choices=choices,items=items,submissions=Submission.query.order_by(Submission.id.desc()).limit(100).all(),resource_files={i.id:File.query.filter_by(item_id=i.id).all() for i in items},fixed_audiences={i.id for i in items if i.kind in ('dates','rollslip') or Submission.query.filter_by(item_id=i.id).first() is not None},review=review,token=secrets.token_urlsafe(32),today=school_today(),end=school_today()+timedelta(days=180))
-    app.extensions['parent_study_helpers']=dict(parent_page=parent_page,submit=submit,listing=listing)
+        submissions=Submission.query.order_by(Submission.id.desc()).limit(100).all()
+        return render_template('parent_study_admin.html',title='Parent Study & Documents',kinds=KINDS,choices=choices,items=items,submissions=submissions,response_files=response_files(submissions),resource_files={i.id:File.query.filter_by(item_id=i.id).all() for i in items},fixed_audiences={i.id for i in items if i.kind in ('dates','rollslip') or Submission.query.filter_by(item_id=i.id).first() is not None},review=review,token=secrets.token_urlsafe(32),today=school_today(),end=school_today()+timedelta(days=180))
+    app.extensions['parent_study_helpers']=dict(parent_page=parent_page,submit=submit,listing=listing,response_files=response_files,response_download=response_download)
     app.register_blueprint(bp)

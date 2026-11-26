@@ -110,6 +110,76 @@ class ParentAppTests(unittest.TestCase):
         self.assertEqual(self.post('/workspace/general/parent-study',dict(action='grade',id=1,version=1,marks='100'),p).status_code,302)
         self.assertEqual(self.post('/workspace/general/parent-study',dict(action='grade',id=1,version=1,marks='8 / 10',feedback='Good work')).status_code,302)
         p=self.parent();self.assertIn(b'8 / 10',self.page(p,'assignments').data)
+    def test_assignment_attachment_only_upload_retry_and_private_download(self):
+        from PIL import Image
+        from tests.word_attachment_fixture import word_attachment
+        from student_extras import DOCX_MIME
+        self.seed_app();p=self.parent()
+        page=self.page(p,'assignments')
+        self.assertIn(b'Attach files or photos',page.data)
+        self.assertIn(b'enctype="multipart/form-data"',page.data)
+        M=app.extensions['parent_study_models']
+        token=secrets.token_urlsafe(32)
+        data=dict(token=token,item=self.assignment,body='')
+        self.assertEqual(self.action(p,'submission',data).status_code,422)
+        invalid=self.action(p,'submission',{**data,'body':'Keep this answer','attachments':(io.BytesIO(b'<html>bad</html>'),'fake.jpg')})
+        self.assertEqual(invalid.status_code,422);self.assertIn(b'Keep this answer',invalid.data);self.assertIn(b'Please select your files again',invalid.data)
+        self.assertEqual(self.tenant(lambda:M['submission'].query.count()),0)
+        self.assertEqual(self.action(p,'submission',{**data,'attachments':[(io.BytesIO(b'%PDF-1.4\nfictional'),f'{n}.pdf') for n in range(6)]}).status_code,422)
+        image=io.BytesIO();Image.new('RGB',(20,20),'white').save(image,'PNG');photo=image.getvalue()
+        document=word_attachment()
+        def upload(body='',changed=False,token=token):
+            return self.action(p,'submission',dict(data,token=token,body=body,attachments=[(io.BytesIO(photo),'answer.png'),(io.BytesIO(document if not changed else word_attachment({'word/extra.xml':b'<different/>'})),'answer.docx')]))
+        self.assertEqual(upload().status_code,302)
+        self.assertEqual(upload().status_code,302) # same token, same bytes
+        self.assertEqual(upload(body='Changed answer').status_code,409)
+        self.assertEqual(upload(changed=True).status_code,409)
+        self.assertEqual(upload(token=secrets.token_urlsafe(32)).status_code,409)
+        def saved():
+            sub=M['submission'].query.one();files=M['submission_file'].query.order_by(M['submission_file'].id).all()
+            self.assertEqual(sub.body,'');self.assertEqual(len(files),2)
+            self.assertEqual([(f.filename,f.content) for f in files],[('answer.png',photo),('answer.docx',document)])
+            return sub.id,[f.id for f in files]
+        rid,ids=self.tenant(saved)
+        shown=self.page(p,'assignments');self.assertIn(b'Response submitted',shown.data);self.assertIn(b'answer.png',shown.data);self.assertIn(b'answer.docx',shown.data)
+        path=f'{self.base}/app/students/1/study/responses/{rid}/files/{ids[1]}'
+        response=p.get(path)
+        self.assertEqual(response.status_code,200);self.assertEqual(response.data,document)
+        self.assertIn(DOCX_MIME,response.headers['Content-Type']);self.assertIn('no-store',response.headers['Cache-Control'])
+        for wrong in (path.replace('students/1/','students/2/'),path.replace('students/1/','students/3/'),path.replace(f'responses/{rid}/',f'responses/{rid+999}/')):
+            self.assertEqual(p.get(wrong).status_code,404)
+        self.assertEqual(app.test_client().get(path).status_code,403)
+        admin=f'/workspace/general/parent-study/responses/{rid}/files/{ids[1]}'
+        self.assertIn(b'answer.docx',self.c.get('/workspace/general/parent-study').data)
+        self.assertEqual(self.c.get(admin).data,document)
+        self.assertEqual(p.get(admin).status_code,302) # parent session cannot enter owner workspace
+        p=self.parent()
+        self.tenant(lambda:setattr(M['item'].query.filter_by(id=self.assignment).one(),'published',False))
+        self.assertEqual(p.get(path).status_code,404)
+    def test_assignment_response_attachment_does_not_bypass_due_date(self):
+        self.seed_app();p=self.parent();M=app.extensions['parent_study_models']
+        self.tenant(lambda:setattr(db.session.get(M['item'],self.assignment),'due',school_today()-timedelta(days=1)))
+        result=self.action(p,'submission',dict(item=self.assignment,body='',attachments=(io.BytesIO(b'%PDF-1.4\nfictional'),'late.pdf')))
+        self.assertEqual(result.status_code,422)
+        self.assertEqual(self.tenant(lambda:M['submission_file'].query.count()),0)
+    def test_assignment_attachment_schema_upgrade_preserves_existing_text_responses(self):
+        from sqlalchemy import inspect
+        self.seed_app();p=self.parent();M=app.extensions['parent_study_models']
+        self.assertEqual(self.action(p,'submission',dict(item=self.assignment,body='Existing answer')).status_code,302)
+        engine=self.H['engine'](self.school)
+        # Simulate a fictional school upgrading from the old schema.
+        with engine.begin() as conn:M['submission_file'].__table__.drop(conn)
+        self.assertFalse(inspect(engine).has_table(M['submission_file'].__tablename__))
+        self.H['create_workspace'](engine)
+        self.assertTrue(inspect(engine).has_table(M['submission_file'].__tablename__))
+        self.assertIn(b'Existing answer',self.page(p,'assignments').data)
+        def new_assignment():
+            item=M['item'](kind='assignments',title='Second assignment',campus='North',class_name='One',section='A',subject='Math',body='New work',starts=school_today(),ends=school_today()+timedelta(days=1),published=True,token=secrets.token_urlsafe(32))
+            db.session.add(item);db.session.flush();return item.id
+        iid=self.tenant(new_assignment)
+        self.assertEqual(self.action(p,'submission',dict(item=iid,body='Written answer with file',attachments=(io.BytesIO(b'%PDF-1.4\nfictional'),'solution.pdf'))).status_code,302)
+        shown=self.page(p,'assignments')
+        for value in (b'Existing answer',b'Written answer with file',b'solution.pdf'):self.assertIn(value,shown.data)
     def test_published_resources_files_revoked_and_not_foreign_child(self):
         self.seed_app();p=self.parent();file=self.tenant(lambda:app.extensions['parent_study_models']['file'].query.one().id)
         path=f'{self.base}/app/students/1/study/files/{file}';self.assertEqual(p.get(path).status_code,200)

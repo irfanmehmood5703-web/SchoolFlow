@@ -63,7 +63,7 @@ def configure_teacher_app(app,db,Student,Employee):
     @bp.url_defaults
     def subject_urls(endpoint,values):
         selected=getattr(g,'teacher_subject',None)
-        if selected and values.get('cid')==selected[0] and endpoint in ('teacher_app.diary','teacher_app.diary_file','teacher_app.materials','teacher_app.study_file','teacher_app.exam_list','teacher_app.create_exam','teacher_app.marks'):
+        if selected and values.get('cid')==selected[0] and endpoint in ('teacher_app.diary','teacher_app.diary_file','teacher_app.materials','teacher_app.study_file','teacher_app.response_file','teacher_app.exam_list','teacher_app.create_exam','teacher_app.marks'):
             values.setdefault('subject',selected[1])
     @bp.get('/classes/<int:cid>/subjects/<feature>')
     def subjects(cid,feature):
@@ -241,10 +241,21 @@ def configure_teacher_app(app,db,Student,Employee):
         return material_page(c,M)
     def material_page(c,M,**values):
         items=M['item'].query.filter_by(campus=c.data['campus'],class_name=c.data['class_name'],subject=c.data['subject']).filter(M['item'].section.in_(['',c.data['section']]),M['item'].kind.in_(list(STUDY))).order_by(M['item'].id.desc()).limit(100).all();ids=[i.id for i in items];pupils={s.id:s for s,d in roster(c)}
-        return render('materials',cohort=c,items=items,pupils=pupils,files={i.id:M['file'].query.filter_by(item_id=i.id).all() for i in items},responses=M['submission'].query.filter(M['submission'].item_id.in_(ids),M['submission'].student_id.in_(pupils)).order_by(M['submission'].id.desc()).limit(100).all(),**values)
+        responses=M['submission'].query.filter(M['submission'].item_id.in_(ids),M['submission'].student_id.in_(pupils)).order_by(M['submission'].id.desc()).limit(100).all()
+        return render('materials',cohort=c,items=items,pupils=pupils,files={i.id:M['file'].query.filter_by(item_id=i.id).all() for i in items},responses=responses,response_files=app.extensions['parent_study_helpers']['response_files'](responses),**values)
     @bp.get('/classes/<int:cid>/materials/<int:iid>/files/<int:fid>')
     def study_file(cid,iid,fid):
         c=cohort(cid,'student_extras.view',subject_required=True);study_item(c,iid);f=app.extensions['parent_study_models']['file'].query.filter_by(id=fid,item_id=iid).first_or_404();return attachment(f)
+    @bp.get('/classes/<int:cid>/materials/<int:iid>/responses/<int:rid>/files/<int:fid>')
+    def response_file(cid,iid,rid,fid):
+        c=cohort(cid,'student_extras.view',subject_required=True)
+        row=study_item(c,iid)
+        if row.kind!='assignments':abort(404)
+        M=app.extensions['parent_study_models']
+        submission=M['submission'].query.filter_by(id=rid,item_id=iid).first_or_404()
+        if submission.student_id not in {s.id for s,d in roster(c)}:abort(404)
+        file=M['submission_file'].query.filter_by(id=fid,submission_id=submission.id).first_or_404()
+        return app.extensions['parent_study_helpers']['response_download'](file)
     def exam_rows(c,award):
         rows=[(s,d) for s,d in roster(c,False) if all(not award.data.get(k) or d.get(k)==award.data[k] for k in ('section','gender','group_name','academic_session'))]
         def roll(pair):
