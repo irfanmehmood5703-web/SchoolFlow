@@ -95,7 +95,7 @@ def configure_teacher_app(app,db,Student,Employee):
             for prefix in prefixes:
                 if key.startswith(prefix) and key[len(prefix):] not in {str(n) for n in ids}:abort(403,'A student outside this class was submitted.')
     def audit(action,c=None,**values):db.session.add(Audit(action=action,data=dict(staff_id=g.staff_principal.id,employee_id=g.teacher_employee.id,campus=c.data['campus'] if c else '',**values)))
-    def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','timetable':'Class Timetable','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','class_exams':'Award Lists','class_marks':'Class Award List','create_exam':'Create Award List','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace'}.get(view,view.title()),**values)
+    def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','timetable':'Class Timetable','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','class_exams':'Award Lists','class_marks':'Class Award List','create_exam':'Create Award List','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace','fee_access_denied':'Fee Defaulters'}.get(view,view.title()),**values)
     @bp.context_processor
     def context():
         return dict(teacher=g.teacher_employee,teacher_account=g.staff_principal,teacher_today=school_today(),teacher_classes=cohorts(),teacher_periods=app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()) if request.endpoint in ('teacher_app.home','teacher_app.reminders') else [],teacher_can=lambda code,campus:campus in grants(code),teacher_fee_visible=bool(cohorts('fees.view')),teacher_token=secrets.token_urlsafe(32),teacher_study=STUDY,timedelta=timedelta,teacher_own=own_access,teacher_money=lambda n:'Rs '+f'{n/100:,.2f}')
@@ -139,7 +139,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events(),lecture_alerts=notices)
     @bp.get('/classes')
     def classes():
-        if request.args.get('feature')=='fee_defaulters' and not cohorts('fees.view'):abort(403,'The school has hidden fee defaulter information for your account.')
+        if request.args.get('feature')=='fee_defaulters' and not cohorts('fees.view'):return render('fee_access_denied'),403
         if request.args.get('feature')=='exam_list':
             groups={}
             for c in cohorts('exam.view'):
@@ -511,7 +511,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('absentees',cohort=c,pupils=pupils,history=grouped,first=first,last=last,minimum=minimum,consecutive=request.args.get('consecutive')=='1')
     @bp.get('/classes/<int:cid>/fee-defaulters')
     def fee_defaulters(cid):
-        if not grants('fees.view'):abort(403,'The school has hidden fee defaulter information for your account.')
+        if not grants('fees.view'):return render('fee_access_denied'),403
         c=cohort(cid,'fees.view');pupils={s.id:(s,d) for s,d in roster(c,False)};B=ops['bill'];query=B.query.filter(B.student_id.in_(pupils));future=request.args.get('future')=='1';search=request.args.get('q','').strip()[:120].casefold()
         if not future:query=query.filter(B.due<school_today())
         bills=[b for b in query.order_by(B.due,B.id).all() if b.remaining>0 and (not search or search in pupils[b.student_id][0].name.casefold())]

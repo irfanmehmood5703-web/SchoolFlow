@@ -13,10 +13,10 @@
       <p class="muted">Teachers can view generated unpaid challans and outstanding balances for their assigned classes only.</p>
       <hr>
       <label class="check"><input type="radio" name="fee_defaulters" value="hide" required {{'checked' if mode=='hide' else ''}}> <strong>Hide from all teachers</strong></label>
-      <p class="muted">Removes Fee Defaulters from Teacher Home and class menus, and blocks direct access to the report.</p>
+      <p class="muted">Keeps the Fee Defaulters option visible in the Teacher App, but shows an access-not-enabled message instead of any fee information. Direct report access is blocked.</p>
       <hr>
       <label class="check"><input type="radio" name="fee_defaulters" value="selected" required {{'checked' if mode=='selected' else ''}}> <strong>Selected teachers only (HRM permissions)</strong></label>
-      <p class="muted">Use HRM → Manage Employees → Edit employee → Teacher App Credentials → Access Fee Defaulter Information. Only teachers with Show Fee Defaulters access will see this read-only report.</p>
+      <p class="muted">Use HRM → Manage Employees → Edit employee → Teacher App Credentials → Access Fee Defaulter Information. Only teachers with Show Fee Defaulters access will see this read-only report. Others see an access-not-enabled message.</p>
     </fieldset>
     <p class="muted">No challans, receipts or fees are changed by this setting. Parent App, Owner App and separately granted desktop finance permissions are unaffected. The new setting applies on the next Teacher App request.</p>
     <button type="submit">Save Teacher App Settings</button>
