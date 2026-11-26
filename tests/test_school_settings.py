@@ -153,6 +153,29 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertEqual(self.post('hrm','employee-fields',version='1',required_email='1').status_code,422)
         self.assertEqual(self.post('hrm','employee-fields',version='1',action='reset').status_code,302)
         self.assertIn(b'name="email"',self.c.get('/records/employee/1/edit').data)
+    def test_staff_shift_designation_checkboxes_and_assignment_button(self):
+        path='/workspace/core/hrm/shift-templates'
+        page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'<legend>Applicable designations</legend>',page.data)
+        self.assertIn(b'Leave all unchecked to apply to every designation.',page.data)
+        self.assertIn(b'<a class="button" href="/workspace/core/hrm/assign-shifts">Assign templates to employees',page.data)
+        self.assertNotIn(b'<select multiple size="5" name="designations"',page.data)
+        for name in [b'Class Teacher',b'Clerk']:
+            self.assertIn(b'type="checkbox" name="designations" value="'+name+b'"',page.data)
+        self.assertEqual(self.shift(designations=['Class Teacher','Clerk']).status_code,302)
+        record=self.item('shift-template')
+        self.assertEqual(set(record.data['designations']),{'Class Teacher','Clerk'})
+        edit=self.c.get(path+'?edit='+str(record.id))
+        self.assertEqual(edit.status_code,200)
+        for name in [b'Class Teacher',b'Clerk']:
+            self.assertIn(b'name="designations" value="'+name+b'" checked',edit.data)
+        self.assertEqual(self.shift(id=record.id,version=str(record.version),designations=[]).status_code,302)
+        self.assertEqual(self.item('shift-template').data['designations'],[])
+        edit=self.c.get(path+'?edit='+str(record.id))
+        self.assertNotIn(b'name="designations" value="Class Teacher" checked',edit.data)
+        self.assertNotIn(b'name="designations" value="Clerk" checked',edit.data)
+        self.assertEqual(self.c.get('/workspace/core/hrm/assign-shifts').status_code,200)
     def test_shift_applicability_assignment_and_in_use_delete(self):
         self.assertEqual(self.shift().status_code,302);r=self.item('shift-template')
         path='/workspace/core/hrm/assign-shifts'
