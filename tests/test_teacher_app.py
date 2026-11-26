@@ -223,6 +223,59 @@ class TeacherAppTests(unittest.TestCase):
         page=self.c.get('/teacher-app/timetable')
         self.assertIn(b'No timetable scheduled yet',page.data)
         self.assertNotIn(b'09:00',page.data)
+    def test_teacher_full_class_and_lectures_coexist(self):
+        from datetime import datetime
+        from school_clock import SCHOOL_TIMEZONE
+        self.seed();root='/workspace/core/automatic-reports';path=root+'/periods'
+        def setup():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid)
+            row.data={**row.data,'subject':''}
+            staff=db.session.get(self.Staff,self.sid)
+            staff.data={**staff.data,'permissions':{},'campuses':['Campus A']}
+            lecture=W(kind='teacher-classes',status='Active',data={**row.data,'class_name':'Two','section':'B','subject':'English'})
+            other=W(kind='teacher-classes',status='Active',data={**row.data,'class_name':'Three','section':'A'})
+            db.session.add_all([lecture,other]);db.session.flush()
+            return lecture.id,other.id
+        lecture,other=self.tenant(setup)
+        self.login('owner@example.invalid')
+        page=self.c.get(root)
+        self.assertIn(b'Full Class (all day)',page.data)
+        self.assertIn(b'Lecture / Period',page.data)
+        data={'_csrf':self.token(),'action':'add_full_class','assignment_id':str(self.cid),'weekdays':['0','1','2','3','4']}
+        self.assertEqual(self.c.post(path,data={**data,'weekdays':[]}).status_code,422)
+        self.assertEqual(self.c.post(path,data={**data,'weekdays':['0','99']}).status_code,422)
+        self.assertEqual(self.c.post(path,data={**data,'assignment_id':str(lecture)}).status_code,422)
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        self.assertEqual(self.c.post(path,data={**data,'assignment_id':str(other),'weekdays':['0','5']}).status_code,409)
+        lecture_data={'_csrf':self.token(),'action':'add','assignment_id':str(lecture),'weekday':'0','time':'10:00','lead':'5'}
+        self.assertEqual(self.c.post(path,data=lecture_data).status_code,302)
+        self.assertEqual(self.c.post(path,data=lecture_data).status_code,409)
+        self.assertEqual(self.c.post(path,data={**lecture_data,'assignment_id':f'{self.cid}:Math','time':'09:00'}).status_code,302)
+        def check():
+            W=self.ops['workflow'];rows=W.query.filter_by(kind='automatic-period-reminder',status='Active').all()
+            self.assertEqual(len(rows),7)
+            self.assertEqual(sum(r.data.get('mode')=='full-class' for r in rows),5)
+            cohorts=[db.session.get(W,cid) for cid in (self.cid,lecture)]
+            helper=app.extensions['automatic_report_helpers']
+            monday=[p for p in helper['teacher_timetable'](cohorts) if p['weekday']==0]
+            self.assertEqual([(p['mode'],p['time'],p['subject']) for p in monday],[('full-class','All day','Full Class'),('lecture','09:00','Math'),('lecture','10:00','English')])
+            upcoming=helper['teacher_periods'](cohorts,datetime(2026,11,23,8,56,tzinfo=SCHOOL_TIMEZONE))
+            self.assertEqual([p['subject'] for p in upcoming],['Math','English'])
+            self.assertTrue(upcoming[0]['due'])
+            self.assertFalse(upcoming[1]['due'])
+        self.tenant(check)
+        self.login()
+        page=self.c.get('/teacher-app/timetable')
+        self.assertEqual(page.status_code,200)
+        for expected in (b'5 full-class days',b'2 lectures',b'All day',b'Class teacher',b'Two',b'English',b'Math'):self.assertIn(expected,page.data)
+        self.assertEqual(page.data.count(b'timetable-full-class'),5)
+        self.assertEqual(self.c.post(path,data={**data,'_csrf':self.token()}).status_code,403)
+        self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],self.cid),'status','Voided'))
+        page=self.c.get('/teacher-app/timetable')
+        self.assertNotIn(b'timetable-full-class',page.data)
+        self.assertIn(b'English',page.data)
+        self.assertNotIn(b'09:00',page.data)
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})

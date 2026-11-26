@@ -215,7 +215,13 @@ def configure_automatic_reports(app,db,Student,Employee):
             d=row.data;a=allowed.get(d.get('assignment_id'))
             if not a or a!=d.get('assignment'):continue
             weekday=d.get('weekday');clock=d.get('time','');lead=d.get('lead')
-            if weekday not in range(7) or lead not in (0,5,10,15,30) or not isinstance(clock,str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):continue
+            if weekday not in range(7):continue
+            scope=dict(weekday=weekday,campus=a['campus'],class_name=a['class_name'],section=a['section'])
+            if d.get('mode')=='full-class':
+                if not a.get('subject') and not d.get('subject'):
+                    out.append(dict(scope,time='All day',subject='Full Class',lead=0,mode='full-class'))
+                continue
+            if d.get('mode','lecture')!='lecture' or lead not in (0,5,10,15,30) or not isinstance(clock,str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):continue
             subject=d.get('subject') or a.get('subject') or ''
             if a.get('subject'):
                 if subject!=a['subject']:continue
@@ -223,14 +229,14 @@ def configure_automatic_reports(app,db,Student,Employee):
                 aid=d['assignment_id']
                 if aid not in catalog:catalog[aid]=period_subjects(a)
                 if subject not in catalog[aid]:continue
-            out.append(dict(weekday=weekday,time=clock,subject=subject or 'Class period',campus=a['campus'],class_name=a['class_name'],section=a['section'],lead=lead))
-        return sorted(out,key=lambda r:(r['weekday'],r['time'],r['campus'],r['class_name'],r['section'],r['subject']))
+            out.append(dict(scope,time=clock,subject=subject or 'Class period',lead=lead,mode='lecture'))
+        return sorted(out,key=lambda r:(r['weekday'],r['mode']!='full-class',r['time'],r['campus'],r['class_name'],r['section'],r['subject']))
     def teacher_periods(cohorts,now=None):
         now=now or datetime.now(SCHOOL_TIMEZONE)
         day=now.date();minute=now.hour*60+now.minute
         out=[];holidays=app.extensions['holiday_calendar_helpers']['rows']()
         for p in teacher_timetable(cohorts):
-            if p['weekday']!=day.weekday():continue
+            if p['mode']!='lecture' or p['weekday']!=day.weekday():continue
             if any(h.scope in ('',p['campus']) and (h.data['date'][5:]==day.strftime('%m-%d') if h.data.get('repeats') else h.data['date']==day.isoformat()) for h in holidays):continue
             hour,m=map(int,p['time'].split(':'));start=hour*60+m
             if start<minute:continue
@@ -241,7 +247,7 @@ def configure_automatic_reports(app,db,Student,Employee):
         if not owner():abort(403)
         csrf();app.extensions['admission_capacity']['lock']()
         action=request.form.get('action')
-        if action=='add':
+        if action in ('add','add_full_class'):
             raw=request.form.get('assignment_id','');assignment_id,separator,subject=raw.partition(':')
             aid=int(assignment_id) if assignment_id.isascii() and assignment_id.isdigit() and len(assignment_id)<=18 else None
             assignment=next((r for r in assignments() if r.id==aid),None)
@@ -249,16 +255,35 @@ def configure_automatic_reports(app,db,Student,Employee):
             if separator and (assignment.data.get('subject') or not subject or subject not in period_subjects(assignment.data)):abort(422,'Choose a configured subject for this class.')
             employee=db.session.get(Employee,int(assignment.data['employee_id']))
             if not employee or employee.status!='Active':abort(422,'Choose an active teacher.')
+            rows=period_rows()
+            if action=='add_full_class':
+                if separator or assignment.data.get('subject'):abort(422,'Full Class requires an active class-only assignment.')
+                supplied=request.form.getlist('weekdays')
+                if not supplied or any(day not in ('0','1','2','3','4','5','6') for day in supplied):abort(422,'Select at least one valid weekday.')
+                days=sorted(set(map(int,supplied)))
+                active={r.id:r.data for r in assignments()}
+                existing=set()
+                for row in rows:
+                    d=row.data;a=active.get(d.get('assignment_id'))
+                    if d.get('mode')!='full-class' or not a or a!=d.get('assignment') or a.get('subject') or str(a['employee_id'])!=str(assignment.data['employee_id']) or d.get('weekday') not in days:continue
+                    if row.data['assignment_id']!=aid:abort(409,'This teacher already has another Full Class on a selected day. Change the class schedule first.')
+                    existing.add(d['weekday'])
+                new_days=[day for day in days if day not in existing]
+                if len(rows)+len(new_days)>500:abort(422,'Remove unused timetable entries before adding more.')
+                for day in new_days:
+                    db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(mode='full-class',assignment_id=aid,assignment=dict(assignment.data),weekday=day,time='',lead=0)))
+                if new_days:db.session.add(ops['audit'](action='Create full class schedule',data={'assignment_id':aid,'weekdays':new_days}))
+                flash(f'{len(new_days)} full-class day(s) saved. {len(existing)} already scheduled; no duplicates created.','success')
+                db.session.commit();return redirect(url_for('automatic_reports.index'))
             weekday=request.form.get('weekday',type=int);lead=request.form.get('lead',type=int);clock=request.form.get('time','')
             if weekday not in range(7) or lead not in (0,5,10,15,30) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):abort(422,'Choose a weekday, period start and reminder lead time.')
-            rows=period_rows()
             if len(rows)>=500:abort(422,'Remove unused periods before adding more.')
-            if any(r.data.get('assignment',{}).get('employee_id')==assignment.data['employee_id'] and r.data.get('weekday')==weekday and r.data.get('time')==clock for r in rows):abort(409,'A period for this teacher already starts at that time.')
-            db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(assignment_id=aid,assignment=dict(assignment.data),weekday=weekday,time=clock,lead=lead,**({'subject':subject} if separator else {}))))
+            if any(r.data.get('mode','lecture')=='lecture' and str(r.data.get('assignment',{}).get('employee_id'))==str(assignment.data['employee_id']) and r.data.get('weekday')==weekday and r.data.get('time')==clock for r in rows):abort(409,'A period for this teacher already starts at that time.')
+            db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(mode='lecture',assignment_id=aid,assignment=dict(assignment.data),weekday=weekday,time=clock,lead=lead,**({'subject':subject} if separator else {}))))
             db.session.add(ops['audit'](action='Create period reminder',data={'assignment_id':aid,'weekday':weekday,'time':clock}))
         elif action=='remove':
             row=W.query.filter_by(kind='automatic-period-reminder',status='Active',id=request.form.get('id',type=int)).first_or_404()
-            row.status='Voided';db.session.add(ops['audit'](action='Remove period reminder',data={'id':row.id}))
+            row.status='Voided';db.session.add(ops['audit'](action='Remove full class schedule' if row.data.get('mode')=='full-class' else 'Remove period reminder',data={'id':row.id}))
         else:abort(422)
         db.session.commit();return redirect(url_for('automatic_reports.index'))
     @bp.route('',methods=['GET','POST'])
