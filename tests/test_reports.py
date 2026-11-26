@@ -33,6 +33,47 @@ class ReportTests(unittest.TestCase):
         text=self.get('fees/fee-reminder?from=2026-09&to=2026-09').data.decode()
         self.assertIn('Fictional Pupil',text);self.assertNotIn('No Challan Pupil',text);self.assertRegex(text,r'(?<![\d,.])700(?![\d,.])')
         self.assertEqual(self.get('fees/defaulters?from=2026-09&to=2026-09&pending_months=2').status_code,200)
+    def test_staff_attendance_report_staff_filters_color_totals_and_exports(self):
+        from io import StringIO
+        import csv
+        clerk=Employee(employee_no='A2',name='Fictional Clerk',role='Clerk',status='Active')
+        db.session.add(clerk);db.session.flush()
+        for employee,department in ((self.e,'Academics'),(clerk,'Administration')):
+            db.session.add(self.rm['employee'](employee_id=employee.id,data={'campus':'Campus A','department':department,'gender':'Female'}))
+        for category,values in [('campus',['Campus A']),('department',['Academics','Administration']),('designation',['Subject Teacher','Clerk'])]:
+            for value in values:db.session.add(self.rm['settings'](category=category,value=value,class_name=''))
+        for person,day,state in [(self.e,1,'Present'),(self.e,2,'Late'),(clerk,1,'Absent'),(clerk,2,'Short Leave')]:
+            db.session.add(self.m['daily'](kind='staff',person_id=person.id,day=date(2026,9,day),status=state))
+        db.session.commit()
+        path='attendance/staff-attendance-report?from=2026-09-01&to=2026-09-02'
+        page=self.get(path+'&class_name=Old+Class&section=Z&academic_session=obsolete&group_name=old')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'staff-attendance-report',page.data)
+        self.assertIn(b'Attendance summary',page.data)
+        for key,value in [('employees',2),('marked-days',4),('present',1),('absent',1),('late',1),('leave-days',1),('off-days',0)]:
+            self.assertRegex(page.data,rb'data-attendance-status="'+key.encode()+rb'"><span>[^<]+</span><b>'+str(value).encode()+rb'</b>')
+        for field in ('class_name','section','academic_session','group_name'):
+            self.assertNotIn(('name="'+field+'"').encode(),page.data)
+        self.assertIn(b'Active employees only',page.data)
+        self.assertNotIn(b'Currently enrolled only',page.data)
+        self.assertNotIn(b'Sandwich Leave',page.data)
+        self.assertIn(b'Fictional Teacher',page.data)
+        self.assertIn(b'Fictional Clerk',page.data)
+        filtered=self.get(path+'&department=Academics&designation=Subject+Teacher')
+        self.assertIn(b'Fictional Teacher',filtered.data)
+        self.assertNotIn(b'Fictional Clerk',filtered.data)
+        self.assertIn(b'data-attendance-status="present"><span>Present</span><b>1</b>',filtered.data)
+        export=self.get(path+'&department=Academics&designation=Subject+Teacher&export=csv')
+        rows=list(csv.reader(StringIO(export.data.decode('utf-8-sig'))))
+        self.assertEqual(rows[0][:3],['ID','Name','Designation'])
+        self.assertEqual(len(rows),2)
+        self.assertEqual(rows[1][1],'Fictional Teacher')
+        self.assertEqual(rows[1][-1],'2')
+        self.assertEqual(self.get(path+'&export=xlsx').status_code,200)
+        # Historical statuses remain available instead of silently losing a marked day.
+        db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,3),status='Sandwich Leave'));db.session.commit()
+        self.assertIn(b'Sandwich Leave',self.get(path.replace('to=2026-09-02','to=2026-09-03')).data)
+
     def test_attendance_distinct_reports_and_consecutive_dates(self):
         for d in [1,2,4]:db.session.add(self.m['daily'](kind='student',person_id=self.s.id,day=date(2026,9,d),status='Absent'))
         db.session.commit()

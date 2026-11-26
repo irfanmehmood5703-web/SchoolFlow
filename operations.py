@@ -177,16 +177,16 @@ def configure_operations(app, db, Student, Employee):
                 values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
         cache[key]=tuple(values)
         return values
-    def people(kind='student', active=True):
+    def people(kind='student', active=True, filter_keys=('campus','class_name','section','academic_session')):
         cls=Student if kind=='student' else Employee
         detail=rm['student' if kind=='student' else 'employee']
         owner=detail.student_id if kind=='student' else detail.employee_id
         query=cls.query.outerjoin(detail,owner==cls.id)
         if active:query=query.filter(cls.status=='Active')
-        for key in ('campus','class_name','section','academic_session'):
+        for key in filter_keys:
             value=request.values.get(key,'')
             if value:
-                column=Student.class_name if key=='class_name' and kind=='student' else detail.data[key].as_string()
+                column=Student.class_name if key=='class_name' and kind=='student' else Employee.role if key=='designation' and kind=='employee' else detail.data[key].as_string()
                 query=query.filter(column==value)
         return query.order_by(cls.id).all()
     def selected(name='ids'):
@@ -954,7 +954,8 @@ def configure_operations(app, db, Student, Employee):
         if kind not in ('student','staff'): abort(404)
         if kind=='student' and (request.method=='GET' or request.form.get('grid_mode')=='1'):return student_attendance_grid()
         d=day(request.values.get('day',school_today().isoformat()));people_kind='student' if kind=='student' else 'employee'
-        objs=people(people_kind)
+        filter_keys=('campus','designation','department') if kind=='staff' else ('campus','class_name','section','academic_session')
+        objs=people(people_kind,filter_keys=filter_keys)
         if request.method=='POST':
             app.extensions['admission_capacity']['lock']()
             app.extensions['school_settings_helpers']['attendance_guard'](kind,d)
@@ -978,11 +979,11 @@ def configure_operations(app, db, Student, Employee):
                 count+=1
             if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience='parent' if kind=='student' else kind,event='attendance',context={'day':d.isoformat()})
             audit('Save attendance',kind=kind,day=str(d),count=count);commit();flash(f'{count} attendance records saved.','success')
-            return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat(),**{k:request.form[k] for k in ('campus','class_name','section','academic_session') if request.form.get(k)}))
+            return redirect(url_for('ops.take_attendance',kind=kind,day=d.isoformat(),**{k:request.form[k] for k in filter_keys if request.form.get(k)}))
         existing={r.person_id:r for r in Daily.query.filter_by(kind=kind,day=d).all()}
         shift_details=app.extensions['record_helpers']['raw_many'](people_kind,objs)
         schedules={p.id:app.extensions['school_settings_helpers']['shift'](kind,p,shift_details.get(p.id,{}),d) for p in objs}
-        return render('take_attendance.html',schedules=schedules,locked=bool(kind=='staff' and app.extensions['school_settings_helpers']['config']('hrm:attendance-lock').get('daily','') and str(d)<=app.extensions['school_settings_helpers']['config']('hrm:attendance-lock')['daily']),title='Staff Attendance' if kind=='staff' else 'Student Attendance',kind=kind,people=objs,existing=existing,day=d,details=lambda p:details(p,people_kind))
+        return render('take_attendance.html',filter_keys=filter_keys,schedules=schedules,locked=bool(kind=='staff' and app.extensions['school_settings_helpers']['config']('hrm:attendance-lock').get('daily','') and str(d)<=app.extensions['school_settings_helpers']['config']('hrm:attendance-lock')['daily']),title='Staff Attendance' if kind=='staff' else 'Student Attendance',kind=kind,people=objs,existing=existing,day=d,details=lambda p:details(p,people_kind))
 
     @bp.route('/attendance-report')
     def attendance_report():
