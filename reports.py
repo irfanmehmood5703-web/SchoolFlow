@@ -32,9 +32,10 @@ def configure_reports(app,db,Student,Employee):
     def options(category):return [r.value for r in rm['settings'].query.filter_by(category=category).order_by(rm['settings'].value).all()]
     def match(person,kind='student'):
         d=details(person,kind)
-        for key in ('campus','class_name','section','academic_session','gender','group_name'):
+        filter_keys=('campus','department','designation','gender') if kind=='employee' else ('campus','class_name','section','academic_session','gender','group_name')
+        for key in filter_keys:
             values=[v for v in request.args.getlist(key) if v]
-            actual=person.class_name if key=='class_name' and kind=='student' else d.get(key,'')
+            actual=person.class_name if key=='class_name' and kind=='student' else person.role if key=='designation' and kind=='employee' else d.get(key,'')
             if values and actual not in values:return False
         if request.args.get('enrolled')=='1' and person.status!='Active':return False
         if request.args.get('status') and person.status!=request.args['status']:return False
@@ -193,6 +194,10 @@ def configure_reports(app,db,Student,Employee):
         if view not in ATTENDANCE_REPORTS:abort(404)
         start,end=bounds();kind='staff' if view=='staff-attendance-report' else 'student';cls=Employee if kind=='staff' else Student;person_kind='employee' if kind=='staff' else 'student'
         persons={p.id:p for p in cls.query.all() if match(p,person_kind)}
+        if kind=='staff':
+            sort=request.args.get('sort','employee_no')
+            key={'employee_no':lambda p:((p.employee_no or '').casefold(),p.id),'name':lambda p:((p.name or '').casefold(),p.id),'designation':lambda p:((p.role or '').casefold(),(p.name or '').casefold(),p.id)}.get(sort,lambda p:(p.id,))
+            persons={p.id:p for p in sorted(persons.values(),key=key)}
         records=Daily.query.filter(Daily.kind==kind,Daily.day>=start,Daily.day<=end,Daily.person_id.in_(persons)).order_by(Daily.day,Daily.person_id).all()
         statuses=['Present','Absent','Late','Leave','Short Leave','Off Day','Death Leave','Paper Leave','Sandwich Leave']
         focus=next(iter(persons.values())) if request.args.get('person_id') and len(persons)==1 else None
@@ -239,7 +244,14 @@ def configure_reports(app,db,Student,Employee):
         if view=='individual-attendance':
             rows=[[str(r.day),r.person_id,persons[r.person_id].name,r.status] for r in records]
             return response(view,['Date','ID','Name','Status'],rows)
-        rows=[[id,p.name,p.class_name if kind=='student' else p.role,*[counts[id][s] for s in statuses],sum(counts[id].values())] for id,p in persons.items()]
+        if kind=='staff':
+            summary=Counter(r.status for r in records)
+            # Keep historical Sandwich Leave visible only where it was actually recorded.
+            staff_statuses=[s for s in statuses if s!='Sandwich Leave' or summary[s]]
+            rows=[[id,p.name,p.role,*[counts[id][s] for s in staff_statuses],sum(counts[id].values())] for id,p in persons.items()]
+            totals={'Employees':len(persons),'Marked days':len(records),'Present':summary['Present'],'Absent':summary['Absent'],'Late':summary['Late'],'Leave days':sum(summary[s] for s in ('Leave','Short Leave','Death Leave','Paper Leave','Sandwich Leave')),'Off days':summary['Off Day']}
+            return response(view,['ID','Name','Designation',*staff_statuses,'Marked'],rows,totals=totals,note='Counts are based on saved attendance records in the selected range. Unmarked days are not counted as absences.')
+        rows=[[id,p.name,p.class_name,*[counts[id][s] for s in statuses],sum(counts[id].values())] for id,p in persons.items()]
         return response(view,['ID','Name','Class / Designation',*statuses,'Marked'],rows)
 
     @bp.route('/teacher-performance')

@@ -159,3 +159,38 @@
  .report-print-tail .report-print-signature>td{border:0!important;background:transparent!important;padding:5pt 0 0!important;text-align:left!important;width:auto!important;white-space:normal!important}
  .report-print-tail .report-branding-footer>div{margin:0!important;padding-top:4pt!important}
 }
+
+
+/* Staff attendance: status colors reinforce labels, never replace them. */
+.staff-attendance-report{--attendance-tone:#124e39;--attendance-bg:#e8f4ed}
+.staff-attendance-report [data-attendance-status="present"]{--attendance-tone:#17643e;--attendance-bg:#e3f5e9}
+.staff-attendance-report [data-attendance-status="absent"]{--attendance-tone:#a52c35;--attendance-bg:#fce7e9}
+.staff-attendance-report [data-attendance-status="late"]{--attendance-tone:#8a5508;--attendance-bg:#fff0ce}
+.staff-attendance-report :is([data-attendance-status="leave"],[data-attendance-status="leave-days"]){--attendance-tone:#245d9b;--attendance-bg:#e5efff}
+.staff-attendance-report :is([data-attendance-status="short-leave"],[data-attendance-status="paper-leave"]){--attendance-tone:#664292;--attendance-bg:#f1e9fc}
+.staff-attendance-report :is([data-attendance-status="off-day"],[data-attendance-status="off-days"],[data-attendance-status="death-leave"],[data-attendance-status="sandwich-leave"]){--attendance-tone:#42525e;--attendance-bg:#eaf0f4}
+.staff-report-summary{margin:18px 0 22px}
+.staff-report-summary h2{font-size:17px;margin:0 0 10px}
+.staff-attendance-report .staff-report-summary .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;margin:0}
+.staff-attendance-report .staff-report-summary .card{min-width:0;background:var(--attendance-bg);border:1px solid color-mix(in srgb,var(--attendance-tone) 22%,white);border-top:3px solid var(--attendance-tone);border-radius:10px;padding:12px 14px}
+.staff-attendance-report .staff-report-summary .card span{color:var(--attendance-tone);font-weight:650;font-size:12px}
+.staff-attendance-report .staff-report-summary .card b{color:var(--attendance-tone);font-size:25px;margin:4px 0 0}
+.staff-attendance-report .report-table-output h2{color:#164e39;font-size:17px}
+.staff-attendance-report .report-table-output thead th{color:#fff;background:#19553f;font-weight:700;font-size:12px;white-space:normal}
+.staff-attendance-report .report-table-output thead th[data-attendance-status]{color:var(--attendance-tone);background:var(--attendance-bg);text-align:center}
+.staff-attendance-report .report-table-output tbody tr:nth-child(even){background:#f3f8f5}
+.staff-attendance-report .report-table-output tbody td{border-bottom:1px solid #dce8e0}
+.staff-attendance-report .report-table-output td[data-attendance-status]{text-align:center;font-variant-numeric:tabular-nums}
+.staff-attendance-report .report-table-output .staff-status-number{background:var(--attendance-bg);color:var(--attendance-tone);font-weight:750}
+.staff-attendance-report .report-table-output .staff-status-zero{color:#617168}
+@media print{
+ .staff-attendance-report{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+ .staff-report-summary{margin:6pt 0}
+ .staff-report-summary h2,.staff-attendance-report .report-table-output h2{font-size:10pt;margin:3pt 0}
+ .staff-attendance-report .staff-report-summary .cards{grid-template-columns:repeat(7,minmax(0,1fr));gap:4pt}
+ .staff-attendance-report .staff-report-summary .card{padding:4pt 5pt;break-inside:avoid;border-top-width:2px}
+ .staff-attendance-report .staff-report-summary .card span{font-size:7.5pt}
+ .staff-attendance-report .staff-report-summary .card b{font-size:13pt;margin:2pt 0 0}
+ .staff-attendance-report .report-table-output thead th{font-size:8pt}
+ .staff-attendance-report .report-table-output :is(th,td){padding:3pt!important;border:1px solid #c7d9ce;overflow-wrap:anywhere;white-space:normal}
+}

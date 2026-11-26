@@ -176,6 +176,32 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertNotIn(b'name="designations" value="Class Teacher" checked',edit.data)
         self.assertNotIn(b'name="designations" value="Clerk" checked',edit.data)
         self.assertEqual(self.c.get('/workspace/core/hrm/assign-shifts').status_code,200)
+    def test_staff_attendance_relevant_filters_ignore_student_criteria(self):
+        path='/workspace/attendance/staff'
+        # A stale Class filter sent by a saved URL must not hide the employee.
+        page=self.c.get(path+'?day=2026-09-07&class_name=Class+A&section=Z&academic_session=unknown')
+        self.assertEqual(page.status_code,200)
+        for key in ('class_name','section','academic_session','father_contact','mother_contact','student_contact','parent_notification'):
+            self.assertNotIn(('name="'+key+'"').encode(),page.data)
+        for key in ('designation','department','campus','teacher_notification'):
+            self.assertIn(('name="'+key+'"').encode(),page.data)
+        self.assertIn(b'Fictional Teacher',page.data)
+        self.assertIn(b'Fictional Clerk',page.data)
+        for employee,department in ((self.e,'Academics'),(self.clerk,'Administration')):
+            detail=self.rm['employee'].query.filter_by(employee_id=employee.id).one()
+            detail.data={**detail.data,'department':department}
+        db.session.commit()
+        page=self.c.get(path+'?day=2026-09-07&department=Academics&designation=Class+Teacher')
+        self.assertIn(b'Fictional Teacher',page.data)
+        self.assertNotIn(b'Fictional Clerk',page.data)
+        values={'_csrf':self.csrf,'day':'2026-09-07','department':'Academics','designation':'Class Teacher','class_name':'Class A',f'status_{self.e.id}':'Present',f'status_{self.clerk.id}':'Absent'}
+        saved=self.c.post(path,data=values)
+        self.assertEqual(saved.status_code,302)
+        self.assertIn('department=Academics',saved.location)
+        self.assertIn('designation=Class+Teacher',saved.location)
+        self.assertNotIn('class_name=',saved.location)
+        self.assertEqual([(row.person_id,row.status) for row in self.ops['daily'].query.all()],[(self.e.id,'Present')])
+
     def test_attendance_clock_formats_shift_form_report_and_preserves_storage(self):
         from school_clock import normalize_clock,attendance_clock
         for canonical,label in [('00:00','12:00 AM'),('08:00','08:00 AM'),('12:00','12:00 PM'),('14:00','02:00 PM'),('23:59','11:59 PM'),('','')]:
