@@ -106,3 +106,7 @@
 .award-create-paper label{font-size:13px;margin:4px 0}
 .award-create-paper input[type=number]{font-size:14px;margin-bottom:0}
 @media(max-width:600px){.combined-marks .marks-help{font-size:12px}.award-entry-table th,.award-entry-table td{padding:6px}.award-entry-table .award-student{min-width:94px;max-width:105px}.award-entry-table thead th{min-width:105px}.award-cell{width:100px}}
+
+/* Keep long teacher page titles and school names inside the available header space. */
+.header-copy{min-width:0;overflow-wrap:anywhere}
+.header-action{flex-shrink:0}
