@@ -1,0 +1,9 @@
+/* Teacher assignment: touch-friendly multi-class selection in the existing zinc-green theme. */
+.teacher-assignment-classes{min-width:0;margin:0;padding:12px;border:1px solid #cadbd2;border-radius:10px;background:#f5faf7}
+.teacher-assignment-classes legend{font-weight:650;color:#243d32;padding:0 4px}
+.teacher-assignment-classes p{margin:0 0 8px;font-size:.85rem;line-height:1.45}
+.teacher-assignment-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:7px;max-height:240px;overflow:auto;padding:2px}
+.teacher-assignment-options label{display:flex;align-items:center;gap:8px;min-height:40px;margin:0;padding:7px 9px;border:1px solid #d2e0d8;border-radius:7px;background:#fff;cursor:pointer;overflow-wrap:anywhere}
+.teacher-assignment-options label:has(input:checked){border-color:#176b52;background:#e5f3ec;color:#165840}
+.teacher-assignment-options input[type=checkbox]{width:18px;height:18px;min-width:18px;margin:0;flex:none;accent-color:#176b52}
+.teacher-assignment-options label:focus-within{outline:2px solid #176b52;outline-offset:1px}
