@@ -345,8 +345,16 @@ for key in ('sms-report', 'family-sms', 'notifications', 'staff-sms'):
         'Review the request, intended audience, channel and recorded status.',
         'Check the connected school-SIM workflow separately when SMS delivery is intended.',
         note='Queued, network-submitted, delivered and read are different states. Unconnected channels do not provide verified delivery or read receipts.')
-GUIDES['update-salary'] = GUIDES['salary-plans']
-GUIDES['salary-approvals'] = GUIDES['salary-plans']
+GUIDES['update-salary'] = guide('Find and update an existing salary plan.',
+    'Open HRM → Salary → Update Salary Plan.',
+    'Find the employee or plan ID in the saved list and click Update plan.',
+    'Review the existing salary and deduction settings, edit them and save for approval.',
+    note='Updated plans return to Pending; already generated salaries are not changed.')
+GUIDES['salary-approvals'] = guide('Review and decide saved salary plans.',
+    'Open HRM → Add Approval → Salary Plan Approvals.',
+    'Review the employee, basic salary and saved status; use Update plan to review detailed settings if needed.',
+    'Select the appropriate plans and click Approve selected or Reject selected.',
+    note='You can also approve a saved plan directly on the Create Salary Plan page.')
 
 
 # Exact current Configuration menu, with route parameters instead of copied URLs.

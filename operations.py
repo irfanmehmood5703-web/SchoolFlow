@@ -267,7 +267,8 @@ def configure_operations(app, db, Student, Employee):
         if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder','fee-sheet'): return url_for('reports.fees',view=key)
         if key in ('student-attendance','staff-attendance'): return url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student')
         if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return url_for('reports.attendance',view=key)
-        if key in ('salary-plans','update-salary'): return url_for('ops.plans')
+        if key=='salary-plans': return url_for('ops.plans')
+        if key=='update-salary': return url_for('ops.plans',view='update')
         if key=='lecture-delivery': return url_for('hrm_reports.lecture_delivery')
         if key in ('salary-report','lecture-report'): return url_for('hrm_reports.report',view=key)
         if key in ('generate-salary','pay-salary'): return url_for('ops.payroll',view=key)
@@ -280,7 +281,7 @@ def configure_operations(app, db, Student, Employee):
         if key in ('sms-report','family-sms','notifications','staff-sms'): return url_for('ops.message_log',view=key)
         if key=='admission-approvals':
             return url_for('admission_limits.approvals')
-        if key=='salary-approvals': return url_for('ops.plans')
+        if key=='salary-approvals': return url_for('ops.plans',view='approvals')
         if key=='teacher-performance': return url_for('reports.teacher_performance')
         if key=='student-360': return url_for('student_overview.index')
         return url_for('ops.entry',key=key)
@@ -1537,14 +1538,21 @@ def configure_operations(app, db, Student, Employee):
     def plans():
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
         deduction_types=['Absent','Late','Leave','Short Leave','Death Leave','Paper Leave']
+        view=request.args.get('view','')
+        if view not in ('','approvals','update'):abort(404)
         edit=request.values.get('edit','');obj=db.session.get(Workflow,int(edit)) if edit else None
-        if obj and obj.kind!='salary-plans': abort(404)
+        if edit and (not obj or obj.kind!='salary-plans'): abort(404)
+        def plan_rows():
+            return Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all()
+        if request.method=='GET' and view in ('approvals','update') and not edit:
+            return render('salary_plan_list.html',title='Salary Plan Approvals' if view=='approvals' else 'Update Salary Plan',rows=plan_rows(),employee=lambda id:db.session.get(Employee,int(id)),plan_view=view)
+
         if request.method=='POST':
             if request.form.get('action') in ('approve','reject'):
                 rows=Workflow.query.filter(Workflow.id.in_(selected()),Workflow.kind=='salary-plans').with_for_update().all()
                 if not rows: raise ValueError('Select salary plans.')
                 for p in rows: p.status='Approved' if request.form['action']=='approve' else 'Rejected'
-                audit('Salary plan '+request.form['action'],ids=[p.id for p in rows]);commit();return redirect(url_for('ops.plans'))
+                audit('Salary plan '+request.form['action'],ids=[p.id for p in rows]);commit();flash('Salary plan approval decision saved.','success');return redirect(url_for('ops.plans',view='approvals') if view=='approvals' else url_for('ops.plans'))
             employee_id=int(request.form.get('employee_id','0'));db.get_or_404(Employee,employee_id)
             data=dict(employee_id=str(employee_id))
             for k in ['basic','security_return','security_payment','incentive_per_lecture','annual_increment','bonus_amount']:
@@ -1577,7 +1585,7 @@ def configure_operations(app, db, Student, Employee):
             if obj: obj.data=data;obj.status='Pending'
             else: db.session.add(Workflow(kind='salary-plans',data=data,status='Pending'))
             audit('Save salary plan',employee=employee_id);commit();flash('Salary plan saved for approval.','success');return redirect(url_for('ops.plans'))
-        return render('salary_plans.html',title='Create / Update Salary Plan',rows=Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all(),employee=lambda id:db.session.get(Employee,int(id)),data=obj.data if obj else {},edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=None,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
+        return render('salary_plans.html',title='Update Salary Plan' if obj else 'Create Salary Plan',rows=plan_rows(),employee=lambda id:db.session.get(Employee,int(id)),data=obj.data if obj else {},edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=None,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
 
     def lecture_amount(entry,month_value):
         if entry.data.get('rate_override'): return money(entry.data['rate_override'])*int(entry.data['lectures'])
