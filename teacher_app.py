@@ -95,7 +95,7 @@ def configure_teacher_app(app,db,Student,Employee):
             for prefix in prefixes:
                 if key.startswith(prefix) and key[len(prefix):] not in {str(n) for n in ids}:abort(403,'A student outside this class was submitted.')
     def audit(action,c=None,**values):db.session.add(Audit(action=action,data=dict(staff_id=g.staff_principal.id,employee_id=g.teacher_employee.id,campus=c.data['campus'] if c else '',**values)))
-    def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','timetable':'Class Timetable','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace'}.get(view,view.title()),**values)
+    def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','timetable':'Class Timetable','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','class_exams':'Award Lists','class_marks':'Class Award List','create_exam':'Create Award List','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace'}.get(view,view.title()),**values)
     @bp.context_processor
     def context():
         return dict(teacher=g.teacher_employee,teacher_account=g.staff_principal,teacher_today=school_today(),teacher_classes=cohorts(),teacher_periods=app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()) if request.endpoint in ('teacher_app.home','teacher_app.reminders') else [],teacher_can=lambda code,campus:campus in grants(code),teacher_token=secrets.token_urlsafe(32),teacher_study=STUDY,timedelta=timedelta,teacher_own=own_access,teacher_money=lambda n:'Rs '+f'{n/100:,.2f}')
@@ -138,7 +138,14 @@ def configure_teacher_app(app,db,Student,Employee):
         notices=[dict(period_notice(row,row['day']),due_at=row['due_at'],starts_at=row['starts_at']) for row in alerts]
         return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events(),lecture_alerts=notices)
     @bp.get('/classes')
-    def classes():return render('classes')
+    def classes():
+        if request.args.get('feature')=='exam_list':
+            groups={}
+            for c in cohorts('exam.view'):
+                key=class_key(c)
+                if key not in groups or not c.data.get('subject'):groups[key]=c
+            return render('classes',exam_classes=list(groups.values()))
+        return render('classes')
     @bp.get('/timetable')
     def timetable():
         periods=app.extensions['automatic_report_helpers']['teacher_timetable'](cohorts())
@@ -269,28 +276,114 @@ def configure_teacher_app(app,db,Student,Employee):
             for i,p in enumerate(a.data.get('papers',[])):
                 if p.get('subject')==c.data['subject'] and str(p.get('teacher') or g.teacher_employee.id)==str(g.teacher_employee.id):out.append((a,i,p))
         return out
+    def class_key(c):
+        return tuple(c.data[k] for k in ('campus','class_name','section'))
+    def exam_subjects(c,permission):
+        # The class card selects a cohort, not a new grant. Every subject
+        # still requires an active assignment and the requested exam capability.
+        return {subject:subject_cohort(row,subject) for row in cohorts(permission)
+                if class_key(row)==class_key(c) for subject in subject_choices(row)}
+    def class_exams(c,permission):
+        subjects=exam_subjects(c,permission);out=[]
+        # Scan the saved award lists once, preserving the school's paper order.
+        for award in W.query.filter_by(kind='awards',status='Active').order_by(W.id.desc()).all():
+            if award.data.get('campus')!=c.data['campus'] or award.data.get('class_name')!=c.data['class_name'] or award.data.get('section') not in ('',None,c.data['section']):continue
+            papers=[(i,p,subjects[p['subject']]) for i,p in enumerate(award.data.get('papers',[])) if p.get('subject') in subjects and str(p.get('teacher') or g.teacher_employee.id)==str(g.teacher_employee.id)]
+            if papers:out.append((award,papers))
+        return out
     @bp.route('/classes/<int:cid>/exams/new',methods=['GET','POST'])
     def create_exam(cid):
-        c=cohort(cid,'exam.create',subject_required=True);rows=roster(c,False);catalog={k:sorted({d.get(k) for s,d in rows if d.get(k)}) for k in ('gender','group_name','academic_session')};settings=app.extensions['school_settings_helpers'];config=settings['subject_config'](c.data['subject']);grading=config.get('grading','Marks');token=review('new-exam',cid,dict(assignment=c.data,catalog=catalog,config=config))
+        explicit=bool(request.args.get('subject'))
+        c=cohort(cid,'exam.create',subject_required=explicit)
+        subjects={c.data['subject']:c} if explicit else exam_subjects(c,'exam.create')
+        if not subjects:abort(403,'No subjects are assigned for creating award lists.')
+        rows=roster(c,False);catalog={k:sorted({d.get(k) for s,d in rows if d.get(k)}) for k in ('gender','group_name','academic_session')}
+        settings=app.extensions['school_settings_helpers'];configs=[dict(subject=subject,config=settings['subject_config'](subject)) for subject in sorted(subjects,key=str.casefold)]
+        token=review('new-class-exam',cid,dict(assignments={k:v.data for k,v in subjects.items()},catalog=catalog,configs=configs))
         if request.method=='POST':
             name=request.form.get('name','').strip();day=parse_day(request.form.get('exam_date'));returned=parse_day(request.form.get('return_date'));typ=request.form.get('test_type');sort=request.form.get('sort_order');filtering=request.form.get('student_filter')
             if not 1<=len(name)<=180 or typ not in ('Written','Oral','Practical') or sort not in ('sid','roll','section') or filtering not in ('class','subject') or returned<day:raise ValueError('Check exam name, dates, assessment type and sorting.')
             selection={k:request.form.get(k,'') for k in catalog}
             if any(value and value not in catalog[k] for k,value in selection.items()):raise ValueError('Choose values present in this assigned class.')
-            maximum=Decimal(0)
-            if grading=='Marks':
-                try:maximum=Decimal(request.form.get('total',''))
-                except InvalidOperation:raise ValueError('Enter the numeric paper total.')
-                if not maximum.is_finite() or not 0<maximum<=10000:raise ValueError('Total marks must be positive and at most 10,000.')
+            chosen=request.form.getlist('subjects')
+            if not chosen or len(chosen)!=len(set(chosen)) or not set(chosen)<=set(map(str,range(len(configs)))):raise ValueError('Select only the assigned subjects for this exam.')
+            papers=[]
+            for i,item in enumerate(configs):
+                if str(i) not in chosen:continue
+                config=item['config'];grading=config.get('grading','Marks');maximum=Decimal(0)
+                if grading=='Marks':
+                    try:maximum=Decimal(request.form.get('total_'+str(i),''))
+                    except InvalidOperation:raise ValueError('Enter the numeric paper total for '+item['subject']+'.')
+                    if not maximum.is_finite() or not 0<maximum<=10000:raise ValueError('Total marks must be positive and at most 10,000.')
+                papers.append(dict(subject=item['subject'],grading=grading,subject_group=config.get('group',''),date=str(day),type=typ,total=float(maximum),teacher=str(g.teacher_employee.id),time='',syllabus=''))
             if W.query.filter(W.kind=='awards',W.data['name'].as_string()==name).first():raise ValueError('An award list already uses this name. Choose a unique name.')
-            data=dict(name=name,print_heading=name,campus=c.data['campus'],class_name=c.data['class_name'],section=c.data['section'],return_date=str(returned),sort_order=sort,student_filter=filtering,recheck=request.form.get('recheck')=='1',**selection,papers=[dict(subject=c.data['subject'],grading=grading,subject_group=config.get('group',''),date=str(day),type=typ,total=float(maximum),teacher=str(g.teacher_employee.id),time='',syllabus='')])
-            row=W(kind='awards',status='Active',data=data);db.session.add(row);audit('Teacher created assigned subject award list',c);db.session.commit();return redirect(url_for('teacher_app.exam_list',cid=cid))
-        return render('create_exam',cohort=c,catalog=catalog,grading=grading,review_token=token)
+            data=dict(name=name,print_heading=name,campus=c.data['campus'],class_name=c.data['class_name'],section=c.data['section'],return_date=str(returned),sort_order=sort,student_filter=filtering,recheck=request.form.get('recheck')=='1',**selection,papers=papers)
+            row=W(kind='awards',status='Active',data=data);db.session.add(row);audit('Teacher created assigned class award list',c,subjects=[p['subject'] for p in papers]);db.session.commit();return redirect(url_for('teacher_app.exam_list',cid=cid))
+        return render('create_exam',cohort=c,catalog=catalog,configs=configs,review_token=token)
 
     @bp.get('/classes/<int:cid>/exams')
     def exam_list(cid):
-        c=cohort(cid,'exam.view',subject_required=True);q=request.args.get('q','').strip()[:120].casefold();rows=[r for r in exams(c) if not q or q in (' '.join([str(r[0].id),str(r[0].data.get('name','')),c.data['class_name'],r[2]['subject']])).casefold()]
-        return render('exams',cohort=c,exams=rows,search=request.args.get('q','')[:120])
+        q=request.args.get('q','').strip()[:120].casefold()
+        if request.args.get('subject'):
+            c=cohort(cid,'exam.view',subject_required=True)
+            rows=[r for r in exams(c) if not q or q in (' '.join([str(r[0].id),str(r[0].data.get('name','')),c.data['class_name'],r[2]['subject']])).casefold()]
+            return render('exams',cohort=c,exams=rows,search=request.args.get('q','')[:120])
+        c=cohort(cid,'exam.view')
+        rows=[(a,papers) for a,papers in class_exams(c,'exam.view') if not q or q in ' '.join([str(a.id),a.data.get('name',''),c.data['class_name'],*[p['subject'] for _,p,_ in papers]]).casefold()]
+        return render('class_exams',cohort=c,exams=rows,search=request.args.get('q','')[:120],subjects=exam_subjects(c,'exam.view'))
+
+    def paper_marks(c,a,i,p):
+        rows=[(s,d) for s,d in exam_rows(c,a) if enrolled(a,p,d)];ids=[s.id for s,d in rows]
+        numeric=p.get('grading','Marks')=='Marks';Model=ops['score'] if numeric else ops['qualitative']
+        saved={r.student_id:r for r in Model.query.filter_by(award_id=a.id,paper=i).filter(Model.student_id.in_(ids)).all()}
+        direct=app.extensions['school_settings_helpers']['direct_choices'](c.data['campus'],c.data['class_name'])
+        snapshot=dict(assignment=c.data,roster=[(s.id,s.name,d.get('roll_no')) for s,d in rows],grading=direct,saved=[(sid,r.obtained if numeric else r.value,r.state,'' if numeric else r.remarks) for sid,r in sorted(saved.items())])
+        return SimpleNamespace(index=i,paper=p,scope=c,rows=rows,ids=set(ids),numeric=numeric,model=Model,saved=saved,direct=direct,snapshot=snapshot)
+    def save_paper(a,column,prefix=''):
+        i=column.index;p=column.paper;Model=column.model;saved=column.saved;numeric=column.numeric;direct=column.direct
+        for s,d in column.rows:
+            keys=[k+prefix+str(s.id) for k in ('mark_','state_')]
+            if not any(k in request.form for k in keys):continue
+            value=request.form.get(keys[0],'').strip();state=request.form.get(keys[1],'')
+            if state not in ('','A','L'):raise ValueError('Invalid paper attendance.')
+            row=saved.get(s.id)
+            if numeric:
+                try:n=Decimal(value) if value else None;maximum=Decimal(str(p['total']))
+                except (InvalidOperation,KeyError):raise ValueError('Enter valid marks.')
+                if n is not None and (not n.is_finite() or not 0<=n<=maximum):raise ValueError(p['subject']+': marks must be within the saved paper total.')
+                if not row:row=Model(award_id=a.id,student_id=s.id,paper=i);db.session.add(row)
+                row.obtained=None if state or n is None else float(n)
+            else:
+                mode=p.get('grading');permitted={'0','1'} if mode=='Checkbox' else set(direct) if mode=='Direct Grading' else set()
+                if value and value not in permitted and (not row or value!=row.value):raise ValueError('Choose a configured grade.')
+                if not row:row=Model(award_id=a.id,student_id=s.id,paper=i);db.session.add(row)
+                row.value=None if state else value or None;row.remarks=direct.get(value,'') if mode=='Direct Grading' else ''
+            row.state=state
+    @bp.route('/classes/<int:cid>/award/<int:aid>',methods=['GET','POST'])
+    def class_marks(cid,aid):
+        c=cohort(cid,'exam.update' if request.method=='POST' else 'exam.view')
+        papers=next(((a,p) for a,p in class_exams(c,'exam.view') if a.id==aid),None)
+        if not papers:abort(403,'This award list is not assigned to your class.')
+        a,selected=papers
+        # A paper assigned explicitly to another teacher remains excluded.
+        release_model=app.extensions.get('parent_exam_release_model')
+        release=db.session.get(release_model,aid) if release_model is not None else None
+        published=bool(release and release.published)
+        if published and request.method=='POST':abort(403,'Published results are locked. Contact the school owner.')
+        columns=[paper_marks(scope,a,i,p) for i,p,scope in selected]
+        rows=[(s,d) for s,d in exam_rows(c,a) if any(s.id in col.ids for col in columns)]
+        snapshot=dict(award=a.data,publication_version=release.version if release else 0,published=published,papers=[(col.index,col.snapshot) for col in columns])
+        token=review('class-marks',f'{cid}:{aid}',snapshot)
+        if request.method=='POST':
+            updates={subject for subject in exam_subjects(c,'exam.update')}
+            allowed={k+str(col.index)+'_'+str(sid) for col in columns if col.paper['subject'] in updates for sid in col.ids for k in ('mark_','state_')}
+            if any(key.startswith(('mark_','state_')) and key not in allowed for key in request.form):abort(403,'This student or exam paper is not assigned to you.')
+            for col in columns:
+                if col.paper['subject'] in updates:save_paper(a,col,str(col.index)+'_')
+            audit('Teacher saved class award marks',c,award_id=aid,papers=[col.index for col in columns if col.paper['subject'] in updates]);db.session.commit()
+            flash('Award list marks saved. Parent report publication remains with the school.','success');return redirect(url_for('teacher_app.class_marks',cid=cid,aid=aid))
+        return render('class_marks',cohort=c,award=a,columns=columns,rows=rows,review_token=token,published=published,editable=not published and c.data['campus'] in grants('exam.update'),maximum=sum(col.paper.get('total',0) for col in columns if col.numeric))
+
     @bp.route('/classes/<int:cid>/marks/<int:aid>/<int:paper>',methods=['GET','POST'])
     def marks(cid,aid,paper):
         c=cohort(cid,'exam.update' if request.method=='POST' else 'exam.view',subject_required=True);selected=next(((a,i,p) for a,i,p in exams(c) if a.id==aid and i==paper),None)
@@ -305,23 +398,7 @@ def configure_teacher_app(app,db,Student,Employee):
         snapshot=dict(publication_version=release.version if release else 0,published=published,assignment=c.data,award=a.data,roster=[(s.id,s.name,d.get('roll_no')) for s,d in rows],grading=direct,saved=[(sid,r.obtained if numeric else r.value,r.state,'' if numeric else r.remarks) for sid,r in sorted(saved.items())]);token=review('marks',str(cid)+':'+str(aid)+':'+str(i),snapshot)
         if request.method=='POST':
             extra_ids(['mark_','state_'],ids)
-            for s,d in rows:
-                if not any(k+str(s.id) in request.form for k in ('mark_','state_')):continue
-                state=request.form.get('state_'+str(s.id),'');value=request.form.get('mark_'+str(s.id),'').strip()
-                if state not in ('','A','L'):raise ValueError('Invalid paper attendance.')
-                row=saved.get(s.id)
-                if numeric:
-                    try:n=Decimal(value) if value else None;maximum=Decimal(str(p['total']))
-                    except (InvalidOperation,KeyError):raise ValueError('Enter valid marks.')
-                    if n is not None and (not n.is_finite() or not 0<=n<=maximum):raise ValueError('Marks must be within the saved paper total.')
-                    if not row:row=Model(award_id=aid,student_id=s.id,paper=i);db.session.add(row)
-                    row.obtained=None if state or n is None else float(n)
-                else:
-                    mode=p.get('grading');permitted={'0','1'} if mode=='Checkbox' else set(direct) if mode=='Direct Grading' else set()
-                    if value and value not in permitted and (not row or value!=row.value):raise ValueError('Choose a configured grade.')
-                    if not row:row=Model(award_id=aid,student_id=s.id,paper=i);db.session.add(row)
-                    row.value=None if state else value or None;row.remarks=direct.get(value,'') if mode=='Direct Grading' else ''
-                row.state=state
+            save_paper(a,SimpleNamespace(index=i,paper=p,rows=rows,model=Model,saved=saved,numeric=numeric,direct=direct))
             audit('Teacher saved subject marks',c,award_id=aid,paper=i);db.session.commit();flash('Marks saved. Parent report publication remains with the school.','success');return redirect(url_for('teacher_app.marks',cid=cid,aid=aid,paper=i))
         return render('marks',cohort=c,award=a,paper=p,paper_index=i,rows=rows,saved=saved,numeric=numeric,direct=direct,review_token=token,published=published)
     @bp.route('/meetings',methods=['GET','POST'])

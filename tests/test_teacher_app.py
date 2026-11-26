@@ -155,7 +155,7 @@ class TeacherAppTests(unittest.TestCase):
         self.assertIn(b'Class only',home.data)
         self.assertIn((root+'/attendance').encode(),home.data)
         self.assertIn((root+'/subjects/diary').encode(),home.data)
-        self.assertIn((root+'/subjects/exam_list').encode(),home.data)
+        self.assertIn((root+'/exams').encode(),home.data)
         self.assertNotIn(b'Campus B',home.data)
         page=self.c.get(root+'/attendance')
         self.assertEqual(page.status_code,200);self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
@@ -613,6 +613,83 @@ class TeacherAppTests(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertRegex(page.data,rb'name="mark_'+str(self.pupil).encode()+rb'_1" value="44(?:\.0)?"')
         self.assertRegex(page.data,rb'name="mark_'+str(self.pupil).encode()+rb'_0" value="30(?:\.0)?"')
+
+    def test_combined_award_all_assigned_subjects_atomic_save_and_publication_lock(self):
+        self.seed()
+        def make():
+            W=self.ops['workflow'];assignment=db.session.get(W,self.cid);assignment.data={**assignment.data,'subject':''}
+            for name in ('English','Urdu','Computer'):
+                db.session.add(self.rm['settings'](category='subject',value=name,class_name='One'))
+            teacher=str(db.session.get(self.Staff,self.sid).employee_id)
+            papers=[dict(subject='Math',grading='Marks',total=50,teacher=teacher),dict(subject='English',grading='Marks',total=40,teacher=teacher),dict(subject='Urdu',grading='Marks',total=30,teacher='9999'),dict(subject='Computer',grading='Checkbox',total=0,teacher=teacher)]
+            a=W(kind='awards',status='Active',data=dict(name='Fictional class test',campus='Campus A',class_name='One',section='A',papers=papers))
+            db.session.add(a);db.session.flush()
+            db.session.add(self.ops['score'](award_id=a.id,student_id=self.pupil,paper=0,obtained=35,state=''))
+            return a.id
+        aid=self.tenant(make);root=f'/teacher-app/classes/{self.cid}';path=root+f'/award/{aid}'
+        page=self.c.get(root+'/exams');self.assertEqual(page.status_code,200);self.assertEqual(page.data.count(f'/award/{aid}'.encode()),1);self.assertIn(b'3 subjects',page.data)
+        page=self.c.get(path);self.assertEqual(page.status_code,200)
+        self.assertIn(b'Maximum marks',page.data);self.assertIn(b'Save all marks',page.data);self.assertIn(b'English',page.data);self.assertIn(b'Computer',page.data)
+        self.assertNotIn(b'Urdu',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        token=self.review(path)
+        mark=lambda i:f'mark_{i}_{self.pupil}'
+        data={'_csrf':self.token(),'review':token,mark(0):'42',mark(1):'41',mark(3):'1'}
+        self.assertEqual(self.c.post(path,data=data).status_code,422)
+        self.tenant(lambda:self.assertEqual([(r.paper,r.obtained) for r in self.ops['score'].query.all()],[(0,35)]))
+        data[mark(1)]='39'
+        self.assertEqual(self.c.post(path,data={**data,mark(2):'25'}).status_code,403)
+        self.assertEqual(self.c.post(path,data={**data,'mark_0_99999':'12'}).status_code,403)
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        def check():
+            self.assertEqual([(r.paper,r.obtained) for r in self.ops['score'].query.order_by(self.ops['score'].paper).all()],[(0,42),(1,39)])
+            self.assertEqual(self.ops['qualitative'].query.one().value,'1')
+        self.tenant(check)
+        self.assertNotEqual(self.c.post(path,data=data).status_code,302)
+        token=self.review(path)
+        self.tenant(lambda:db.session.add(app.extensions['parent_exam_release_model'](award_id=aid,published=True)))
+        self.assertEqual(self.c.post(path,data={**data,'review':token}).status_code,403)
+        self.assertNotIn(b'Save all marks',self.c.get(path).data)
+
+    def test_combined_award_subject_teacher_multiple_assignments_and_stale_review(self):
+        self.seed()
+        def make():
+            W=self.ops['workflow'];assignment=db.session.get(W,self.cid)
+            db.session.add(self.rm['settings'](category='subject',value='English',class_name='One'))
+            other=W(kind='teacher-classes',status='Active',data={**assignment.data,'subject':'English'})
+            db.session.add(other);db.session.flush()
+            papers=[dict(subject='Math',grading='Marks',total=50),dict(subject='English',grading='Marks',total=40),dict(subject='Urdu',grading='Marks',total=30)]
+            a=W(kind='awards',status='Active',data=dict(name='Fictional lecture test',campus='Campus A',class_name='One',section='A',papers=papers))
+            db.session.add(a);db.session.flush()
+            return a.id,other.id
+        aid,cid2=self.tenant(make);root=f'/teacher-app/classes/{self.cid}';path=root+f'/award/{aid}'
+        page=self.c.get('/teacher-app/classes?feature=exam_list');self.assertEqual(page.status_code,200);self.assertEqual(page.data.count(b'Award lists'),1)
+        page=self.c.get(path);self.assertIn(b'English',page.data);self.assertIn(b'Math',page.data);self.assertNotIn(b'Urdu',page.data)
+        token=self.review(path)
+        data={'_csrf':self.token(),'review':token,f'mark_0_{self.pupil}':'32',f'mark_1_{self.pupil}':'37'}
+        self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],cid2),'status','Voided'))
+        self.assertEqual(self.c.post(path,data=data).status_code,422)
+        self.tenant(lambda:self.assertEqual(self.ops['score'].query.count(),0))
+        page=self.c.get(path);self.assertNotIn(b'English',page.data);self.assertIn(b'Math',page.data)
+
+    def test_create_one_award_with_multiple_subject_totals(self):
+        self.seed()
+        def full():
+            row=db.session.get(self.ops['workflow'],self.cid);row.data={**row.data,'subject':''}
+            db.session.add(self.rm['settings'](category='subject',value='English',class_name='One'))
+            db.session.add(self.rm['settings'](category='subject',value='Other class',class_name='Two'))
+        self.tenant(full)
+        root=f'/teacher-app/classes/{self.cid}';path=root+'/exams/new';page=self.c.get(path)
+        self.assertIn(b'English',page.data);self.assertIn(b'Math',page.data);self.assertNotIn(b'Other class',page.data)
+        data=dict(_csrf=self.token(),review=self.review(path),name='Fictional combined monthly',exam_date=str(school_today()),return_date=str(school_today()+timedelta(days=1)),test_type='Written',sort_order='roll',student_filter='class',subjects=['0','1'],total_0='40',total_1='50')
+        self.assertEqual(self.c.post(path,data={**data,'subjects':['0','1','2']}).status_code,422)
+        self.assertEqual(self.c.post(path,data={**data,'total_1':'NaN'}).status_code,422)
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        def check():
+            a=self.ops['workflow'].query.filter_by(kind='awards').one()
+            self.assertEqual([(p['subject'],p['total']) for p in a.data['papers']],[('English',40),('Math',50)])
+            return a.id
+        aid=self.tenant(check)
+        self.assertIn(b'Maximum marks',self.c.get(root+f'/award/{aid}').data)
 
     def test_material_publication_and_files_stay_assigned(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/materials';page=self.c.get(path);token=re.search(rb'name="token" value="([^"]+)"',page.data).group(1).decode()
