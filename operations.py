@@ -2,7 +2,7 @@
 import calendar, csv, hmac, io, json, re, secrets, hashlib
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
-from school_clock import school_today
+from school_clock import school_today,normalize_clock,attendance_clock
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for, has_request_context, send_file, make_response
 from sqlalchemy import case
@@ -136,6 +136,7 @@ def configure_operations(app, db, Student, Employee):
     app.extensions['ops_models'] = dict(workflow=Workflow,bill=Bill,receipt=Receipt,daily=Daily,score=Score,qualitative=QualitativeScore,salary=Salary,audit=Audit)
     app.extensions['exam_marks_save_model']=ExamMarksSave
     app.extensions['salary_increment_request_model']=SalaryIncrementRequest
+    app.jinja_env.filters['attendance_clock']=attendance_clock
     app.jinja_env.filters['cash'] = lambda x: f'{(x or 0)/100:,.2f}'.rstrip('0').rstrip('.')
     app.jinja_env.globals.update(zip=zip)
 
@@ -944,7 +945,7 @@ def configure_operations(app, db, Student, Employee):
             if action=='send' and (request.form.get('branded_sms')=='on' or request.form.get('whatsapp_sms')=='on'):flash('External SMS/WhatsApp requests require a connected provider.','warning')
             return redirect(url_for('ops.take_attendance',kind='student',**{k:request.form[k] for k in ('mode','from','to','campus','class_name','section','academic_session','gender','search','status_filter','origin_filter') if request.form.get(k)}))
         if request.args.get('export'):
-            return csv_response(['Date','Attendance Type','SID','Roll No','Student','Father Name','Attendance','Campus','Class','Section','Session','Gender','Shift In','Mark In','Shift Out','Mark Out'],[[r['day'],r['origin'],r['p'].id,r['detail'].get('roll_no',''),r['p'].name,r['p'].father,r['status'] or 'Unmarked',r['detail'].get('campus',''),r['p'].class_name,r['detail'].get('section',''),r['detail'].get('academic_session',''),r['detail'].get('gender',''),r['schedule'].get('in',''),r['record'].time_in if r['record'] else '',r['schedule'].get('out',''),r['record'].time_out if r['record'] else ''] for r in rows],'student-attendance')
+            return csv_response(['Date','Attendance Type','SID','Roll No','Student','Father Name','Attendance','Campus','Class','Section','Session','Gender','Shift In','Mark In','Shift Out','Mark Out'],[[r['day'],r['origin'],r['p'].id,r['detail'].get('roll_no',''),r['p'].name,r['p'].father,r['status'] or 'Unmarked',r['detail'].get('campus',''),r['p'].class_name,r['detail'].get('section',''),r['detail'].get('academic_session',''),r['detail'].get('gender',''),attendance_clock(r['schedule'].get('in','')),attendance_clock(r['record'].time_in) if r['record'] else '',attendance_clock(r['schedule'].get('out','')),attendance_clock(r['record'].time_out) if r['record'] else ''] for r in rows],'student-attendance')
         codes={'Present':'P','Absent':'A','Late':'L','Leave':'LV','Short Leave':'SL','Off Day':'OD','Death Leave':'DL','Paper Leave':'PL'}
         return render('student_attendance_grid.html',title='Student Attendance',kind='student',mode=mode,start=start,end=end,rows=rows,codes=codes,summary=Counter(r['status'] or 'Unmarked' for r in rows),saved_count=saved_count,scope_filters=scope_filters,roster_count=len(pupils))
     
@@ -973,9 +974,7 @@ def configure_operations(app, db, Student, Employee):
                 for k in ('time_in','time_out'):
                     field=k+'_'+str(p.id)
                     if kind=='student' and field not in request.form:continue
-                    val=request.form.get(field,'')
-                    if val and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',val): raise ValueError('Enter valid times.')
-                    setattr(row,k,val)
+                    setattr(row,k,normalize_clock(request.form.get(field,'')))
                 count+=1
             if request.form.get('send'): queue('Attendance',[p.id for p in objs if request.form.get('status_'+str(p.id))],audience='parent' if kind=='student' else kind,event='attendance',context={'day':d.isoformat()})
             audit('Save attendance',kind=kind,day=str(d),count=count);commit();flash(f'{count} attendance records saved.','success')
@@ -994,7 +993,7 @@ def configure_operations(app, db, Student, Employee):
         rows=Daily.query.filter(Daily.kind==kind,Daily.day>=start,Daily.day<=end).order_by(Daily.day.desc(),Daily.person_id).all()
         if view=='absentees': rows=[r for r in rows if r.status=='Absent']
         if request.args.get('person_id'): rows=[r for r in rows if str(r.person_id)==request.args['person_id']]
-        if request.args.get('export'): return csv_response(['Date','Name','Status','Lectures','Time In','Time Out'],[[r.day,db.session.get(cls,r.person_id).name,r.status,r.lectures,r.time_in,r.time_out] for r in rows],'attendance')
+        if request.args.get('export'): return csv_response(['Date','Name','Status','Lectures','Time In','Time Out'],[[r.day,db.session.get(cls,r.person_id).name,r.status,r.lectures,attendance_clock(r.time_in),attendance_clock(r.time_out)] for r in rows],'attendance')
         return render('attendance_report.html',title=TITLES.get(view,'Attendance Report'),rows=rows,person=lambda id:db.session.get(cls,id),summary=Counter(r.status for r in rows),kind=kind)
 
     def date_sheet_scopes():

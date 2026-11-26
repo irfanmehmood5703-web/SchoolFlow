@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const ed=activeEditor||document.querySelector('.settings-rich-editor');if(ed)insert(ed,b.dataset.insertTag);
  }));
  document.querySelectorAll('[data-copy-tag]').forEach(b=>b.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(b.dataset.copyTag);b.textContent='Copied '+b.dataset.copyTag}catch{b.textContent='Copy: '+b.dataset.copyTag}}));
- document.querySelectorAll('[data-day-off]').forEach(c=>{const update=()=>c.closest('tr').querySelectorAll('input[type=time]').forEach(i=>{const ownOff=c.closest('tr').querySelector('[name="'+i.name.replace('_','_off_')+'"]');i.disabled=c.checked||!!ownOff?.checked;i.required=!i.disabled});c.closest('tr').querySelectorAll('input[type=checkbox]').forEach(x=>x.addEventListener('change',update));c.addEventListener('change',update);update()});
+ document.querySelectorAll('[data-day-off]').forEach(c=>{const update=()=>c.closest('tr').querySelectorAll('[data-attendance-clock]').forEach(i=>{const ownOff=c.closest('tr').querySelector('[name="'+i.name.replace('_','_off_')+'"]');i.disabled=c.checked||!!ownOff?.checked;i.required=!i.disabled});c.closest('tr').querySelectorAll('input[type=checkbox]').forEach(x=>x.addEventListener('change',update));c.addEventListener('change',update);update()});
  document.querySelectorAll('[data-settings-order]').forEach(body=>{
   let dragging=null;
   body.addEventListener('dragstart',e=>{dragging=e.target.closest('[data-order-row]');if(dragging)e.dataTransfer.setData('text/plain',dragging.dataset.orderRow)});

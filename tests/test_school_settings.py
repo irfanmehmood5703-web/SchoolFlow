@@ -176,6 +176,46 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertNotIn(b'name="designations" value="Class Teacher" checked',edit.data)
         self.assertNotIn(b'name="designations" value="Clerk" checked',edit.data)
         self.assertEqual(self.c.get('/workspace/core/hrm/assign-shifts').status_code,200)
+    def test_attendance_clock_formats_shift_form_report_and_preserves_storage(self):
+        from school_clock import normalize_clock,attendance_clock
+        for canonical,label in [('00:00','12:00 AM'),('08:00','08:00 AM'),('12:00','12:00 PM'),('14:00','02:00 PM'),('23:59','11:59 PM'),('','')]:
+            self.assertEqual(attendance_clock(canonical),label)
+            self.assertEqual(normalize_clock(label),canonical)
+        for invalid in ('13:00 PM','00:10 AM','2:60 PM','25:00','noon'):
+            with self.assertRaises(ValueError):normalize_clock(invalid)
+        self.assertEqual(self.shift(**{'time_'+str(i):'8:00 AM' for i in range(7)}).status_code,302)
+        morning=self.item('shift-template')
+        self.assertEqual(morning.data['days']['0']['time'],'08:00')
+        self.assertEqual(self.shift(name='Afternoon',direction='out',**{'time_'+str(i):'2:00 PM' for i in range(7)}).status_code,302)
+        afternoon=self.m['item'].query.filter_by(kind='shift-template',name='Afternoon').one()
+        self.assertEqual(afternoon.data['days']['0']['time'],'14:00')
+        edit=self.c.get('/workspace/core/hrm/shift-templates?edit='+str(afternoon.id))
+        self.assertIn(b'name="time_0" value="02:00 PM"',edit.data)
+        self.assertNotIn(b'type="time" name="time_',edit.data)
+        assignment={'_csrf':self.csrf,'version':'0','action':'save','employee_ids':str(self.e.id),f'in_{self.e.id}_0':str(morning.id),f'out_{self.e.id}_0':str(afternoon.id)}
+        self.assertEqual(self.c.post('/workspace/core/hrm/assign-shifts',data=assignment).status_code,302)
+        path='/workspace/attendance/staff'
+        page=self.c.get(path+'?day=2026-09-07')
+        self.assertEqual(page.status_code,200)
+        self.assertIn('08:00 AM – 02:00 PM'.encode(),page.data)
+        self.assertIn(b'name="time_in_'+str(self.e.id).encode()+b'"',page.data)
+        self.assertNotIn(b'type="time" name="time_in_',page.data)
+        values={'_csrf':self.csrf,'day':'2026-09-07',f'status_{self.e.id}':'Present',f'time_in_{self.e.id}':'08:05 AM',f'time_out_{self.e.id}':'2:10 PM'}
+        self.assertEqual(self.c.post(path,data=values).status_code,302)
+        row=self.ops['daily'].query.one()
+        self.assertEqual((row.time_in,row.time_out),('08:05','14:10'))
+        page=self.c.get(path+'?day=2026-09-07')
+        self.assertIn(b'value="08:05 AM"',page.data)
+        self.assertIn(b'value="02:10 PM"',page.data)
+        report='/workspace/attendance-report?view=staff-attendance-report&from=2026-09-07&to=2026-09-07'
+        for response in [self.c.get(report),self.c.get(report+'&export=csv')]:
+            self.assertEqual(response.status_code,200)
+            self.assertIn(b'08:05 AM',response.data)
+            self.assertIn(b'02:10 PM',response.data)
+        values[f'time_out_{self.e.id}']='14:10 PM'
+        self.assertEqual(self.c.post(path,data=values).status_code,422)
+        self.assertEqual(self.ops['daily'].query.one().time_out,'14:10')
+
     def test_shift_applicability_assignment_and_in_use_delete(self):
         self.assertEqual(self.shift().status_code,302);r=self.item('shift-template')
         path='/workspace/core/hrm/assign-shifts'

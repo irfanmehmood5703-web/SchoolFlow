@@ -71,7 +71,7 @@ class ReportTests(unittest.TestCase):
         db.session.add(Item(kind='hrm-branding',scope='Campus A',name='Individual Attendance Report',data=dict(header='[emp_name]|[emp_id]|[date]|[time]|[qr_status]',body='',footer='')))
         db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,1),status='Late',time_in='08:15'));db.session.commit()
         page=self.get('attendance/staff-attendance-report?from=2026-09-01&to=2026-09-01&person_id='+str(self.e.id));self.assertEqual(page.status_code,200)
-        self.assertIn(b'Fictional Teacher|T1|2026-09-01|08:15|Late',page.data);self.assertNotIn(b'[emp_name]',page.data)
+        self.assertIn(b'Fictional Teacher|T1|2026-09-01|08:15 AM|Late',page.data);self.assertNotIn(b'[emp_name]',page.data)
     def test_student_attendance_branding_uses_actual_details_not_other_pupil(self):
         Item=app.extensions['school_settings_models']['item'];db.session.add(self.rm['student'](student_id=self.s.id,data={'campus':'Campus A','roll_no':'0007','section':'A'}))
         db.session.add(Item(kind='exam-branding',scope='Campus A',name='Individual Attendance Report',data=dict(header='[studentName]|[fatherName]|[rollNo]|[sectionName]|[attendance]',body='',footer='')))
