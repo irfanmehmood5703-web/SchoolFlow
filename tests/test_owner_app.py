@@ -83,7 +83,7 @@ class OwnerAppTests(unittest.TestCase):
         _,ctx=self.page('/owner-app/report/complaints?campus=North');self.assertEqual(ctx['summary']['value'],1);self.assertIn('OWNER-A feedback',str(ctx['rows']))
     def test_all_pages_reports_tools_and_no_desktop_navigation(self):
         for path in ('','/reports','/approvals','/connect','/notifications','/profile','/widgets','/reminders','/activity'):
-            r,_=self.page('/owner-app'+path);self.assertNotIn(b'class="top-navigation"',r.data);self.assertNotIn(b'>null<',r.data)
+            r,_=self.page('/owner-app'+path);self.assertNotIn(b'class="top-navigation"',r.data);self.assertNotIn(b'>null<',r.data);self.assertIn(b'<meta name="schoolflow-document" content="1">',r.data)
         for key in REPORT_KEYS:self.assertIn(self.c.get('/owner-app/report/'+key).status_code,(200,302),key)
         for key,(_,path) in TOOLS.items():
             self.page('/owner-app/open/'+key)

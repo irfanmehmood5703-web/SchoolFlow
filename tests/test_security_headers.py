@@ -12,6 +12,18 @@ class SecurityHeadersTests(unittest.TestCase):
         secure=self.client.get('/healthz',base_url='https://school.example')
         self.assertEqual(secure.headers['Strict-Transport-Security'],'max-age=31536000')
         self.assertNotIn('Strict-Transport-Security',self.client.get('/healthz').headers)
+    def test_native_readiness_contract(self):
+        health=self.client.get('/healthz')
+        self.assertEqual(health.status_code,200)
+        self.assertEqual(health.mimetype,'application/json')
+        self.assertEqual(health.headers['X-SchoolFlow-Response'],'1')
+        self.assertEqual(health.json['status'],'ok')
+        self.assertTrue(health.json['build'].startswith('schoolflow-'))
+        self.assertIn('no-store',health.headers['Cache-Control'])
+        for path in ('/','/mobile/teacher','/mobile/parents','/mobile/owner'):
+            page=self.client.get(path)
+            self.assertEqual(page.status_code,200,path)
+            self.assertIn(b'<meta name="schoolflow-document" content="1">',page.data,path)
     def test_baseline_policy_preserves_capture_and_same_origin_print(self):
         response=self.client.get('/healthz');h=response.headers
         self.assertEqual(h['X-Content-Type-Options'],'nosniff')

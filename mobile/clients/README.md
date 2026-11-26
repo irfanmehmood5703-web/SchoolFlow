@@ -162,3 +162,15 @@ Android 12+ needs the Alarms & reminders access for exact timing and Android
 effort. Device force-stop and manufacturer battery restrictions can prevent or
 delay delivery. Schedule changes become effective at the next successful
 sync, and offline cache expires after 48 hours. This is not a push service.
+
+### Native school opening screen
+All school-branded Android apps show their locally packaged school logo and name
+while connecting. Only a successful, marked SchoolFlow JSON health response
+allows startup. Owner, Parent and Teacher WebViews remain covered until a
+SchoolFlow document is actually rendered; upstream HTML, including a successful
+HTTP 200 hosting wake-up page, is never accepted as a school page. Health
+checks retry for a bounded 105 seconds with a manual retry on failure. Native
+SMS/attendance tools may open their local screen after a connection timeout,
+subject to their existing connection and permission rules. Automatic retries
+never replay a business POST, SMS or new attendance action. Existing device
+state, cookies and signed app identities are preserved.

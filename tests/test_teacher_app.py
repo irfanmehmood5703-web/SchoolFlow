@@ -31,6 +31,7 @@ class TeacherAppTests(unittest.TestCase):
         self.assertIn(b'Fictional school',page.data)
         self.assertIn(b'Use the active Teacher account',page.data)
         self.assertIn(b'class="teacher-auth-card"',page.data)
+        self.assertIn(b'<meta name="schoolflow-document" content="1">',page.data)
         self.assertEqual(page.data.count(b'<h1>Fictional school</h1>'),1)
         self.assertNotIn(b'class="public-header"',page.data)
         self.assertIn(b'data-password-icon',page.data)
@@ -40,7 +41,8 @@ class TeacherAppTests(unittest.TestCase):
         for login in ('teacher.one','teacher@example.invalid'):
             r=self.app_login(login)
             self.assertTrue(r.location.endswith('/teacher-app'))
-            self.assertEqual(self.c.get(r.location).status_code,200)
+            dashboard=self.c.get(r.location);self.assertEqual(dashboard.status_code,200)
+            self.assertIn(b'<meta name="schoolflow-document" content="1">',dashboard.data)
             r=self.c.get('/mobile/teacher',follow_redirects=True)
             self.assertEqual(r.request.path,'/teacher-app')
             r=self.c.post('/auth/logout',data={'_csrf':self.token()},follow_redirects=True)

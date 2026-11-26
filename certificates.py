@@ -159,7 +159,7 @@ def configure_certificates(app,db,Student):
         if not hmac.compare_digest(signature,guardian_signature(iid)):abort(404)
         issue=db.get_or_404(CertificateIssue,iid)
         status=guardian_status(issue)
-        response=app.response_class('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guardian card verification</title><main style="font:18px Arial;max-width:480px;margin:12vh auto;padding:25px;border:2px solid #176b4a;border-radius:12px"><h2>SchoolFlow Guardian Card</h2><h1>'+str(escape(status))+'</h1><p>Reference: '+str(escape(issue.reference))+'</p><p>Verify the guardian photo in person before releasing a student.</p></main>',mimetype='text/html')
+        response=app.response_class('<!doctype html><meta name="schoolflow-document" content="1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guardian card verification</title><main style="font:18px Arial;max-width:480px;margin:12vh auto;padding:25px;border:2px solid #176b4a;border-radius:12px"><h2>SchoolFlow Guardian Card</h2><h1>'+str(escape(status))+'</h1><p>Reference: '+str(escape(issue.reference))+'</p><p>Verify the guardian photo in person before releasing a student.</p></main>',mimetype='text/html')
         response.headers['Cache-Control']='no-store';return response
     @bp.post('/guardian-revoke/<int:iid>')
     def guardian_revoke(iid):
