@@ -7,3 +7,6 @@
 .teacher-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.teacher-feature{display:flex;flex-direction:column;align-items:flex-start;gap:10px;color:var(--ink);padding:18px!important}.teacher-feature svg{width:30px;height:30px;color:var(--green)}.teacher-feature small{color:var(--muted);font-size:11px}@media(max-width:600px){.teacher-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.teacher-feature strong{font-size:14px}}
 .teacher-main .form-grid>*{min-width:0}.teacher-main input,.teacher-main select,.teacher-main textarea{min-width:0;max-width:100%}@media(max-width:600px){.teacher-main .form-grid{grid-template-columns:minmax(0,1fr)}}
 .teacher-main .badge{white-space:nowrap;flex-shrink:0}.teacher-main>.section-heading>h2{min-width:0}
+
+/* Whole-class subject selection stays compact and touch-friendly. */
+.teacher-subject-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.teacher-subject-options .button{min-height:44px;justify-content:center;text-align:center;white-space:normal;overflow-wrap:anywhere}

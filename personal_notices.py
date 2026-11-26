@@ -15,12 +15,20 @@ def configure_notices(app,db,Student):
     app.extensions['notice_model']=State
     def events():
         a=actor(app);result=[];M=app.extensions['message_models'];C=M['conversation'];Msg=M['message'];Seen=M['seen'];message_key='owner:demo' if a['demo'] else a['key'];permitted=scopes(app,'messages.view')
+        staff=getattr(g,'staff_principal',None);teacher=staff and staff.data.get('role')=='Teacher'
+        if teacher:permitted=app.extensions['staff_access_helpers']['teacher_app_grant'](staff,'messages.view')
         if (permitted is None or permitted) and message_key not in app.extensions['message_helpers']['config']()['disabled']:
             seen=db.session.query(Seen.conversation_id.label('cid'),Seen.last_id.label('last')).filter(Seen.actor==message_key).subquery()
             q=db.session.query(C.id,C.subject,func.count(Msg.id),func.max(Msg.id)).join(Msg,Msg.conversation_id==C.id).outerjoin(seen,seen.c.cid==C.id).filter(or_(C.first_actor==message_key,C.second_actor==message_key),Msg.actor!=message_key,Msg.blocked==False,Msg.id>func.coalesce(seen.c.last,0))
             if permitted is not None:q=q.filter(C.campus.in_(permitted))
             SD=app.extensions['record_models']['student']
             valid=db.session.query(Student.id).join(SD,SD.student_id==Student.id).filter(Student.status=='Active',SD.data['campus'].as_string()==C.campus).correlate(C)
+            if teacher:
+                W=app.extensions['ops_models']['workflow']
+                assigned=[r.data for r in W.query.filter_by(kind='teacher-classes',status='Active').all() if str(r.data.get('employee_id'))==str(staff.employee_id) and r.data.get('campus') in permitted and r.data.get('class_name') and r.data.get('section')]
+                from sqlalchemy import and_,false
+                restrictions=[and_(Student.class_name==r['class_name'],SD.data['campus'].as_string()==r['campus'],SD.data['section'].as_string()==r['section']) for r in assigned]
+                valid=valid.filter(or_(*restrictions) if restrictions else false())
             q=q.filter(or_(C.student_id.is_(None),C.student_id.in_(valid)))
             for cid,subject,count,last in q.group_by(C.id,C.subject).order_by(func.max(Msg.id).desc()).limit(15).all():result.append(dict(key='message:'+cid,revision=str(last),title='Unread conversation',detail=subject+' · '+str(count)+' unread',url=url_for('messages.thread',cid=cid)))
         S=app.extensions['support_models'];T=S['ticket'];R=S['reply'];permitted=scopes(app,'support.view')

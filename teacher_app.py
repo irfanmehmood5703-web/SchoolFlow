@@ -1,5 +1,6 @@
-"""Assigned-class Teacher App over existing school records and explicit grants."""
+"""Assigned-class Teacher App with role-based, assignment-scoped capabilities."""
 import calendar,hashlib,hmac,io,json,re,secrets
+from types import SimpleNamespace
 from datetime import date,datetime,timedelta
 from decimal import Decimal,InvalidOperation
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,send_file,session,url_for
@@ -22,7 +23,7 @@ def configure_teacher_app(app,db,Student,Employee):
         digest=db.Column(db.String(64),nullable=False)
         target_id=db.Column(db.Integer)
     app.extensions['teacher_app_models']=dict(submission=Submission)
-    def grants(permission):return sh['grant'](g.staff_principal,permission)
+    def grants(permission):return sh['teacher_app_grant'](g.staff_principal,permission)
     @bp.before_request
     def guard():
         p=getattr(g,'staff_principal',None)
@@ -41,11 +42,35 @@ def configure_teacher_app(app,db,Student,Employee):
     def cohorts(permission=None):
         permitted=grants(permission) if permission else set(g.staff_principal.data.get('campuses',[]))&set(sh['campuses']())
         return [r for r in W.query.filter_by(kind='teacher-classes',status='Active').order_by(W.id).all() if str(r.data.get('employee_id'))==str(g.teacher_employee.id) and r.data.get('campus') in permitted and all(r.data.get(k) for k in ('class_name','section'))]
+    def subject_choices(row):
+        if row.data.get('subject'):return [row.data['subject']]
+        cls=row.data['class_name'];campus=row.data['campus'];allowed=app.extensions['school_settings_helpers']['subject_allowed']
+        return sorted({r.value for r in rm['settings'].query.filter_by(category='subject').all() if (not r.class_name or r.class_name==cls) and allowed(campus,cls,r.value)},key=str.casefold)
+    def subject_cohort(row,subject):
+        return SimpleNamespace(id=row.id,data={**row.data,'subject':subject})
     def cohort(cid,permission=None,subject_required=False):
         row=next((r for r in cohorts(permission) if r.id==cid),None)
         if not row:abort(403,'This class or action is not assigned to your teacher account.')
-        if subject_required and not row.data.get('subject'):abort(403,'Ask your school to assign a subject for this action.')
+        if subject_required:
+            subject=request.args.get('subject','')
+            if row.data.get('subject'):
+                if subject and subject!=row.data['subject']:abort(403,'This subject is not assigned.')
+            else:
+                if not subject or subject not in subject_choices(row):abort(403,'Choose a configured subject from your assigned class.')
+                g.teacher_subject=(cid,subject)
+                return subject_cohort(row,subject)
         return row
+    @bp.url_defaults
+    def subject_urls(endpoint,values):
+        selected=getattr(g,'teacher_subject',None)
+        if selected and values.get('cid')==selected[0] and endpoint in ('teacher_app.diary','teacher_app.diary_file','teacher_app.materials','teacher_app.study_file','teacher_app.exam_list','teacher_app.create_exam','teacher_app.marks'):
+            values.setdefault('subject',selected[1])
+    @bp.get('/classes/<int:cid>/subjects/<feature>')
+    def subjects(cid,feature):
+        features={'diary':('student_extras.view','Class Diary'),'materials':('student_extras.view','Study Material'),'exam_list':('exam.view','Exam Marks')}
+        if feature not in features:abort(404)
+        code,label=features[feature];row=cohort(cid,code)
+        return render('subjects',cohort=row,subjects=subject_choices(row),feature=feature,feature_label=label,kind=request.args.get('kind',''))
     def roster(c,subject=True):
         D=rm['student'];q=Student.query.join(D,D.student_id==Student.id).filter(Student.status=='Active',Student.class_name==c.data['class_name'],D.data['campus'].as_string()==c.data['campus'],D.data['section'].as_string()==c.data['section'])
         rows=app.extensions['record_helpers']['read_many']('student',q.order_by(Student.name,Student.id).all())
@@ -348,7 +373,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('requests',kind=kind,rows=rows,review_token=token,first=first,last=last)
     @bp.get('/diaries')
     def diaries():
-        assigned=[c for c in cohorts('student_extras.view') if c.data.get('subject')];first=parse_day(request.args.get('from_date',str(school_today())));last=parse_day(request.args.get('to_date',str(school_today())))
+        assigned=[subject_cohort(c,subject) for c in cohorts('student_extras.view') for subject in subject_choices(c)];first=parse_day(request.args.get('from_date',str(school_today())));last=parse_day(request.args.get('to_date',str(school_today())))
         if last<first or (last-first).days>30 or last>school_today():raise ValueError('Choose a diary range of up to 31 days through today.')
         filters={k:request.args.get(k,'').strip() for k in ('class_name','section','subject')};search=request.args.get('q','').strip()[:120].casefold();choices={k:sorted({c.data[k] for c in assigned}) for k in filters}
         E=app.extensions['student_extras_models']['entry'];entries=E.query.filter(E.kind=='diary',E.starts>=first,E.starts<=last,E.campus.in_({c.data['campus'] for c in assigned})).all();keys={(r.campus,r.data.get('class_name'),r.data.get('section'),r.data.get('subject'),r.starts) for r in entries};cards=[]
@@ -440,7 +465,7 @@ def configure_teacher_app(app,db,Student,Employee):
             d=row.data;assignment=d.get('assignment',{})
             if assignment.get('campus')!=details.get('campus') or assignment.get('class_name')!=student.class_name or assignment.get('section')!=details.get('section'):continue
             staff=db.session.get(staff_model,d.get('staff_id'));employee=db.session.get(Employee,staff.employee_id) if staff else None
-            if not staff or not staff.active or staff.data.get('role')!='Teacher' or not employee or employee.status!='Active' or details.get('campus') not in sh['grant'](staff,'student_extras.update'):continue
+            if not staff or not staff.active or staff.data.get('role')!='Teacher' or not employee or employee.status!='Active' or details.get('campus') not in sh['teacher_app_grant'](staff,'student_extras.update'):continue
             link=db.session.get(W,d.get('cohort'))
             if not link or link.kind!='teacher-classes' or link.status!='Active' or link.data!=assignment or str(link.data.get('employee_id'))!=str(employee.id):continue
             due=datetime.fromisoformat(d['due'])
