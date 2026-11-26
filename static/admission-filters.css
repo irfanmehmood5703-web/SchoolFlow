@@ -1,0 +1,43 @@
+.admission-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+  padding: 13px;
+  border: 1px solid #c7ded2;
+  border-radius: 10px;
+  background: #f1f8f4;
+}
+.admission-filter-field {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  color: #173d2c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.admission-filter-field :is(input,select) {
+  min-height: 36px;
+  min-width: 0;
+  width: 100%;
+  background: #fff;
+  border-color: #9db9a9;
+}
+.admission-filter-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+}
+.student-record-views {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+.student-record-views a[aria-current="page"] {
+  border-color: #176b4a;
+  background: #e6f4eb;
+}
+@media print {
+  .admission-filter-bar, .student-record-views { display: none; }
+}

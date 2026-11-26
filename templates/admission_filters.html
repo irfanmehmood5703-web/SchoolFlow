@@ -1,0 +1,15 @@
+{% macro field(key, label, options=none, type='search', value=none) %}
+<label class="admission-filter-field">
+  <span>{{label}}</span>
+  {% set selected = request.args.get(key, '') if value is none else value %}
+  {% if options is not none %}
+  <select name="{{key}}">
+    {% for item in options|unique(attribute=0) %}
+    <option value="{{item[0]}}" {{'selected' if selected == item[0] else ''}}>{{item[1]}}</option>
+    {% endfor %}
+  </select>
+  {% else %}
+  <input type="{{type}}" name="{{key}}" value="{{selected}}" maxlength="160">
+  {% endif %}
+</label>
+{% endmacro %}
