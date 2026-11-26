@@ -84,6 +84,12 @@ def configure_staff_access(app,db,Student,Employee):
     # class operation must still validate an active assignment and roster.
     TEACHER_APP_DEFAULTS=frozenset(('attendance.view','attendance.update','attendance.own','student_extras.view','student_extras.create','student_extras.update','exam.view','exam.create','exam.update','fees.view','teacher.leave_view','teacher.leave_approve','ptm.view','ptm.update','payroll.self','hrm.self_requests','messages.view','messages.create','messages.update'))
     def teacher_app_grant(row,code):
+        if row and row.data.get('role')=='Teacher' and code=='fees.view':
+            visibility=app.extensions['school_settings_helpers']['config']('teacher-app-visibility').get('fee_defaulters','show')
+            if visibility=='selected':
+                detail=rm['employee'].query.filter_by(employee_id=row.employee_id).first()
+                if not detail or detail.data.get('fee_access') not in ('view','contact'):return set()
+            elif visibility!='show':return set()
         if row and row.active and row.data.get('role')=='Teacher' and code in TEACHER_APP_DEFAULTS:
             employee=db.session.get(Employee,row.employee_id)
             if employee and employee.status=='Active':
