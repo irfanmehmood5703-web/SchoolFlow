@@ -216,13 +216,13 @@ class TeacherAppTests(unittest.TestCase):
         home=self.c.get('/teacher-app');self.assertIn(b'Class Timetable',home.data)
         page=self.c.get('/teacher-app/timetable')
         self.assertEqual(page.status_code,200)
-        for expected in (b'Urdu',b'Monday',b'09:00',b'Saturday',b'Class period',b'11:00',b'2 periods'):self.assertIn(expected,page.data)
+        for expected in (b'Urdu',b'Monday',b'9:00 AM',b'Saturday',b'Class period',b'11:00 AM',b'2 periods'):self.assertIn(expected,page.data)
         for forbidden in (b'Campus B',b'09:31',b'Forbidden subject'):self.assertNotIn(forbidden,page.data)
         self.assertEqual(self.c.post(path,data={**data,'_csrf':self.token()}).status_code,403)
         self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],self.cid),'status','Voided'))
         page=self.c.get('/teacher-app/timetable')
         self.assertIn(b'No timetable scheduled yet',page.data)
-        self.assertNotIn(b'09:00',page.data)
+        self.assertNotIn(b'9:00 AM',page.data)
     def test_teacher_full_class_and_lectures_coexist(self):
         from datetime import datetime
         from school_clock import SCHOOL_TIMEZONE
@@ -275,7 +275,7 @@ class TeacherAppTests(unittest.TestCase):
         page=self.c.get('/teacher-app/timetable')
         self.assertNotIn(b'timetable-full-class',page.data)
         self.assertIn(b'English',page.data)
-        self.assertNotIn(b'09:00',page.data)
+        self.assertNotIn(b'9:00 AM',page.data)
     def test_weekly_lecture_multiple_days_preserve_full_class_and_reject_conflicts(self):
         self.seed();path='/workspace/core/automatic-reports/periods'
         def setup():
@@ -309,7 +309,7 @@ class TeacherAppTests(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertIn(b'5 full-class days',page.data)
         self.assertIn(b'5 lectures',page.data)
-        self.assertEqual(page.data.count(b'class="timetable-time">10:00'),5)
+        self.assertEqual(page.data.count(b'class="timetable-time">10:00 AM'),5)
         self.assertEqual(self.c.post(path,data={'_csrf':self.token(),**data,'weekdays':['5']}).status_code,403)
     def test_multiple_subject_lectures_saved_atomically_with_individual_times(self):
         self.seed();path='/workspace/core/automatic-reports/periods'
@@ -347,6 +347,92 @@ class TeacherAppTests(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertIn(b'2 full-class days',page.data);self.assertIn(b'9 lectures',page.data)
         for subject in (b'Math',b'Urdu',b'English'):self.assertEqual(page.data.count(b'<strong>'+subject+b'</strong>'),3)
+    def test_teacher_period_clock_display_uses_12_hour_time(self):
+        from unittest.mock import patch
+        from datetime import datetime
+        from school_clock import SCHOOL_TIMEZONE
+        self.seed();path='/workspace/core/automatic-reports/periods'
+        self.login('owner@example.invalid')
+        for clock in ('00:00','09:00','12:00','13:15','23:30'):
+            self.assertEqual(self.c.post(path,data={'_csrf':self.token(),'action':'add','assignment_id':str(self.cid),'time':clock,'lead':'5','weekdays':['0']}).status_code,302)
+        self.login()
+        page=self.c.get('/teacher-app/timetable')
+        self.assertEqual(page.status_code,200)
+        for value in (b'12:00 AM',b'9:00 AM',b'12:00 PM',b'1:15 PM',b'11:30 PM'):
+            self.assertIn(b'class="timetable-time">'+value,page.data)
+        for value in (b'00:00',b'09:00',b'13:15',b'23:30'):
+            self.assertNotIn(b'class="timetable-time">'+value,page.data)
+        # Home and notification feeds use 12-hour labels, not stored clock keys.
+        with patch('automatic_reports.datetime') as clock:
+            clock.now.return_value=datetime(2026,11,23,13,11,tzinfo=SCHOOL_TIMEZONE)
+            self.assertIn(b'1:15 PM',self.c.get('/teacher-app').data)
+            self.assertIn(b'1:15 PM',self.c.get('/teacher-app/notifications').data)
+        def check():
+            rows=app.extensions['automatic_report_helpers']['teacher_timetable']([db.session.get(self.ops['workflow'],self.cid)])
+            self.assertEqual([r['time'] for r in rows],['00:00','09:00','12:00','13:15','23:30'])
+            self.assertEqual([r['time_label'] for r in rows],['12:00 AM','9:00 AM','12:00 PM','1:15 PM','11:30 PM'])
+        self.tenant(check)
+
+    def test_edit_weekly_timetable_and_single_day_with_conflicts(self):
+        self.seed();root='/workspace/core/automatic-reports';path=root+'/periods'
+        def setup():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid);row.data={**row.data,'subject':''}
+            db.session.add(self.rm['settings'](category='subject',value='History',class_name='One'))
+        self.tenant(setup);self.login('owner@example.invalid')
+        def post(**fields):return self.c.post(path,data={'_csrf':self.token(),**fields})
+        self.assertEqual(post(action='add_full_class',assignment_id=str(self.cid),weekdays=['0','1','2','3','4']).status_code,302)
+        self.assertEqual(post(action='add',assignment_id=f'{self.cid}:History',time='23:30',lead='5',weekdays=['0','1','2','3','4','5']).status_code,302)
+        self.assertEqual(post(action='add',assignment_id=f'{self.cid}:Math',time='10:30',lead='5',weekdays=['0','1','2','3','4','5']).status_code,302)
+        def saved():
+            return [(r.id,r.status,dict(r.data)) for r in self.ops['workflow'].query.filter_by(kind='automatic-period-reminder').order_by(self.ops['workflow'].id)]
+        initial=self.tenant(saved)
+        full=next(id for id,status,d in initial if d['mode']=='full-class')
+        history=next(id for id,status,d in initial if d.get('subject')=='History')
+        edit=f'{path}/{history}/edit'
+        page=self.c.get(root);self.assertEqual(page.status_code,200)
+        self.assertEqual(page.data.count(b'Edit weekly'),3)
+        self.assertIn(b'11:30 PM',page.data);self.assertIn(b'10:30 AM',page.data)
+        def review(url):
+            page=self.c.get(url);self.assertEqual(page.status_code,200)
+            return re.search(rb'name="revision" value="([^"]+)"',page.data).group(1).decode()
+        token=review(edit)
+        self.assertIn(b'<option value="PM" selected>',self.c.get(edit).data)
+        data=dict(_csrf=self.token(),revision=token,weekdays=['0','1','2','3','4'],hour='11',minute='30',meridiem='AM',lead='10')
+        self.assertEqual(self.c.post(edit,data={**data,'hour':'10'}).status_code,409)
+        self.assertEqual(self.c.post(edit,data={**data,'meridiem':'XX'}).status_code,422)
+        self.assertEqual(self.c.post(edit,data={**data,'weekdays':[]}).status_code,422)
+        self.assertEqual(self.c.post(edit,data={**data,'revision':'stale'}).status_code,409)
+        self.assertEqual(self.c.post(edit,data={**data,'_csrf':'bad'}).status_code,400)
+        self.assertEqual(initial,self.tenant(saved))
+        self.assertEqual(self.c.post(edit,data=data).status_code,302)
+        self.assertEqual(self.c.post(edit,data=data).status_code,409)
+        after=self.tenant(saved)
+        retained=[(id,d) for id,status,d in after if status=='Active' and d.get('subject')=='History']
+        self.assertEqual(len(retained),5)
+        self.assertTrue(all(d['time']=='11:30' and d['lead']==10 for _,d in retained))
+        self.assertEqual({id for id,d in retained},{id for id,status,d in initial if d.get('subject')=='History' and d['weekday']<5})
+        self.assertEqual(sum(status=='Voided' for _,status,_ in after),1)
+        # Edit only Wednesday; preserve all remaining weekly history lectures.
+        day=next(id for id,d in retained if d['weekday']==2);single=f'{path}/{day}/edit?scope=day'
+        self.assertEqual(self.c.post(single,data={**data,'revision':review(single),'weekdays':['2'],'hour':'12','meridiem':'PM'}).status_code,302)
+        # Add Saturday to full-class without affecting subject lectures.
+        full_url=f'{path}/{full}/edit'
+        self.assertEqual(self.c.post(full_url,data={'_csrf':self.token(),'revision':review(full_url),'weekdays':['0','1','2','3','4','5']}).status_code,302)
+        def check():
+            W=self.ops['workflow'];current=W.query.filter_by(kind='automatic-period-reminder',status='Active').all()
+            self.assertEqual(len(current),17)
+            self.assertEqual(W.query.filter_by(kind='teacher-classes',status='Active').count(),1)
+            self.assertEqual(self.ops['audit'].query.filter_by(action='Edit teacher timetable').count(),3)
+            tt=app.extensions['automatic_report_helpers']['teacher_timetable']([db.session.get(W,self.cid)])
+            self.assertEqual([p['time'] for p in tt if p['subject']=='History'],['11:30','11:30','12:30','11:30','11:30'])
+            self.assertEqual(sum(p['mode']=='full-class' for p in tt),6)
+        self.tenant(check)
+        self.login()
+        page=self.c.get('/teacher-app/timetable');self.assertEqual(page.status_code,200)
+        self.assertIn(b'11:30 AM',page.data);self.assertIn(b'12:30 PM',page.data);self.assertNotIn(b'23:30',page.data)
+        self.assertEqual(self.c.get(edit).status_code,403)
+        self.assertEqual(self.c.post(edit,data={**data,'_csrf':self.token()}).status_code,403)
+
     def test_direct_cross_class_lecture_assignment_and_timetable(self):
         self.seed();root='/workspace/core/automatic-reports';path=root+'/periods'
         def setup():

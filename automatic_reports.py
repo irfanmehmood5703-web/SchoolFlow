@@ -5,7 +5,7 @@ External delivery is opt-in. All amounts remain integer paisa.
 """
 from datetime import datetime,timedelta
 from collections import Counter
-import re,hashlib
+import re,hashlib,json
 from flask import Blueprint,abort,flash,g,redirect,render_template,request,session,url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -22,6 +22,7 @@ REPORTS=(
     ('income-expense','Income & Expenses','daily','14:00'),
 )
 KEY='automatic-owner-reports'
+WEEKDAYS=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
 def money(value):return 'Rs. {:,.2f}'.format(value/100)
 
 def period(now,frequency,clock):
@@ -236,6 +237,97 @@ def configure_automatic_reports(app,db,Student,Employee):
         return dict(teachers=teachers,campuses=schools,full_classes=full)
     def period_rows():
         return W.query.filter_by(kind='automatic-period-reminder',status='Active').order_by(W.id).all()
+    def period_group_key(data):
+        # Identical recurring schedules can be represented by old or new rows.
+        # Group by the exact assignment, subject, start time and reminder; never
+        # combine different subjects, teachers, sections or times.
+        assignment=data.get('assignment',{})
+        mode=data.get('mode','lecture')
+        return json.dumps([mode,data.get('assignment_id'),assignment,
+                           data.get('subject') or assignment.get('subject') or '',
+                           data.get('time','') if mode=='lecture' else '',
+                           data.get('lead') if mode=='lecture' else 0],sort_keys=True,ensure_ascii=False)
+    def clock_label(clock):
+        if not isinstance(clock,str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):return 'Invalid time'
+        hour,minute=map(int,clock.split(':'))
+        return f'{hour%12 or 12}:{minute:02d} {"AM" if hour<12 else "PM"}'
+    def timetable_groups(rows,employees):
+        groups={}
+        for row in rows:groups.setdefault(period_group_key(row.data),[]).append(row)
+        out=[]
+        for members in groups.values():
+            members.sort(key=lambda r:(r.data.get('weekday',7),r.id))
+            row=members[0];d=row.data;a=d.get('assignment',{})
+            full=d.get('mode')=='full-class'
+            out.append(dict(id=row.id,rows=members,teacher=employees.get(str(a.get('employee_id')),'Inactive teacher'),
+                            campus=a.get('campus',''),class_name=a.get('class_name',''),section=a.get('section',''),
+                            subject='Full Class' if full else d.get('subject') or a.get('subject') or 'Class period',
+                            full=full,time='All day' if full else clock_label(d.get('time')),
+                            lead=d.get('lead',0),days=sorted({r.data['weekday'] for r in members if r.data.get('weekday') in range(7)})))
+        return sorted(out,key=lambda group:(group['teacher'].casefold(),not group['full'],group['rows'][0].data.get('time',''),group['campus'],group['class_name'],group['section'],group['subject']))
+    @bp.route('/periods/<int:pid>/edit',methods=['GET','POST'])
+    def edit_period(pid):
+        if not owner():abort(403)
+        csrf()
+        if request.method=='POST':app.extensions['admission_capacity']['lock']()
+        rows=period_rows()
+        anchor=next((r for r in rows if r.id==pid),None)
+        if not anchor:abort(404 if request.method=='GET' else 409,'This timetable entry has changed. Reload the saved timetable.')
+        single=request.args.get('scope')=='day'
+        members=[anchor] if single else [r for r in rows if period_group_key(r.data)==period_group_key(anchor.data)]
+        revision=hashlib.sha256(json.dumps([(r.id,r.data) for r in members],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        data=anchor.data;a=data.get('assignment',{});mode=data.get('mode','lecture')
+        active={r.id:r.data for r in assignments()}
+        aid=data.get('assignment_id');employee=db.session.get(Employee,int(a['employee_id'])) if str(a.get('employee_id','')).isdigit() else None
+        subject=data.get('subject') or a.get('subject') or ''
+        valid_subject=(subject==a.get('subject') if a.get('subject') else not subject or subject in period_subjects(a)) if aid in active and a==active[aid] else False
+        if not employee or employee.status!='Active' or not valid_subject or mode not in ('lecture','full-class') or (mode=='full-class' and subject):
+            abort(409,'This teacher or assignment is no longer active. Review the class assignment before editing; you can still remove an unused timetable entry.')
+        old_days={r.data['weekday'] for r in members}
+        if request.method=='POST':
+            if request.form.get('revision')!=revision:abort(409,'This timetable changed since you opened it. Reload before saving.')
+            supplied=request.form.getlist('weekdays')
+            if not supplied or any(d not in ('0','1','2','3','4','5','6') for d in supplied) or (single and len(set(supplied))!=1):
+                abort(422,'Select one valid weekday for a day edit, or at least one weekday for a weekly edit.')
+            days=sorted(set(map(int,supplied)))
+            if mode=='lecture':
+                hour=request.form.get('hour',type=int);minute=request.form.get('minute',type=int);meridiem=request.form.get('meridiem')
+                lead=request.form.get('lead',type=int)
+                if hour not in range(1,13) or minute not in range(60) or meridiem not in ('AM','PM') or lead not in (0,5,10,15,30):
+                    abort(422,'Choose a valid hour, minute, AM/PM and reminder.')
+                clock=f'{hour%12+(12 if meridiem=="PM" else 0):02d}:{minute:02d}'
+            else:clock='';lead=0
+            selected_ids={r.id for r in members}
+            for r in rows:
+                d=r.data;snapshot=d.get('assignment',{})
+                if r.id in selected_ids or str(snapshot.get('employee_id'))!=str(a.get('employee_id')) or d.get('weekday') not in days:continue
+                if mode=='lecture' and d.get('mode','lecture')=='lecture' and d.get('time')==clock:
+                    abort(409,'This teacher already has a lecture at the selected time on one of these days. Nothing was changed.')
+                if mode=='full-class' and d.get('mode')=='full-class' and active.get(d.get('assignment_id'))==snapshot:
+                    abort(409,'This teacher already has Full Class on a selected day. Nothing was changed.')
+            if len(rows)-len(members)+len(days)>500:abort(422,'Remove unused timetable entries before adding more.')
+            before=[dict(id=r.id,data=dict(r.data)) for r in members]
+            # Keep IDs on unchanged weekdays; retire only unchecked days and
+            # add newly selected days. The academic assignment is never changed.
+            unused={r.id:r for r in members}
+            after=[]
+            for day in days:
+                row=next((r for r in unused.values() if r.data.get('weekday')==day),None)
+                if row is None and single:row=anchor
+                updated={**data,'mode':mode,'weekday':day,'time':clock,'lead':lead}
+                if row is not None:
+                    unused.pop(row.id,None);row.data=updated
+                else:
+                    row=W(kind='automatic-period-reminder',status='Active',data=updated);db.session.add(row);db.session.flush()
+                after.append(dict(id=row.id,data=updated))
+            for row in unused.values():row.status='Voided'
+            db.session.add(ops['audit'](action='Edit teacher timetable',data={'scope':'day' if single else 'weekly','before':before,'after':after}))
+            db.session.commit()
+            flash('Timetable updated successfully. The Teacher App will show the new schedule.','success')
+            return redirect(url_for('automatic_reports.index',_anchor='saved-timetable'))
+        clock=data.get('time','')
+        hour,minute=map(int,clock.split(':')) if mode=='lecture' and isinstance(clock,str) and re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock) else (8,0)
+        return render_template('timetable_edit.html',title='Edit timetable',teacher=employee.name,assignment=a,subject=subject or ('Full Class' if mode=='full-class' else 'Class period'),full=mode=='full-class',single=single,days=old_days,weekdays=WEEKDAYS,revision=revision,hour=hour%12 or 12,minute=minute,meridiem='AM' if hour<12 else 'PM',lead=data.get('lead',5),time_label='All day' if mode=='full-class' else clock_label(clock))
     def teacher_timetable(cohorts):
         """Recurring weekly periods for the exact active, permitted assignments."""
         allowed={r.id:r.data for r in cohorts}
@@ -248,7 +340,7 @@ def configure_automatic_reports(app,db,Student,Employee):
             scope=dict(weekday=weekday,campus=a['campus'],class_name=a['class_name'],section=a['section'])
             if d.get('mode')=='full-class':
                 if not a.get('subject') and not d.get('subject'):
-                    out.append(dict(scope,time='All day',subject='Full Class',lead=0,mode='full-class'))
+                    out.append(dict(scope,time='All day',time_label='All day',subject='Full Class',lead=0,mode='full-class'))
                 continue
             if d.get('mode','lecture')!='lecture' or lead not in (0,5,10,15,30) or not isinstance(clock,str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):continue
             subject=d.get('subject') or a.get('subject') or ''
@@ -258,7 +350,7 @@ def configure_automatic_reports(app,db,Student,Employee):
                 aid=d['assignment_id']
                 if aid not in catalog:catalog[aid]=period_subjects(a)
                 if subject not in catalog[aid]:continue
-            out.append(dict(scope,time=clock,subject=subject or 'Class period',lead=lead,mode='lecture'))
+            out.append(dict(scope,time=clock,time_label=clock_label(clock),subject=subject or 'Class period',lead=lead,mode='lecture'))
         return sorted(out,key=lambda r:(r['weekday'],r['mode']!='full-class',r['time'],r['campus'],r['class_name'],r['section'],r['subject']))
     def teacher_periods(cohorts,now=None):
         now=now or datetime.now(SCHOOL_TIMEZONE)
@@ -410,7 +502,8 @@ def configure_automatic_reports(app,db,Student,Employee):
             flash('Automatic report settings saved.','success')
             return redirect(url_for('automatic_reports.index'))
         row,rules=settings();active_assignments=assignments()
-        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=active_assignments,lecture_catalog=lecture_catalog(active_assignments),assignment_subjects={a.id:period_subjects(a.data) for a in active_assignments if not a.data.get('subject')},employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
+        employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()}
+        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),period_groups=timetable_groups(period_rows(),employees),assignments=active_assignments,lecture_catalog=lecture_catalog(active_assignments),assignment_subjects={a.id:period_subjects(a.data) for a in active_assignments if not a.data.get('subject')},employees=employees,weekdays=WEEKDAYS,wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
     @bp.after_request
     def private(response):
         response.headers['Cache-Control']='no-store';return response

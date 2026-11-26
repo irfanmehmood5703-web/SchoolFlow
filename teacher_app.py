@@ -110,7 +110,7 @@ def configure_teacher_app(app,db,Student,Employee):
         events=list(app.extensions['notice_events']())
         for row in app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()):
             if row['due']:
-                events.append(dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(school_today()),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time']))
+                events.append(dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(school_today()),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time_label']))
         if own_access('attendance.own','attendance.view','attendance.self'):
             for row in Daily.query.filter_by(kind='staff',person_id=g.teacher_employee.id).order_by(Daily.day.desc()).limit(5):
                 events.append(dict(key='attendance:'+str(row.id),revision=digest([row.status,row.time_in,row.time_out]),title='Your attendance',detail=str(row.day)+' · '+row.status))
