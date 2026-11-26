@@ -644,6 +644,35 @@ class TeacherAppTests(unittest.TestCase):
         self.assertEqual(downloaded.status_code,200);self.assertEqual(downloaded.data,content)
         self.assertIn('attachment',downloaded.headers['Content-Disposition'])
         self.assertIn(DOCX_MIME,downloaded.headers['Content-Type'])
+    def test_assignment_response_attachments_are_class_and_subject_scoped(self):
+        from tests.word_attachment_fixture import word_attachment
+        from student_extras import DOCX_MIME
+        from secrets import token_urlsafe
+        self.seed();M=app.extensions['parent_study_models'];content=word_attachment()
+        def seed_response():
+            W=self.ops['workflow'];cohort=db.session.get(W,self.cid);cohort.data={**cohort.data,'subject':''}
+            item=M['item'](kind='assignments',title='Worksheet',campus='Campus A',class_name='One',section='A',subject='Math',body='Solve this',starts=school_today(),ends=school_today()+timedelta(days=1),published=True,token=token_urlsafe(32))
+            db.session.add(item);db.session.flush()
+            sub=M['submission'](item_id=item.id,student_id=self.pupil,family_id=1,body='')
+            db.session.add(sub);db.session.flush()
+            file=M['submission_file'](submission_id=sub.id,filename='response.docx',mime=DOCX_MIME,content=content);db.session.add(file);db.session.flush()
+            foreign=Student.query.filter_by(name='Pupil Campus B').one()
+            outside=M['submission'](item_id=item.id,student_id=foreign.id,family_id=2,body='Foreign answer');db.session.add(outside);db.session.flush()
+            other=M['submission_file'](submission_id=outside.id,filename='foreign.docx',mime=DOCX_MIME,content=content);db.session.add(other);db.session.flush()
+            return item.id,sub.id,file.id,outside.id,other.id
+        iid,rid,fid,other_rid,other_fid=self.tenant(seed_response);self.login()
+        root=f'/teacher-app/classes/{self.cid}/materials'
+        path=f'{root}/{iid}/responses/{rid}/files/{fid}?subject=Math'
+        page=self.c.get(root+'?subject=Math')
+        self.assertEqual(page.status_code,200);self.assertIn(b'response.docx',page.data);self.assertIn(path.encode(),page.data);self.assertNotIn(b'foreign.docx',page.data)
+        r=self.c.get(path);self.assertEqual(r.status_code,200);self.assertEqual(r.data,content);self.assertIn(DOCX_MIME,r.headers['Content-Type'])
+        self.assertEqual(self.c.get(path.replace(f'responses/{rid}/files/{fid}',f'responses/{other_rid}/files/{other_fid}')).status_code,404)
+        self.assertEqual(self.c.get(path.replace('subject=Math','subject=English')).status_code,403)
+        self.assertEqual(self.c.post(root+'?subject=Math',data={'_csrf':self.token(),'action':'grade','item':iid,'submission':rid,'version':1,'marks':'8/10','feedback':'Good work'}).status_code,302)
+        self.assertEqual(self.tenant(lambda:db.session.get(M['submission'],rid).marks),'8/10')
+        self.assertEqual(self.c.get(path).data,content)
+        self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],self.cid),'status','Voided'))
+        self.assertEqual(self.c.get(path).status_code,403)
     def test_student_leave_scope_and_review(self):
         self.seed()
         def make():
