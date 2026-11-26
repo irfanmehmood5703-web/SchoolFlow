@@ -1,6 +1,7 @@
 """Explicit group and cap math, unsaved previews and approved payroll snapshots."""
 import os,unittest
 from datetime import date
+from html.parser import HTMLParser
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Employee
 from operations import money
@@ -48,6 +49,40 @@ class PayrollRuleWorkflowTests(unittest.TestCase):
     def tearDown(self):db.session.remove();db.drop_all();self.ctx.pop()
     def form(self,**changes):
         data={'_csrf':self.csrf,'employee_id':str(self.e.id),'basic':'10000','allowed_0':'1','jump_0':'2','limit_0':'150.50','type_0':'Abs','deduction_0':'100','frequency_0':'Recursive','jump_mode_0':'started_groups','cap_mode_0':'amount','preview_count_0':'6','preview_working_days':'22'};data.update(changes);return data
+    def test_salary_editor_and_approval_are_above_deductions_with_correct_form_ownership(self):
+        html=self.c.get('/workspace/salary-plans').get_data(as_text=True)
+        self.assertLess(html.index('id="salary-plan-editor"'),html.index('Save plan for approval'))
+        self.assertLess(html.index('Save plan for approval'),html.index('id="salary-plan-approvals"'))
+        self.assertLess(html.index('Salary Plan Approvals'),html.index('<h2>Attendance Based Deductions</h2>'))
+        class Controls(HTMLParser):
+            def __init__(self):
+                super().__init__();self.owner=None;self.controls=[]
+            def handle_starttag(self,tag,attrs):
+                a=dict(attrs)
+                if tag=='form':
+                    self.owner=a.get('id')
+                elif tag in ('input','select','button') and a.get('name'):
+                    self.controls.append((a.get('form',self.owner),a))
+            def handle_endtag(self,tag):
+                if tag=='form':self.owner=None
+        parser=Controls();parser.feed(html)
+        editor=[a for owner,a in parser.controls if owner=='salary-plan-editor']
+        names={a['name'] for a in editor}
+        self.assertTrue({'employee_id','basic','_csrf','edit','preview_working_days'}.issubset(names))
+        for i in range(6):
+            for field in ('allowed','type','deduction','frequency','jump_mode','jump','cap_mode','limit','preview_count'):
+                self.assertIn(f'{field}_{i}',names)
+        self.assertEqual([a.get('value') for a in editor if a['name']=='action'],['save','preview','save'])
+        approval=[a for owner,a in parser.controls if owner=='salary-plan-approvals']
+        self.assertEqual([a.get('value') for a in approval if a['name']=='action'],['approve','reject'])
+        self.assertNotIn('employee_id',{a['name'] for a in approval})
+        # Updating a saved plan must retain values shown in the separate rule section.
+        self.c.post('/workspace/salary-plans',data=self.form(action='save'))
+        plan=self.ops['workflow'].query.one()
+        saved=Controls();saved.feed(self.c.get(f'/workspace/salary-plans?edit={plan.id}').get_data(as_text=True))
+        limit=next(a for owner,a in saved.controls if owner=='salary-plan-editor' and a['name']=='limit_0')
+        self.assertEqual(float(limit['value']),150.5)
+        self.assertTrue(any(owner=='salary-plan-approvals' and a['name']=='ids' and a['value']==str(plan.id) for owner,a in saved.controls))
     def test_preview_saves_nothing_and_actual_approved_payroll_uses_the_rule(self):
         response=self.c.post('/workspace/salary-plans',data=self.form(action='preview'));self.assertEqual(response.status_code,200);self.assertRegex(response.data,rb'(?<![\d,.])150\.5(?![\d,.])');self.assertIn(b'Unsaved attendance deduction preview',response.data)
         self.assertEqual(self.ops['workflow'].query.count(),0);self.assertEqual(self.ops['salary'].query.count(),0);self.assertEqual(self.ops['audit'].query.count(),0)
