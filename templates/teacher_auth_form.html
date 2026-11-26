@@ -1,0 +1,44 @@
+{% from 'password_visibility.html' import eye %}
+<section class="teacher-auth-card" aria-labelledby="teacher-auth-heading">
+  {% if error %}<div class="teacher-auth-error" role="alert">{{error}}</div>{% endif %}
+  {% if step == 'login' %}
+    <h2 id="teacher-auth-heading">Welcome back</h2>
+    <p class="teacher-auth-description">Sign in to your teacher account.</p>
+    <form method="post" class="teacher-auth-form">
+      <input type="hidden" name="_csrf" value="{{record_csrf}}">
+      <div class="teacher-auth-field">
+        <label for="email">Username, email or mobile</label>
+        <input id="email" name="email" type="text" required maxlength="254" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Enter your username">
+      </div>
+      <div class="teacher-auth-field">
+        <label for="password">Password</label>
+        <div class="teacher-auth-password">
+          <input id="password" name="password" type="password" required maxlength="128" autocomplete="current-password" placeholder="Enter your password">
+          {{eye("password", "teacher-auth-eye")}}
+        </div>
+      </div>
+      <div class="teacher-auth-options">
+        <label class="teacher-auth-remember"><input type="checkbox" data-remember-user>Remember username</label>
+        <a href="{{url_for('identity.forgot_password')}}">Forgot password?</a>
+      </div>
+      <button class="teacher-auth-primary" type="submit">Sign in <span aria-hidden="true">→</span></button>
+    </form>
+    <div class="teacher-auth-divider"><span>or</span></div>
+    <a class="teacher-auth-qr" href="{{url_for('teacher_login.enter',code=school.code)}}">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h3v3h3v3h-6zM12 3v3M3 12h3m6 0h9m-9 3v6"/></svg>
+      Use school-issued QR sign-in
+    </a>
+    <p class="teacher-auth-help">Use the active Teacher account issued by your school administrator.</p>
+  {% elif step == 'institute' %}
+    <h2 id="teacher-auth-heading">Find your school</h2>
+    <form method="post" class="teacher-auth-form">
+      <input type="hidden" name="_csrf" value="{{record_csrf}}">
+      <div class="teacher-auth-field"><label for="code">Institute Code</label><input id="code" name="code" value="{{app_school_brand.code}}" required maxlength="40" autocomplete="organization"></div>
+      <button class="teacher-auth-primary" type="submit">Continue →</button>
+    </form>
+  {% else %}
+    <h2 id="teacher-auth-heading">Password help</h2>
+    <p class="teacher-auth-description">Contact your school administrator to reset your teacher password in Users &amp; Privileges after verifying your identity. Your existing password cannot be viewed or sent back.</p>
+    <a class="teacher-auth-primary" href="{{url_for('identity.login')}}">Back to sign in</a>
+  {% endif %}
+</section>

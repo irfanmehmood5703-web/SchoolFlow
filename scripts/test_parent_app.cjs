@@ -1,6 +1,21 @@
 'use strict';
 const {chromium}=require(process.env.SCHOOLFLOW_PLAYWRIGHT_MODULE||'playwright');const fs=require('fs');const output='/tmp/parent-app-ui';let current;
 (async()=>{fs.mkdirSync(output,{recursive:true});const entry=JSON.parse(fs.readFileSync('/tmp/parent-ui-entry.json','utf8'));const browser=await chromium.launch({headless:true});let storage;
+// The school-issued permanent numeric login code starts masked, toggles, and masks again on pause.
+{
+ const context=await browser.newContext({viewport:{width:360,height:640}}),page=await context.newPage();current=page;
+ await page.goto('http://localhost:5058/parents/PARENT-TEST/login');
+ const code=page.locator('[name=login_code]');
+ await code.fill('58312694');
+ await page.getByRole('button',{name:'Show code',exact:true}).click();
+ if(await code.getAttribute('type')!=='text')throw Error('Parent code reveal failed');
+ await page.evaluate(()=>window.dispatchEvent(new Event('schoolflow:pause')));
+ if(await code.getAttribute('type')!=='password'||await code.inputValue()!=='58312694')throw Error('Parent code re-mask failed');
+ await page.locator('[name=phone]').fill('03000000001');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await page.waitForURL('**/parents/PARENT-TEST');
+ console.log('PASS Parent school code login with password eye');await context.close();
+}
 for(const width of [390,1280]){const context=await browser.newContext({viewport:{width,height:844},...(storage?{storageState:storage}:{})});const page=await context.newPage();current=page;const errors=[];page.on('pageerror',e=>errors.push(String(e)));const base='http://localhost:5058/parents/PARENT-TEST';if(!storage){await page.goto(base+'/enter');await page.locator('[name=credential]').fill(entry.credential);await page.getByRole('button',{name:'Continue',exact:true}).click();await page.waitForURL(base);storage=await context.storageState()}else await page.goto(base);
 const check=async label=>{if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error(label+' overflow '+width);if(errors.length)throw Error(errors.join('\n'))};await check('home');if(!(await page.textContent('body')).includes('Fictional Sibling'))throw Error('Sibling missing');if((await page.textContent('body')).includes('Fictional Child 2'))throw Error('Family leak');await page.screenshot({path:`${output}/home-${width}.png`});await page.locator('.child-heading').first().click();await page.waitForURL('**/app/student?sid=1');await check('student');await page.screenshot({path:`${output}/student-${width}.png`});
 for(const [tab,key] of [['Academics','academics'],['Attendance','attendance'],['Fees','fees'],['Connect','connect']]){await page.locator('.bottom-tabs').getByRole('link',{name:tab,exact:true}).click();await page.waitForURL(`**/app/${key}?sid=1`);await check(key);await page.screenshot({path:`${output}/${key}-${width}.png`});if(key==='fees'&&!(await page.textContent('body')).includes('Rs 1,400.00'))throw Error('Partial balance missing')}

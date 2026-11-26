@@ -14,6 +14,7 @@ import org.json.*;
 import org.opencv.android.*;
 import org.opencv.core.Mat;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.PasswordVisibility;
 
 /** Attended face gate: recognizing a face never silently posts attendance. */
 public class MainActivity extends CameraActivity implements CameraBridgeViewBase.CvCameraViewListener2 {
@@ -189,7 +190,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   protectedAction=action;startActivityForResult(intent,LOCK_REQUEST);
  }
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==LOCK_REQUEST){Runnable action=protectedAction;protectedAction=null;if(result==RESULT_OK&&action!=null)action.run();else show("Administrator action cancelled.");}}
- private EditText input(LinearLayout box,String hint,String value,int type){EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setInputType(type);e.setSaveEnabled(false);e.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);box.addView(e);return e;}
+ private EditText input(LinearLayout box,String hint,String value,int type){EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setInputType(type);e.setSaveEnabled(false);e.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);PasswordVisibility.addField(box,e,Color.rgb(20,92,70));return e;}
  private LinearLayout form(){LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(18),dp(8),dp(18),dp(8));return box;}
  private ScrollView scroll(View box){ScrollView s=new ScrollView(this);s.addView(box);return s;}
  private void connectionDialog(){

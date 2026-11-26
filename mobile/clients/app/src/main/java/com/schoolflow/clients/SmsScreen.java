@@ -1,5 +1,6 @@
 package com.schoolflow.clients;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.PasswordVisibility;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
@@ -92,7 +93,7 @@ final class SmsScreen {
    value.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
    value.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
   }
-  root.addView(value,new LinearLayout.LayoutParams(-1,-2));
+  PasswordVisibility.addField(root,value,green);
   return value;
  }
  private void addSpinner(LinearLayout root,Spinner spinner,String label){

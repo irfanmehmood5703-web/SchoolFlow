@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#176b4a">
+  <title>Teacher sign in · {{app_school_brand.name}}</title>
+  <link rel="stylesheet" href="{{asset_url('teacher-auth.css')}}">
+  <script src="{{asset_url('install-opening.js')}}" defer></script>
+</head>
+<body class="teacher-auth">
+  <a class="teacher-auth-skip" href="#teacher-auth-main">Skip to sign in</a>
+  <main id="teacher-auth-main" class="teacher-auth-shell">
+    <header class="teacher-auth-brand">
+      <div class="teacher-auth-logo">
+        {% if app_school_brand.has_logo %}
+        <img src="{{url_for('mobile_clients.school_logo',scope=app_school_brand.scope)}}" alt="{{app_school_brand.name}} logo" width="58" height="58">
+        {% else %}
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 10 10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c3 2 9 2 12 0v-5M22 10v6"/></svg>
+        {% endif %}
+      </div>
+      <div class="teacher-auth-school">
+        <p class="teacher-auth-overline">Teacher App</p>
+        <h1>{{app_school_brand.name}}</h1>
+        <span class="teacher-auth-code">Institute Code: {{app_school_brand.code}}</span>
+      </div>
+    </header>
+    {% block content %}{% endblock %}
+    <footer class="teacher-auth-footer">Powered by <strong>SchoolFlow</strong></footer>
+  </main>
+</body>
+</html>

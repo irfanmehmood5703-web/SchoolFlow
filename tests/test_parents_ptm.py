@@ -134,7 +134,11 @@ class ParentsPtmTests(unittest.TestCase):
         self.assertEqual(self.post(path,{**payload,'acknowledge':'yes'}).status_code,302)
         cfg=self.tenant(lambda:self.M['policy'].query.one().data)
         self.assertNotIn(code,str(cfg))
-        self.assertIn(b'School login code',app.test_client().get(login).data)
+        login_page=app.test_client().get(login).data
+        self.assertIn(b'School login code',login_page)
+        self.assertIn(b'aria-controls="parent-login-code"',login_page)
+        self.assertIn(b'aria-label="Show code"',login_page)
+        self.assertIn(b'password-visibility.js',login_page)
         self.assertNotIn(b'Request a login code',app.test_client().get(login).data)
         def sign(number,pin=code):
             p=app.test_client();self.token(p,login)

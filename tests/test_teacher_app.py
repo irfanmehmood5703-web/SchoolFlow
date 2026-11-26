@@ -30,6 +30,12 @@ class TeacherAppTests(unittest.TestCase):
         page=self.c.get(r.location)
         self.assertIn(b'Fictional school',page.data)
         self.assertIn(b'Use the active Teacher account',page.data)
+        self.assertIn(b'class="teacher-auth-card"',page.data)
+        self.assertEqual(page.data.count(b'<h1>Fictional school</h1>'),1)
+        self.assertNotIn(b'class="public-header"',page.data)
+        self.assertIn(b'data-password-icon',page.data)
+        self.assertIn(b'aria-label="Show password"',page.data)
+        self.assertIn(b'teacher-auth.css',page.data)
         self.assertIn(b'teacher password',self.c.get('/auth/forgot-password').data)
         for login in ('teacher.one','teacher@example.invalid'):
             r=self.app_login(login)
