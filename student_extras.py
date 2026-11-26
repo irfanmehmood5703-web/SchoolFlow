@@ -2,11 +2,71 @@
 import hmac
 import io
 import secrets
+import zipfile
+import zlib
+from xml.etree import ElementTree
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, session, url_for, jsonify
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
+
+
+DOCX_MIME='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+DOCX_MAIN=DOCX_MIME+'.main+xml'
+DOCX_TYPES='{http://schemas.openxmlformats.org/package/2006/content-types}'
+DOCX_DOCUMENTS={'{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document','{http://purl.oclc.org/ooxml/wordprocessingml/main}document'}
+
+
+def valid_word_document(content):
+    """Verify a bounded, ordinary OOXML Word document, not an arbitrary ZIP."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as document:
+            parts=document.infolist()
+            if not 1<=len(parts)<=1024 or sum(part.file_size for part in parts)>50*1024*1024:
+                return False
+            seen=set()
+            for part in parts:
+                name=part.filename.casefold()
+                if (not name or name.startswith('/') or '\\' in name or ':' in name
+                        or '..' in name.split('/') or name in seen or part.flag_bits&1
+                        or part.compress_type not in (zipfile.ZIP_STORED,zipfile.ZIP_DEFLATED)
+                        or 'vbaproject' in name or name.startswith(('word/activex/','word/embeddings/'))):
+                    return False
+                seen.add(name)
+            def xml_part(name,limit):
+                info=document.getinfo(name)
+                if not 0<info.file_size<=limit:raise ValueError('Word part is too large.')
+                with document.open(info) as stream:
+                    data=stream.read(limit+1)
+                if len(data)>limit or b'\x00' in data or b'<!DOCTYPE' in data.upper() or b'<!ENTITY' in data.upper():
+                    raise ValueError('Unsafe Word XML.')
+                return ElementTree.fromstring(data)
+            types=xml_part('[Content_Types].xml',512*1024)
+            if types.tag!=DOCX_TYPES+'Types':return False
+            if any('macroenabled' in item.get('ContentType','').casefold() or 'vba' in item.get('ContentType','').casefold() for item in types):
+                return False
+            if not any(item.tag==DOCX_TYPES+'Override' and item.get('PartName')=='/word/document.xml' and item.get('ContentType')==DOCX_MAIN for item in types):
+                return False
+            relationship_tag='{http://schemas.openxmlformats.org/package/2006/relationships}'
+            rels=xml_part('_rels/.rels',512*1024)
+            if rels.tag!=relationship_tag+'Relationships' or not any(
+                    r.tag==relationship_tag+'Relationship' and r.get('Type','').endswith('/officeDocument')
+                    and r.get('Target','').lstrip('/')=='word/document.xml' and r.get('TargetMode')!='External'
+                    for r in rels):
+                return False
+            # Ordinary hyperlinks are fine; reject external templates and other
+            # automatically fetched relationships in a school worksheet.
+            for part in parts:
+                if part.filename.endswith('.rels'):
+                    relationships=xml_part(part.filename,512*1024)
+                    if relationships.tag!=relationship_tag+'Relationships' or any(
+                            r.get('TargetMode','').casefold()=='external' and not r.get('Type','').endswith('/hyperlink')
+                            for r in relationships):
+                        return False
+            return xml_part('word/document.xml',8*1024*1024).tag in DOCX_DOCUMENTS
+    except (zipfile.BadZipFile,KeyError,ValueError,RuntimeError,OSError,NotImplementedError,ElementTree.ParseError,EOFError,zlib.error,OverflowError):
+        return False
 
 
 def configure_student_extras(app, db, Student):
@@ -93,25 +153,32 @@ def configure_student_extras(app, db, Student):
         result = []
         total = 0
         for f in files:
-            name = secure_filename(f.filename)[:180]
-            ext = name.rsplit('.', 1)[-1].lower()
+            # Get the suffix before sanitising or shortening the name so long
+            # or Urdu filenames keep their original, validated file type.
+            raw_name = f.filename.replace('\\','/').rsplit('/',1)[-1]
+            stem, dot, suffix = raw_name.rpartition('.')
+            ext = suffix.lower() if dot else ''
+            safe_stem = secure_filename(stem if dot else raw_name) or 'attachment-'+str(len(result)+1)
+            name = safe_stem[:179-len(ext)]+'.'+ext if ext else safe_stem[:180]
             content = f.read(5 * 1024 * 1024 + 1)
             total += len(content)
             if not content or len(content) > 5 * 1024 * 1024 or total > 15 * 1024 * 1024:
                 raise ValueError('Files must be nonempty, up to 5 MB each and 15 MB combined.')
-            mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','pdf':'application/pdf','mp3':'audio/mpeg','mp4':'video/mp4'}.get(ext)
+            mime = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp','pdf':'application/pdf','mp3':'audio/mpeg','mp4':'video/mp4','docx':DOCX_MIME}.get(ext)
             valid = False
             if ext in ('jpg','jpeg','png','webp'):
                 from PIL import Image, UnidentifiedImageError
                 try:
                     with Image.open(io.BytesIO(content)) as image:
-                        valid = image.format == {'jpg':'JPEG','jpeg':'JPEG','png':'PNG','webp':'WEBP'}[ext]
+                        expected = image.format == {'jpg':'JPEG','jpeg':'JPEG','png':'PNG','webp':'WEBP'}[ext]
                         image.verify()
+                        valid = expected
                 except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError): pass
             elif ext == 'pdf': valid = content.startswith(b'%PDF-')
             elif ext == 'mp3': valid = content.startswith(b'ID3') or (len(content)>1 and content[0]==255 and content[1]&224==224)
             elif ext == 'mp4': valid = len(content)>12 and content[4:8]==b'ftyp'
-            if not mime or not valid: raise ValueError('Use valid JPG, PNG, WebP, PDF, MP3 or MP4 attachments.')
+            elif ext == 'docx': valid = valid_word_document(content)
+            if not mime or not valid: raise ValueError(f'Attachment {name[:100]} was not accepted. Use valid JPG, PNG, WebP, PDF, Word (.docx), MP3 or MP4 attachments. Older .doc and macro-enabled Word files are not supported.')
             result.append((name,mime,content))
         return result
 

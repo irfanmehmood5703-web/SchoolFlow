@@ -116,6 +116,21 @@ class ParentAppTests(unittest.TestCase):
         self.assertEqual(p.get(path.replace('students/1/','students/2/')).status_code,404)
         def hide():app.extensions['parent_study_models']['item'].query.filter_by(kind='notes',published=True,campus='North').one().published=False
         self.tenant(hide);self.assertEqual(p.get(path).status_code,404)
+    def test_published_vacation_docx_download_parent_scope(self):
+        from tests.word_attachment_fixture import word_attachment
+        from student_extras import DOCX_MIME
+        content=word_attachment()
+        data=dict(action='publish',token=secrets.token_urlsafe(32),kind='vacation',campus='North',class_name='One',section='A',title='Fictional Word work',starts=str(school_today()),ends=str(school_today()+timedelta(days=2)),body='Complete the Word worksheet.',published='1',attachments=(io.BytesIO(content),'work.docx',DOCX_MIME))
+        self.assertEqual(self.post('/workspace/general/parent-study',data).status_code,302)
+        p=self.parent()
+        self.assertIn(b'work.docx',self.page(p,'vacation').data)
+        fid=self.tenant(lambda:app.extensions['parent_study_models']['file'].query.one().id)
+        path=f'{self.base}/app/students/1/study/files/{fid}'
+        response=p.get(path);self.assertEqual(response.status_code,200);self.assertEqual(response.data,content)
+        self.assertIn(DOCX_MIME,response.headers['Content-Type']);self.assertIn('attachment',response.headers['Content-Disposition'])
+        self.assertEqual(p.get(path.replace('students/1/','students/2/')).status_code,404)
+        self.tenant(lambda:setattr(app.extensions['parent_study_models']['item'].query.one(),'published',False))
+        self.assertEqual(p.get(path).status_code,404)
     def test_publication_ui_validates_unsafe_link_and_real_scope(self):
         self.assertEqual(self.c.get('/workspace/general/parent-study').status_code,200)
         data=dict(action='publish',token=secrets.token_urlsafe(32),kind='learning',campus='North',class_name='One',section='A',title='Test lesson',starts=str(school_today()),ends=str(school_today()),body='<script>secret</script><b>Safe</b>',published='1')

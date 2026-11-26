@@ -46,6 +46,26 @@ class StudentExtrasTests(unittest.TestCase):
         data=self.payload();data.add('attachments',(io.BytesIO(b'<script>bad</script>'),'fake.jpg'))
         self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,422)
         self.assertEqual(self.models['entry'].query.count(),1)
+    def test_docx_upload_checks_package_and_keeps_extension(self):
+        from tests.word_attachment_fixture import word_attachment
+        from student_extras import DOCX_MIME, valid_word_document
+        content=word_attachment()
+        self.assertTrue(valid_word_document(content))
+        self.assertFalse(valid_word_document(word_attachment({'word/vbaProject.bin':b'macro'})))
+        self.assertFalse(valid_word_document(word_attachment({'../unsafe':b'bad'})))
+        self.assertFalse(valid_word_document(word_attachment({'word/_rels/document.xml.rels':b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="r" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="https://example.invalid/template.dotm" TargetMode="External"/></Relationships>'})))
+        self.assertFalse(valid_word_document(word_attachment(main_type='application/vnd.ms-word.document.macroEnabled.main+xml')))
+        self.assertFalse(valid_word_document(b'fake zip'))
+        data=self.payload();data.add('attachments',(io.BytesIO(content),'worksheet-'+'a'*200+'.docx','application/octet-stream'))
+        self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,302)
+        row=self.models['attachment'].query.one()
+        self.assertTrue(row.filename.endswith('.docx'));self.assertLessEqual(len(row.filename),180);self.assertEqual(row.mime,DOCX_MIME)
+        r=self.c.get('/workspace/general/attachments/'+str(row.id))
+        self.assertEqual(r.status_code,200);self.assertEqual(r.data,content);self.assertIn('attachment',r.headers['Content-Disposition'])
+        for fake,filename in [(b'<html>bad</html>','fake.docx'),(word_attachment({'word/vbaProject.bin':b'macro'}),'macro.docx'),(content,'legacy.doc')]:
+            data=self.payload();data.add('attachments',(io.BytesIO(fake),filename))
+            self.assertEqual(self.c.post('/workspace/general/notices',data=data).status_code,422)
+        self.assertEqual(self.models['entry'].query.count(),1)
     def test_diary_save_and_request_status_filters(self):
         changes=dict(class_name='One',section='A',subject='Math',channel='app',father='1',parent_notification='1',action='save-send')
         self.assertEqual(self.c.post('/workspace/general/diary',data=self.payload(**changes)).status_code,302)
