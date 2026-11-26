@@ -198,32 +198,55 @@ def configure_automatic_reports(app,db,Student,Employee):
     def tick_cli():
         tick_all()
     def assignments():
-        return [r for r in W.query.filter_by(kind='teacher-classes',status='Active').order_by(W.id) if all(r.data.get(k) for k in ('employee_id','campus','class_name','section','subject')) and str(r.data['employee_id']).isdigit()]
+        return [r for r in W.query.filter_by(kind='teacher-classes',status='Active').order_by(W.id) if all(r.data.get(k) for k in ('employee_id','campus','class_name','section')) and str(r.data['employee_id']).isdigit()]
+    def period_subjects(assignment):
+        # Explicit subject assignments remain restricted to that subject.
+        if assignment.get('subject'):return [assignment['subject']]
+        allowed=app.extensions['school_settings_helpers']['subject_allowed']
+        Catalog=app.extensions['record_models']['settings'];cls=assignment['class_name']
+        return sorted({r.value for r in Catalog.query.filter_by(category='subject').all() if (not r.class_name or r.class_name==cls) and allowed(assignment['campus'],cls,r.value)},key=str.casefold)
     def period_rows():
         return W.query.filter_by(kind='automatic-period-reminder',status='Active').order_by(W.id).all()
+    def teacher_timetable(cohorts):
+        """Recurring weekly periods for the exact active, permitted assignments."""
+        allowed={r.id:r.data for r in cohorts}
+        out=[];catalog={}
+        for row in period_rows():
+            d=row.data;a=allowed.get(d.get('assignment_id'))
+            if not a or a!=d.get('assignment'):continue
+            weekday=d.get('weekday');clock=d.get('time','');lead=d.get('lead')
+            if weekday not in range(7) or lead not in (0,5,10,15,30) or not isinstance(clock,str) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):continue
+            subject=d.get('subject') or a.get('subject') or ''
+            if a.get('subject'):
+                if subject!=a['subject']:continue
+            elif subject:
+                aid=d['assignment_id']
+                if aid not in catalog:catalog[aid]=period_subjects(a)
+                if subject not in catalog[aid]:continue
+            out.append(dict(weekday=weekday,time=clock,subject=subject or 'Class period',campus=a['campus'],class_name=a['class_name'],section=a['section'],lead=lead))
+        return sorted(out,key=lambda r:(r['weekday'],r['time'],r['campus'],r['class_name'],r['section'],r['subject']))
     def teacher_periods(cohorts,now=None):
         now=now or datetime.now(SCHOOL_TIMEZONE)
         day=now.date();minute=now.hour*60+now.minute
-        allowed={r.id:r.data for r in cohorts}
-        out=[]
-        holidays=app.extensions['holiday_calendar_helpers']['rows']()
-        for row in period_rows():
-            d=row.data;a=allowed.get(d.get('assignment_id'))
-            if not a or a!=d.get('assignment') or d.get('weekday')!=day.weekday():continue
-            if any(h.scope in ('',a['campus']) and (h.data['date'][5:]==day.strftime('%m-%d') if h.data.get('repeats') else h.data['date']==day.isoformat()) for h in holidays):continue
-            hour,m=map(int,d['time'].split(':'));start=hour*60+m
+        out=[];holidays=app.extensions['holiday_calendar_helpers']['rows']()
+        for p in teacher_timetable(cohorts):
+            if p['weekday']!=day.weekday():continue
+            if any(h.scope in ('',p['campus']) and (h.data['date'][5:]==day.strftime('%m-%d') if h.data.get('repeats') else h.data['date']==day.isoformat()) for h in holidays):continue
+            hour,m=map(int,p['time'].split(':'));start=hour*60+m
             if start<minute:continue
-            out.append(dict(time=d['time'],subject=a['subject'],campus=a['campus'],class_name=a['class_name'],section=a['section'],due=minute>=start-d['lead'],lead=d['lead']))
-        return sorted(out,key=lambda r:r['time'])
+            out.append(dict(p,due=minute>=start-p['lead']))
+        return out
     @bp.post('/periods')
     def periods():
         if not owner():abort(403)
         csrf();app.extensions['admission_capacity']['lock']()
         action=request.form.get('action')
         if action=='add':
-            aid=request.form.get('assignment_id',type=int)
+            raw=request.form.get('assignment_id','');assignment_id,separator,subject=raw.partition(':')
+            aid=int(assignment_id) if assignment_id.isascii() and assignment_id.isdigit() and len(assignment_id)<=18 else None
             assignment=next((r for r in assignments() if r.id==aid),None)
             if not assignment:abort(422,'Choose an active teacher class assignment.')
+            if separator and (assignment.data.get('subject') or not subject or subject not in period_subjects(assignment.data)):abort(422,'Choose a configured subject for this class.')
             employee=db.session.get(Employee,int(assignment.data['employee_id']))
             if not employee or employee.status!='Active':abort(422,'Choose an active teacher.')
             weekday=request.form.get('weekday',type=int);lead=request.form.get('lead',type=int);clock=request.form.get('time','')
@@ -231,7 +254,7 @@ def configure_automatic_reports(app,db,Student,Employee):
             rows=period_rows()
             if len(rows)>=500:abort(422,'Remove unused periods before adding more.')
             if any(r.data.get('assignment',{}).get('employee_id')==assignment.data['employee_id'] and r.data.get('weekday')==weekday and r.data.get('time')==clock for r in rows):abort(409,'A period for this teacher already starts at that time.')
-            db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(assignment_id=aid,assignment=dict(assignment.data),weekday=weekday,time=clock,lead=lead)))
+            db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(assignment_id=aid,assignment=dict(assignment.data),weekday=weekday,time=clock,lead=lead,**({'subject':subject} if separator else {}))))
             db.session.add(ops['audit'](action='Create period reminder',data={'assignment_id':aid,'weekday':weekday,'time':clock}))
         elif action=='remove':
             row=W.query.filter_by(kind='automatic-period-reminder',status='Active',id=request.form.get('id',type=int)).first_or_404()
@@ -257,11 +280,11 @@ def configure_automatic_reports(app,db,Student,Employee):
             except (IntegrityError,StaleDataError):db.session.rollback();abort(409,'Settings changed. Reload first.')
             flash('Automatic report settings saved.','success')
             return redirect(url_for('automatic_reports.index'))
-        row,rules=settings()
-        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=assignments(),employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
+        row,rules=settings();active_assignments=assignments()
+        return render_template('automatic_reports.html',title='Automatic Reports & Notifications',catalog=REPORTS,rules=rules,version=row.version if row else 0,events=events(),history=W.query.filter_by(kind='automatic-report-snapshot',status='Active').order_by(W.id.desc()).limit(30).all(),worker=bool(app.config.get('FINE_WORKER_ENABLED')),periods=period_rows(),assignments=active_assignments,assignment_subjects={a.id:period_subjects(a.data) for a in active_assignments if not a.data.get('subject')},employees={str(e.id):e.name for e in Employee.query.filter_by(status='Active').all()},weekdays=('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'),wa_options=wa_options(),wa_enabled=wa_config()[1].get('enabled',False),wa_version=wa_config()[0].version if wa_config()[0] else 0)
     @bp.after_request
     def private(response):
         response.headers['Cache-Control']='no-store';return response
     app.extensions['automatic_report_events']=events
-    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all,teacher_periods=teacher_periods,wa_send=wa_send)
+    app.extensions['automatic_report_helpers']=dict(capture=capture,tick_all=tick_all,teacher_periods=teacher_periods,teacher_timetable=teacher_timetable,wa_send=wa_send)
     app.register_blueprint(bp)

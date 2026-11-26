@@ -95,7 +95,7 @@ def configure_teacher_app(app,db,Student,Employee):
             for prefix in prefixes:
                 if key.startswith(prefix) and key[len(prefix):] not in {str(n) for n in ids}:abort(403,'A student outside this class was submitted.')
     def audit(action,c=None,**values):db.session.add(Audit(action=action,data=dict(staff_id=g.staff_principal.id,employee_id=g.teacher_employee.id,campus=c.data['campus'] if c else '',**values)))
-    def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace'}.get(view,view.title()),**values)
+    def render(view,**values):return render_template('teacher_app.html',view=view,title={'home':'Teacher Home','classes':'My Classes','timetable':'Class Timetable','attendance':'Class Attendance','diary':'Class Diary','materials':'Study Material','marks':'Exam Marks','meetings':'PTM Meetings','profile':'My Profile','error':'Check this form','self':'My Records','tool':'Teacher workspace'}.get(view,view.title()),**values)
     @bp.context_processor
     def context():
         return dict(teacher=g.teacher_employee,teacher_account=g.staff_principal,teacher_today=school_today(),teacher_classes=cohorts(),teacher_periods=app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()) if request.endpoint in ('teacher_app.home','teacher_app.reminders') else [],teacher_can=lambda code,campus:campus in grants(code),teacher_token=secrets.token_urlsafe(32),teacher_study=STUDY,timedelta=timedelta,teacher_own=own_access,teacher_money=lambda n:'Rs '+f'{n/100:,.2f}')
@@ -129,6 +129,12 @@ def configure_teacher_app(app,db,Student,Employee):
         return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events())
     @bp.get('/classes')
     def classes():return render('classes')
+    @bp.get('/timetable')
+    def timetable():
+        periods=app.extensions['automatic_report_helpers']['teacher_timetable'](cohorts())
+        days=[dict(name=name,today=index==school_today().weekday(),periods=[p for p in periods if p['weekday']==index]) for index,name in enumerate(calendar.day_name)]
+        return render('timetable',days=days,period_count=len(periods))
+
     @bp.route('/classes/<int:cid>/attendance',methods=['GET','POST'])
     def attendance(cid):
         c=cohort(cid,'attendance.update' if request.method=='POST' else 'attendance.view');day=parse_day(request.values.get('day',str(school_today())))

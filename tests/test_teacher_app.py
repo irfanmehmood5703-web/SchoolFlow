@@ -187,6 +187,42 @@ class TeacherAppTests(unittest.TestCase):
         self.assertNotIn(b'class="teacher-exam-compact"',self.c.get(root+'/attendance').data)
         self.assertEqual(self.c.post(path,data={'_csrf':self.token(),'review':self.review(path),f'mark_{self.pupil}':'42',f'state_{self.pupil}':''}).status_code,302)
         self.tenant(lambda:self.assertEqual(self.ops['score'].query.one().obtained,42))
+    def test_weekly_timetable_class_only_periods_and_access(self):
+        self.seed()
+        root='/workspace/core/automatic-reports';path=root+'/periods'
+        def setup():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid)
+            row.data={**row.data,'subject':''}
+            staff=db.session.get(self.Staff,self.sid)
+            staff.data={**staff.data,'permissions':{},'campuses':['Campus A']}
+            db.session.add(self.rm['settings'](category='subject',value='Urdu',class_name='One'))
+            db.session.add(self.rm['settings'](category='subject',value='Forbidden subject',class_name='Two'))
+            other=W(kind='teacher-classes',status='Active',data={**row.data,'campus':'Campus B','subject':'Math'})
+            db.session.add(other);db.session.flush()
+            db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(assignment_id=other.id,assignment=dict(other.data),weekday=1,time='09:31',lead=5)))
+        self.tenant(setup)
+        self.login('owner@example.invalid')
+        page=self.c.get(root)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(f'value="{self.cid}:Urdu"'.encode(),page.data)
+        self.assertNotIn(f'value="{self.cid}:Forbidden subject"'.encode(),page.data)
+        data={'_csrf':self.token(),'action':'add','assignment_id':f'{self.cid}:Urdu','weekday':'0','time':'09:00','lead':'5'}
+        self.assertEqual(self.c.post(path,data={**data,'assignment_id':f'{self.cid}:Forbidden subject'}).status_code,422)
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        self.assertEqual(self.c.post(path,data=data).status_code,409)
+        self.assertEqual(self.c.post(path,data={**data,'assignment_id':str(self.cid),'weekday':'5','time':'11:00'}).status_code,302)
+        self.assertEqual(self.c.get('/teacher-app/timetable').status_code,403)
+        self.login()
+        home=self.c.get('/teacher-app');self.assertIn(b'Class Timetable',home.data)
+        page=self.c.get('/teacher-app/timetable')
+        self.assertEqual(page.status_code,200)
+        for expected in (b'Urdu',b'Monday',b'09:00',b'Saturday',b'Class period',b'11:00',b'2 periods'):self.assertIn(expected,page.data)
+        for forbidden in (b'Campus B',b'09:31',b'Forbidden subject'):self.assertNotIn(forbidden,page.data)
+        self.assertEqual(self.c.post(path,data={**data,'_csrf':self.token()}).status_code,403)
+        self.tenant(lambda:setattr(db.session.get(self.ops['workflow'],self.cid),'status','Voided'))
+        page=self.c.get('/teacher-app/timetable')
+        self.assertIn(b'No timetable scheduled yet',page.data)
+        self.assertNotIn(b'09:00',page.data)
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})

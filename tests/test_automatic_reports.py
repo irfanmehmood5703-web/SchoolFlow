@@ -94,10 +94,15 @@ class AutomaticReportTests(unittest.TestCase):
             self.assertEqual(f([],now),[])
             self.assertTrue(f([row],now)[0]['due'])
             self.assertEqual(f([row],now)[0]['subject'],'Math')
+            timetable=app.extensions['automatic_report_helpers']['teacher_timetable']
+            self.assertEqual(timetable([row])[0]['weekday'],0)
+            self.assertEqual(timetable([row])[0]['time'],'09:00')
+            self.assertEqual(timetable([]),[])
             self.assertFalse(f([row],now.replace(minute=50))[0]['due'])
             self.assertEqual(f([row],now.replace(hour=10)),[])
             row.data={**row.data,'subject':'Changed'}
             self.assertEqual(f([row],now),[])
+            self.assertEqual(timetable([row]),[])
         self.tenant(check)
     def test_whatsapp_disabled_without_linked_provider(self):
         self.assertEqual(self.post('/workspace/core/automatic-reports/whatsapp',dict(action='enable',version='0',provider=1,device='missing',mobile='923000000001',consent='yes')).status_code,422)
