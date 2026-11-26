@@ -276,6 +276,41 @@ class TeacherAppTests(unittest.TestCase):
         self.assertNotIn(b'timetable-full-class',page.data)
         self.assertIn(b'English',page.data)
         self.assertNotIn(b'09:00',page.data)
+    def test_weekly_lecture_multiple_days_preserve_full_class_and_reject_conflicts(self):
+        self.seed();path='/workspace/core/automatic-reports/periods'
+        def setup():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid);row.data={**row.data,'subject':''}
+            other=W(kind='teacher-classes',status='Active',data={**row.data,'class_name':'Two','subject':'English'})
+            db.session.add(other);db.session.flush();return other.id
+        other=self.tenant(setup);self.login('owner@example.invalid')
+        page=self.c.get('/workspace/core/automatic-reports')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Teaching days (weekly)',page.data)
+        self.assertEqual(page.data.count(b'name="weekdays"'),14)
+        csrf=self.token()
+        def post(**fields):return self.c.post(path,data={'_csrf':csrf,**fields})
+        self.assertEqual(post(action='add_full_class',assignment_id=str(self.cid),weekdays=['0','1','2','3','4']).status_code,302)
+        # Existing single-day lecture remains compatible with the weekly form.
+        data=dict(action='add',assignment_id=str(other),time='10:00',lead='5')
+        self.assertEqual(post(**data,weekday='0').status_code,302)
+        self.assertEqual(post(**data,weekday='0').status_code,409)
+        self.assertEqual(post(**data,weekdays=[]).status_code,422)
+        self.assertEqual(post(**data,weekdays=['0','7']).status_code,422)
+        self.assertEqual(post(**data,weekdays=['0','1','2','3','4']).status_code,302)
+        self.assertEqual(post(**data,weekdays=['0','1','2','3','4']).status_code,302)
+        # A conflict on Tuesday means Saturday is not partially inserted.
+        self.assertEqual(post(action='add',assignment_id=f'{self.cid}:Math',time='10:00',lead='5',weekdays=['1','5']).status_code,409)
+        def check():
+            W=self.ops['workflow'];records=W.query.filter_by(kind='automatic-period-reminder',status='Active').all()
+            self.assertEqual(len(records),10)
+            self.assertEqual(sorted(r.data['weekday'] for r in records if r.data.get('mode')=='lecture'),list(range(5)))
+        self.tenant(check);self.login()
+        page=self.c.get('/teacher-app/timetable')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'5 full-class days',page.data)
+        self.assertIn(b'5 lectures',page.data)
+        self.assertEqual(page.data.count(b'class="timetable-time">10:00'),5)
+        self.assertEqual(self.c.post(path,data={'_csrf':self.token(),**data,'weekdays':['5']}).status_code,403)
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})

@@ -275,12 +275,30 @@ def configure_automatic_reports(app,db,Student,Employee):
                 if new_days:db.session.add(ops['audit'](action='Create full class schedule',data={'assignment_id':aid,'weekdays':new_days}))
                 flash(f'{len(new_days)} full-class day(s) saved. {len(existing)} already scheduled; no duplicates created.','success')
                 db.session.commit();return redirect(url_for('automatic_reports.index'))
-            weekday=request.form.get('weekday',type=int);lead=request.form.get('lead',type=int);clock=request.form.get('time','')
-            if weekday not in range(7) or lead not in (0,5,10,15,30) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):abort(422,'Choose a weekday, period start and reminder lead time.')
-            if len(rows)>=500:abort(422,'Remove unused periods before adding more.')
-            if any(r.data.get('mode','lecture')=='lecture' and str(r.data.get('assignment',{}).get('employee_id'))==str(assignment.data['employee_id']) and r.data.get('weekday')==weekday and r.data.get('time')==clock for r in rows):abort(409,'A period for this teacher already starts at that time.')
-            db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(mode='lecture',assignment_id=aid,assignment=dict(assignment.data),weekday=weekday,time=clock,lead=lead,**({'subject':subject} if separator else {}))))
-            db.session.add(ops['audit'](action='Create period reminder',data={'assignment_id':aid,'weekday':weekday,'time':clock}))
+            # New weekly submissions select multiple days. Retain the original
+            # single-day field for existing clients and their conflict behaviour.
+            supplied=request.form.getlist('weekdays');legacy=not supplied and 'weekday' in request.form
+            if legacy:supplied=request.form.getlist('weekday')
+            if not supplied or any(day not in ('0','1','2','3','4','5','6') for day in supplied) or (legacy and len(supplied)!=1):abort(422,'Select at least one valid weekday.')
+            days=sorted(set(map(int,supplied)))
+            lead=request.form.get('lead',type=int);clock=request.form.get('time','')
+            if lead not in (0,5,10,15,30) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):abort(422,'Choose a period start and reminder lead time.')
+            # Check every selected day before creating anything. A replay of the
+            # exact same lecture in the weekly form is harmless; a different
+            # lecture at the same teacher/day/start rejects the whole batch.
+            existing=set();selected_subject=subject if separator else assignment.data.get('subject') or ''
+            for row in rows:
+                d=row.data;snapshot=d.get('assignment',{})
+                if d.get('mode','lecture')!='lecture' or str(snapshot.get('employee_id'))!=str(assignment.data['employee_id']) or d.get('weekday') not in days or d.get('time')!=clock:continue
+                same=(d.get('assignment_id')==aid and snapshot==assignment.data and (d.get('subject') or snapshot.get('subject') or '')==selected_subject and d.get('lead')==lead)
+                if legacy or not same:abort(409,'A different or existing period for this teacher already starts at that time on a selected day. No timetable entries were changed.')
+                existing.add(d['weekday'])
+            new_days=[day for day in days if day not in existing]
+            if len(rows)+len(new_days)>500:abort(422,'Remove unused periods before adding more.')
+            for day in new_days:
+                db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(mode='lecture',assignment_id=aid,assignment=dict(assignment.data),weekday=day,time=clock,lead=lead,**({'subject':subject} if separator else {}))))
+                db.session.add(ops['audit'](action='Create period reminder',data={'assignment_id':aid,'weekday':day,'time':clock}))
+            flash(f'{len(new_days)} lecture day(s) saved. {len(existing)} already scheduled; no duplicates created.','success')
         elif action=='remove':
             row=W.query.filter_by(kind='automatic-period-reminder',status='Active',id=request.form.get('id',type=int)).first_or_404()
             row.status='Voided';db.session.add(ops['audit'](action='Remove full class schedule' if row.data.get('mode')=='full-class' else 'Remove period reminder',data={'id':row.id}))
