@@ -248,20 +248,26 @@ def configure_automatic_reports(app,db,Student,Employee):
         csrf();app.extensions['admission_capacity']['lock']()
         action=request.form.get('action')
         if action in ('add','add_full_class'):
-            raw=request.form.get('assignment_id','');assignment_id,separator,subject=raw.partition(':')
-            aid=int(assignment_id) if assignment_id.isascii() and assignment_id.isdigit() and len(assignment_id)<=18 else None
-            assignment=next((r for r in assignments() if r.id==aid),None)
-            if not assignment:abort(422,'Choose an active teacher class assignment.')
-            if separator and (assignment.data.get('subject') or not subject or subject not in period_subjects(assignment.data)):abort(422,'Choose a configured subject for this class.')
-            employee=db.session.get(Employee,int(assignment.data['employee_id']))
-            if not employee or employee.status!='Active':abort(422,'Choose an active teacher.')
+            active_rows={r.id:r for r in assignments()}
+            def resolve_assignment(raw):
+                assignment_id,separator,subject=raw.partition(':')
+                aid=int(assignment_id) if assignment_id.isascii() and assignment_id.isdigit() and len(assignment_id)<=18 else None
+                assignment=active_rows.get(aid)
+                if not assignment:abort(422,'Choose an active teacher class assignment for every lecture.')
+                if separator and (assignment.data.get('subject') or not subject or subject not in period_subjects(assignment.data)):abort(422,'Choose a configured subject for this class.')
+                employee=db.session.get(Employee,int(assignment.data['employee_id']))
+                if not employee or employee.status!='Active':abort(422,'Choose an active teacher.')
+                return aid,assignment,separator,subject
+            raw_assignments=request.form.getlist('assignment_id')
             rows=period_rows()
             if action=='add_full_class':
+                if len(raw_assignments)!=1:abort(422,'Choose one full-class assignment.')
+                aid,assignment,separator,subject=resolve_assignment(raw_assignments[0])
                 if separator or assignment.data.get('subject'):abort(422,'Full Class requires an active class-only assignment.')
                 supplied=request.form.getlist('weekdays')
                 if not supplied or any(day not in ('0','1','2','3','4','5','6') for day in supplied):abort(422,'Select at least one valid weekday.')
                 days=sorted(set(map(int,supplied)))
-                active={r.id:r.data for r in assignments()}
+                active={aid:r.data for aid,r in active_rows.items()}
                 existing=set()
                 for row in rows:
                     d=row.data;a=active.get(d.get('assignment_id'))
@@ -281,24 +287,35 @@ def configure_automatic_reports(app,db,Student,Employee):
             if legacy:supplied=request.form.getlist('weekday')
             if not supplied or any(day not in ('0','1','2','3','4','5','6') for day in supplied) or (legacy and len(supplied)!=1):abort(422,'Select at least one valid weekday.')
             days=sorted(set(map(int,supplied)))
-            lead=request.form.get('lead',type=int);clock=request.form.get('time','')
-            if lead not in (0,5,10,15,30) or not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock):abort(422,'Choose a period start and reminder lead time.')
-            # Check every selected day before creating anything. A replay of the
-            # exact same lecture in the weekly form is harmless; a different
-            # lecture at the same teacher/day/start rejects the whole batch.
-            existing=set();selected_subject=subject if separator else assignment.data.get('subject') or ''
+            lead=request.form.get('lead',type=int);clocks=request.form.getlist('time')
+            if not raw_assignments or len(raw_assignments)!=len(clocks) or len(raw_assignments)>12 or (legacy and len(raw_assignments)!=1):abort(422,'Choose one to twelve lectures, each with its own assignment and start time.')
+            if lead not in (0,5,10,15,30) or any(not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock) for clock in clocks):abort(422,'Choose a valid start time for every lecture and reminder lead time.')
+            # Validate every selected subject and weekday before inserting any
+            # timetable entry, including collisions inside the submitted batch.
+            def key(data):
+                return (str(data.get('assignment',{}).get('employee_id')),data.get('weekday'),data.get('time'))
+            def signature(data):
+                snapshot=data.get('assignment',{})
+                return (data.get('assignment_id'),snapshot,data.get('subject') or snapshot.get('subject') or '',data.get('lead'))
+            existing={}
             for row in rows:
-                d=row.data;snapshot=d.get('assignment',{})
-                if d.get('mode','lecture')!='lecture' or str(snapshot.get('employee_id'))!=str(assignment.data['employee_id']) or d.get('weekday') not in days or d.get('time')!=clock:continue
-                same=(d.get('assignment_id')==aid and snapshot==assignment.data and (d.get('subject') or snapshot.get('subject') or '')==selected_subject and d.get('lead')==lead)
-                if legacy or not same:abort(409,'A different or existing period for this teacher already starts at that time on a selected day. No timetable entries were changed.')
-                existing.add(d['weekday'])
-            new_days=[day for day in days if day not in existing]
-            if len(rows)+len(new_days)>500:abort(422,'Remove unused periods before adding more.')
-            for day in new_days:
-                db.session.add(W(kind='automatic-period-reminder',status='Active',data=dict(mode='lecture',assignment_id=aid,assignment=dict(assignment.data),weekday=day,time=clock,lead=lead,**({'subject':subject} if separator else {}))))
-                db.session.add(ops['audit'](action='Create period reminder',data={'assignment_id':aid,'weekday':day,'time':clock}))
-            flash(f'{len(new_days)} lecture day(s) saved. {len(existing)} already scheduled; no duplicates created.','success')
+                if row.data.get('mode','lecture')=='lecture':existing.setdefault(key(row.data),[]).append(row.data)
+            new={};already=set()
+            for raw,clock in zip(raw_assignments,clocks):
+                aid,assignment,separator,subject=resolve_assignment(raw)
+                for day in days:
+                    data=dict(mode='lecture',assignment_id=aid,assignment=dict(assignment.data),weekday=day,time=clock,lead=lead,**({'subject':subject} if separator else {}))
+                    slot=key(data);matches=existing.get(slot,[])
+                    if matches:
+                        if legacy or any(signature(old)!=signature(data) for old in matches):abort(409,'A different or existing period for this teacher already starts at that time on a selected day. No timetable entries were changed.')
+                        already.add(slot);continue
+                    if slot in new and signature(new[slot])!=signature(data):abort(409,'Two selected lectures start at the same time for this teacher. No timetable entries were changed.')
+                    new.setdefault(slot,data)
+            if len(rows)+len(new)>500:abort(422,'Remove unused periods before adding more.')
+            for data in new.values():
+                db.session.add(W(kind='automatic-period-reminder',status='Active',data=data))
+                db.session.add(ops['audit'](action='Create period reminder',data={'assignment_id':data['assignment_id'],'weekday':data['weekday'],'time':data['time']}))
+            flash(f'{len(new)} lecture day(s) saved. {len(already)} already scheduled; no duplicates created.','success')
         elif action=='remove':
             row=W.query.filter_by(kind='automatic-period-reminder',status='Active',id=request.form.get('id',type=int)).first_or_404()
             row.status='Voided';db.session.add(ops['audit'](action='Remove full class schedule' if row.data.get('mode')=='full-class' else 'Remove period reminder',data={'id':row.id}))

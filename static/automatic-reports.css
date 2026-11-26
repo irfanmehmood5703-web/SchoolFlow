@@ -1,0 +1,9 @@
+.timetable-lecture-form [hidden]{display:none!important}
+.timetable-lecture-row{min-width:0;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:6px 0 12px;background:#f7faf8}
+.timetable-lecture-row legend{font-size:13px;font-weight:700;color:var(--green);padding:0 5px}
+.timetable-lecture-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(105px,125px);align-items:end;gap:8px}
+.timetable-lecture-fields label{min-width:0;display:block}
+.timetable-lecture-fields select,.timetable-lecture-fields input{margin-top:4px}
+.timetable-lecture-row [data-remove-lecture]{margin-top:8px}
+.timetable-add-lecture{margin:0 0 5px}
+@media(max-width:600px){.timetable-lecture-fields{grid-template-columns:minmax(0,1fr)}}
