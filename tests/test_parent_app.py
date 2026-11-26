@@ -56,7 +56,7 @@ class ParentAppTests(unittest.TestCase):
         self.seed_app();p=self.parent()
         r=p.get(self.base);self.assertEqual(r.status_code,200);self.assertIn(b'Fictional Sibling',r.data);self.assertNotIn(b'Fictional Child 2',r.data)
         for view in ['student','overview','academics','results','attendance','fees','connect','profile','contact','leave','complaints','ptm','notifications','learning','notes','assignments','vacation','dates','rollslip']:
-            r=self.page(p,view);self.assertEqual(r.status_code,200,(view,r.data[:100]));self.assertNotIn(b'SECRET',r.data)
+            r=self.page(p,view);self.assertEqual(r.status_code,200,(view,r.data[:100]));self.assertNotIn(b'SECRET',r.data);self.assertIn(b'<meta name="schoolflow-document" content="1">',r.data)
             self.assertEqual(self.page(p,view,2).status_code,404,view)
         self.assertEqual(self.page(p,'fees',3).status_code,200);self.assertIn(b'Fictional Sibling',p.get(self.base+'/app/profile').data)
         self.assertEqual(self.page(p,'fees','bad').status_code,404)

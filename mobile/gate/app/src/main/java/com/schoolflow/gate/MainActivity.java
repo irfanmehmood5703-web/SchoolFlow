@@ -14,6 +14,7 @@ import org.json.*;
 import org.opencv.android.*;
 import org.opencv.core.Mat;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.OpeningScreen;
 import com.schoolflow.mobile.PasswordVisibility;
 
 /** Attended face gate: recognizing a face never silently posts attendance. */
@@ -25,7 +26,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private final AtomicBoolean busy=new AtomicBoolean(false);
  private final RecognitionPolicy.Stable stable=new RecognitionPolicy.Stable();
  private final Map<String,Long> confirmedAt=new HashMap<>();
- private Vault vault;private volatile FaceEngine engine;
+ private Vault vault;private volatile FaceEngine engine;private OpeningScreen opening;
  private volatile List<RecognitionPolicy.Identity> known=Collections.emptyList();
  private JavaCameraView camera;private TextView status,personText,detail;
  private Button start,confirm,qrModeButton;private Spinner direction;
@@ -46,7 +47,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private String lastSubmittedQr="", lastSubmittedQrDirection="";
  private long lastQrSubmission;
  private long processedAt,lastContact;private Runnable protectedAction;
- private final Runnable poll=new Runnable(){public void run(){if(!visible)return;try{if(vault!=null&&vault.pending()!=null)deliver();else if(vault!=null&&(!contactValid()||SystemClock.elapsedRealtime()-lastContact>40000))heartbeat();}catch(Exception e){show("Protected storage error. Reconnect only after reviewing local data.");}ui.postDelayed(this,15000);}};
+ private final Runnable poll=new Runnable(){public void run(){if(!visible)return;if(opening!=null&&opening.visible()){ui.postDelayed(this,1000);return;}try{if(vault!=null&&vault.pending()!=null)deliver();else if(vault!=null&&(!contactValid()||SystemClock.elapsedRealtime()-lastContact>40000))heartbeat();}catch(Exception e){show("Protected storage error. Reconnect only after reviewing local data.");}ui.postDelayed(this,15000);}};
  private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
  private TextView text(String value,int size){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(Color.rgb(39,39,42));v.setPadding(dp(8),dp(7),dp(8),dp(7));return v;}
  private Button button(String value,Runnable action){Button b=new Button(this);b.setText(value);b.setAllCaps(false);b.setOnClickListener(v->action.run());return b;}
@@ -77,9 +78,9 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   confirm=button("Confirm identity & mark",this::confirmIdentity);confirm.setEnabled(false);panel.addView(confirm);
   panel.addView(button("Retry connection / pending mark",()->{try{if(vault!=null&&vault.pending()!=null)deliver();else heartbeat();}catch(Exception e){show("Cannot read protected storage.");}}));
   panel.addView(button("Cancel pending submission",()->protect(this::cancelPending)));
-  body.addView(new PullToRefresh(scroll(panel),()->visible&&vault!=null&&!busy.get(),this::heartbeat),portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+  body.addView(new PullToRefresh(scroll(panel),()->visible&&vault!=null&&!busy.get(),this::heartbeat),portrait?new LinearLayout.LayoutParams(-1,0,1):new LinearLayout.LayoutParams(0,-1,1));root.addView(body,new LinearLayout.LayoutParams(-1,0,1));opening=new OpeningScreen(this,root);
   switchAttendanceMode(BuildConfig.GATE_SCHOOL_SCOPE.isEmpty());
-  if(BuildConfig.CHECK_FOR_UPDATES)AppUpdates.check(this);
+  opening.awaitReady(EndpointPolicy.BASE,()->{opening.dismiss();if(BuildConfig.CHECK_FOR_UPDATES)AppUpdates.check(this);},()->{});
   try{vault=new Vault(this);known=vault.people();status.setText(vault.lastResult());}catch(Exception e){status.setText("Protected storage cannot be opened. Attendance is disabled; do not replace it with plaintext.");start.setEnabled(false);return;}
   initializer.execute(()->{
    try{if(!OpenCVLoader.initLocal())throw new IllegalStateException();engine=new FaceEngine(this);show("Models ready. Connect a private institute gate; set a device screen lock before enrollment.");}
@@ -89,7 +90,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  @Override protected List<? extends CameraBridgeViewBase> getCameraViewList(){return camera==null?Collections.emptyList():Collections.singletonList(camera);}
  @Override public void onResume(){super.onResume();visible=true;ui.removeCallbacks(poll);ui.postDelayed(poll,1000);}
  @Override public void onPause(){visible=false;ui.removeCallbacks(poll);stopCamera();super.onPause();}
- @Override public void onDestroy(){if(camera!=null)camera.disableView();worker.shutdown();initializer.shutdown();super.onDestroy();}
+ @Override public void onDestroy(){if(opening!=null)opening.close();if(camera!=null)camera.disableView();worker.shutdown();initializer.shutdown();super.onDestroy();}
  private void switchAttendanceMode(boolean useQr){
   stopCamera();
   qrAttendance=useQr;

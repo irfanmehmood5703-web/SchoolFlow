@@ -10,6 +10,7 @@ import android.text.InputType;
 import android.view.View;
 import android.widget.*;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.OpeningScreen;
 import com.schoolflow.mobile.PasswordVisibility;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
@@ -32,6 +33,7 @@ public final class QrActivity extends Activity {
     private static final String KEY = "[A-Za-z0-9_-]{40,60}";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AppUpdates updates = new AppUpdates(this);
+    private OpeningScreen opening;
     private JSONObject data;
     private Vault vault;
     private TextView status;
@@ -40,7 +42,7 @@ public final class QrActivity extends Activity {
     private boolean busy;
     private String scanningDirection;
     private QrVoiceFeedback feedback;
-    private boolean foreground;
+    private boolean foreground,opened;
     private record Announcement(String name, boolean alreadyMarked) {}
     private Announcement pendingAnnouncement;
     private Announcement savedScanAnnouncement;
@@ -87,7 +89,7 @@ public final class QrActivity extends Activity {
         status.setPadding(0, dp(12), 0, 0);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content.addView(status);
-        setContentView(new PullToRefresh(scroll,
+        opening = new OpeningScreen(this, new PullToRefresh(scroll,
                 () -> foreground && scan.isEnabled(),
                 () -> run(() -> {
                     JSONObject gate = heartbeat(data);
@@ -106,6 +108,7 @@ public final class QrActivity extends Activity {
             status.setText("Protected gate storage could not be opened.");
         }
         buttons();
+        opening.awaitReady(EndpointPolicy.BASE, () -> { opening.dismiss(); openingComplete(); }, this::openingComplete);
     }
 
     @Override protected void onResume() {
@@ -115,8 +118,10 @@ public final class QrActivity extends Activity {
             announce(pendingAnnouncement);
             pendingAnnouncement = null;
         }
-        updates.resume();
+        if (opened) updates.resume();
     }
+
+    private void openingComplete() { opened = true; if (foreground) updates.resume(); }
 
     @Override protected void onPause() {
         foreground = false;
@@ -361,6 +366,7 @@ public final class QrActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        opening.close();
         worker.shutdown();
         if (feedback != null) feedback.close();
         super.onDestroy();

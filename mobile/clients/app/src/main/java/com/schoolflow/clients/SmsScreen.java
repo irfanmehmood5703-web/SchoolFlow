@@ -1,5 +1,6 @@
 package com.schoolflow.clients;
 import com.schoolflow.mobile.PullToRefresh;
+import com.schoolflow.mobile.OpeningScreen;
 import com.schoolflow.mobile.PasswordVisibility;
 import android.Manifest;
 import android.app.*;
@@ -24,7 +25,7 @@ import java.util.concurrent.*;
 
 /** An operator starts a finite approved queue; only its next SMS is dispatched. */
 final class SmsScreen {
- private final Activity a;private final Vault vault;private final ExecutorService io=Executors.newSingleThreadExecutor();
+ private final Activity a;private final Vault vault;private OpeningScreen opening;private final ExecutorService io=Executors.newSingleThreadExecutor();
  private final Handler handler=new Handler(Looper.getMainLooper());private final SmsRun run=new SmsRun();
  private JSONObject config=new JSONObject(),job;private TextView status,preview,connection,counts,timer;private EditText code,id,key;private Spinner sims,interval;
  private LinearLayout settings,runMetrics;
@@ -147,7 +148,7 @@ final class SmsScreen {
   root.setOrientation(LinearLayout.VERTICAL);
   root.setPadding(dp(14),dp(12),dp(14),dp(20));
   scroll.addView(root);
-  a.setContentView(new PullToRefresh(scroll,
+  opening=new OpeningScreen(a,new PullToRefresh(scroll,
       () -> active && refreshButton != null && refreshButton.isEnabled(), this::refresh));
 
   LinearLayout header=card(root);
@@ -254,7 +255,7 @@ final class SmsScreen {
   root.animate().alpha(1f).setDuration(200).start();
   try{config=new JSONObject(vault.read());job=config.optJSONObject("job");code.setText(BuildConfig.INSTITUTE_CODE.isEmpty()?config.optString("code"):BuildConfig.INSTITUTE_CODE);code.setEnabled(BuildConfig.INSTITUTE_CODE.isEmpty());id.setText(config.optString("device"));key.setText(config.optString("key"));int seconds=config.optInt("interval",20);interval.setSelection(seconds==15?0:seconds==25?2:1);settings.setVisibility(config.has("scope")?View.GONE:View.VISIBLE);showJob();if(job!=null)status.setText("Saved message recovered. Started or uncertain messages are never sent again automatically.");}
   catch(Exception e){storageFailed=true;status.setText("Private storage unavailable. Contact the school before reconnecting; pending messages must be reviewed.");}
-  loadSims();controls();if(config.has("scope")&&!storageFailed)refresh();
+  loadSims();controls();opening.awaitReady(EndpointPolicy.BASE,()->{opening.dismiss();((MainActivity)a).openingComplete();if(config.has("scope")&&!storageFailed)refresh();},()->((MainActivity)a).openingComplete());
  }
  private void controls(){if(start==null||destroyed)return;boolean free=!busy&&!storageFailed;
   connect.setEnabled(free&&!run.running()&&job==null);code.setEnabled(free&&!run.running()&&job==null&&BuildConfig.INSTITUTE_CODE.isEmpty());id.setEnabled(free&&!run.running()&&job==null);key.setEnabled(free&&!run.running()&&job==null);
@@ -349,5 +350,5 @@ final class SmsScreen {
  private void unregister(){if(receiver!=null){try{a.unregisterReceiver(receiver);}catch(Exception ignored){}receiver=null;}}
  void pause(){active=false;stopRun("Paused because the app is no longer in the foreground. Tap Send Messages to continue.",true);}
  void resume(){active=true;if(job!=null&&"claimed".equals(config.optString("stage"))&&config.has("batch"))stopRun("Paused queue recovered. Tap Send Messages after the connection is checked.",true);controls();}
- void destroy(){destroyed=true;run.stop();handler.removeCallbacks(nextTick);if(timeout!=null)handler.removeCallbacks(timeout);unregister();io.shutdownNow();}
+ void destroy(){destroyed=true;opening.close();run.stop();handler.removeCallbacks(nextTick);if(timeout!=null)handler.removeCallbacks(timeout);unregister();io.shutdownNow();}
 }
