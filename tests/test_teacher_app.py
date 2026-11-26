@@ -113,6 +113,32 @@ class TeacherAppTests(unittest.TestCase):
         for path in ('','/classes','/profile','/my-attendance','/my-salary','/requests/advance','/requests/leave','/diaries','/settings','/reminders',f'/classes/{self.cid}/attendance',f'/classes/{self.cid}/diary',f'/classes/{self.cid}/materials',f'/classes/{self.cid}/exams',f'/classes/{self.cid}/exams/new',f'/classes/{self.cid}/absentees',f'/classes/{self.cid}/fee-defaulters'):
             r=self.c.get('/teacher-app'+path);self.assertEqual(r.status_code,200,(path,r.data[:500]));self.assertNotIn(b'Pupil Campus B',r.data)
         self.assertEqual(self.c.get('/teacher-app/classes/999/attendance').status_code,403)
+    def test_class_only_assignment_shows_class_without_granting_subject_access(self):
+        self.seed()
+        def class_only():
+            W=self.ops['workflow'];row=db.session.get(W,self.cid);row.data={**row.data,'subject':''}
+            staff=db.session.get(self.Staff,self.sid);staff.data={**staff.data,'campuses':['Campus A']}
+            db.session.add(W(kind='teacher-classes',status='Active',data={**row.data,'campus':'Campus B'}))
+        self.tenant(class_only);self.login()
+        root=f'/teacher-app/classes/{self.cid}'
+        home=self.c.get('/teacher-app')
+        self.assertEqual(home.status_code,200)
+        self.assertIn(b'Class only',home.data)
+        self.assertIn((root+'/attendance').encode(),home.data)
+        self.assertNotIn((root+'/diary').encode(),home.data)
+        self.assertNotIn((root+'/exams').encode(),home.data)
+        self.assertNotIn(b'Campus B',home.data)
+        page=self.c.get(root+'/attendance')
+        self.assertEqual(page.status_code,200);self.assertIn(b'Pupil Campus A',page.data);self.assertNotIn(b'Pupil Campus B',page.data)
+        review=self.review(root+'/attendance')
+        self.assertEqual(self.c.post(root+'/attendance',data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'}).status_code,302)
+        for route in ('/diary','/diary/1/files/1','/materials','/materials/1/files/1','/exams','/exams/new','/marks/1/0'):
+            self.assertEqual(self.c.get(root+route).status_code,403,route)
+        for route in ('/diary','/materials','/exams/new','/marks/1/0'):
+            self.assertEqual(self.c.post(root+route,data={'_csrf':self.token()}).status_code,403,route)
+        self.assertEqual(self.c.get('/teacher-app/diaries').status_code,200)
+        for route in ('/absentees','/fee-defaulters'):
+            self.assertEqual(self.c.get(root+route).status_code,200,route)
     def test_only_changed_attendance_is_written_and_times_preserved(self):
         self.seed();path=f'/teacher-app/classes/{self.cid}/attendance';review=self.review(path)
         response=self.c.post(path,data={'_csrf':self.token(),'review':review,'day':str(school_today()),f'status_{self.pupil}':'Absent'})

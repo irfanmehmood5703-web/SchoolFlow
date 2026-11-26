@@ -40,15 +40,16 @@ def configure_teacher_app(app,db,Student,Employee):
     def changed(e):db.session.rollback();return render('error',error='Another request changed these records. Reload before saving again.'),409
     def cohorts(permission=None):
         permitted=grants(permission) if permission else set(g.staff_principal.data.get('campuses',[]))&set(sh['campuses']())
-        return [r for r in W.query.filter_by(kind='teacher-classes',status='Active').order_by(W.id).all() if str(r.data.get('employee_id'))==str(g.teacher_employee.id) and r.data.get('campus') in permitted and all(r.data.get(k) for k in ('class_name','section','subject'))]
-    def cohort(cid,permission=None):
+        return [r for r in W.query.filter_by(kind='teacher-classes',status='Active').order_by(W.id).all() if str(r.data.get('employee_id'))==str(g.teacher_employee.id) and r.data.get('campus') in permitted and all(r.data.get(k) for k in ('class_name','section'))]
+    def cohort(cid,permission=None,subject_required=False):
         row=next((r for r in cohorts(permission) if r.id==cid),None)
         if not row:abort(403,'This class or action is not assigned to your teacher account.')
+        if subject_required and not row.data.get('subject'):abort(403,'Ask your school to assign a subject for this action.')
         return row
     def roster(c,subject=True):
         D=rm['student'];q=Student.query.join(D,D.student_id==Student.id).filter(Student.status=='Active',Student.class_name==c.data['class_name'],D.data['campus'].as_string()==c.data['campus'],D.data['section'].as_string()==c.data['section'])
         rows=app.extensions['record_helpers']['read_many']('student',q.order_by(Student.name,Student.id).all())
-        return [(s,d) for s,d in rows if not subject or not d.get('subjects') or c.data['subject'] in d['subjects']]
+        return [(s,d) for s,d in rows if not subject or not c.data.get('subject') or not d.get('subjects') or c.data['subject'] in d['subjects']]
     def parse_day(raw):
         try:return date.fromisoformat(raw)
         except (ValueError,TypeError):raise ValueError('Choose a valid date.')
@@ -123,7 +124,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('attendance',cohort=c,rows=rows,existing=existing,day=day,statuses=statuses,review_token=token)
     @bp.route('/classes/<int:cid>/diary',methods=['GET','POST'])
     def diary(cid):
-        c=cohort(cid,('student_extras.update' if request.form.get('action')=='update' else 'student_extras.create') if request.method=='POST' else 'student_extras.view');E=app.extensions['student_extras_models']['entry']
+        c=cohort(cid,('student_extras.update' if request.form.get('action')=='update' else 'student_extras.create') if request.method=='POST' else 'student_extras.view',subject_required=True);E=app.extensions['student_extras_models']['entry']
         if request.method=='POST':
             if parse_day(request.form.get('starts'))!=school_today():raise ValueError('Previous diaries are read-only. Choose today to write a diary.')
             if any(request.form.get(k)!=str(c.data[k]) for k in ('campus','class_name','section')) or request.form.getlist('subjects')!=[c.data['subject']] or request.form.get('subject_name_0')!=c.data['subject'] or request.form.getlist('subject_slot')!=['0'] or request.form.get('action') not in ('save','update') or request.form.get('channel')!='app':abort(403)
@@ -149,7 +150,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('diary',cohort=c,entries=entries,editing=editing,diary_writable=request.args.get('day',str(school_today()))==str(school_today()),diary_review=review('diary-update',editing.id,[editing.body,editing.data,c.data]) if editing else '')
     @bp.get('/classes/<int:cid>/diary/<int:eid>/files/<int:fid>')
     def diary_file(cid,eid,fid):
-        c=cohort(cid,'student_extras.view');M=app.extensions['student_extras_models'];e=db.get_or_404(M['entry'],eid)
+        c=cohort(cid,'student_extras.view',subject_required=True);M=app.extensions['student_extras_models'];e=db.get_or_404(M['entry'],eid)
         if e.kind!='diary' or e.campus!=c.data['campus'] or any(e.data.get(k)!=c.data[k] for k in ('class_name','section','subject')):abort(404)
         f=M['attachment'].query.filter_by(id=fid,entry_id=eid).first_or_404();return attachment(f)
     def attachment(f):
@@ -160,7 +161,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return r
     @bp.route('/classes/<int:cid>/materials',methods=['GET','POST'])
     def materials(cid):
-        c=cohort(cid,'student_extras.view' if request.method=='GET' else 'student_extras.create' if request.form.get('action')=='create' else 'student_extras.update');M=app.extensions['parent_study_models']
+        c=cohort(cid,'student_extras.view' if request.method=='GET' else 'student_extras.create' if request.form.get('action')=='create' else 'student_extras.update',subject_required=True);M=app.extensions['parent_study_models']
         if request.method=='POST':
             action=request.form.get('action')
             if action=='create':
@@ -194,7 +195,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('materials',cohort=c,items=items,pupils=pupils,files={i.id:M['file'].query.filter_by(item_id=i.id).all() for i in items},responses=M['submission'].query.filter(M['submission'].item_id.in_(ids),M['submission'].student_id.in_(pupils)).order_by(M['submission'].id.desc()).limit(100).all())
     @bp.get('/classes/<int:cid>/materials/<int:iid>/files/<int:fid>')
     def study_file(cid,iid,fid):
-        c=cohort(cid,'student_extras.view');study_item(c,iid);f=app.extensions['parent_study_models']['file'].query.filter_by(id=fid,item_id=iid).first_or_404();return attachment(f)
+        c=cohort(cid,'student_extras.view',subject_required=True);study_item(c,iid);f=app.extensions['parent_study_models']['file'].query.filter_by(id=fid,item_id=iid).first_or_404();return attachment(f)
     def exam_rows(c,award):
         rows=[(s,d) for s,d in roster(c,False) if all(not award.data.get(k) or d.get(k)==award.data[k] for k in ('section','gender','group_name','academic_session'))]
         def roll(pair):
@@ -210,7 +211,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return out
     @bp.route('/classes/<int:cid>/exams/new',methods=['GET','POST'])
     def create_exam(cid):
-        c=cohort(cid,'exam.create');rows=roster(c,False);catalog={k:sorted({d.get(k) for s,d in rows if d.get(k)}) for k in ('gender','group_name','academic_session')};settings=app.extensions['school_settings_helpers'];config=settings['subject_config'](c.data['subject']);grading=config.get('grading','Marks');token=review('new-exam',cid,dict(assignment=c.data,catalog=catalog,config=config))
+        c=cohort(cid,'exam.create',subject_required=True);rows=roster(c,False);catalog={k:sorted({d.get(k) for s,d in rows if d.get(k)}) for k in ('gender','group_name','academic_session')};settings=app.extensions['school_settings_helpers'];config=settings['subject_config'](c.data['subject']);grading=config.get('grading','Marks');token=review('new-exam',cid,dict(assignment=c.data,catalog=catalog,config=config))
         if request.method=='POST':
             name=request.form.get('name','').strip();day=parse_day(request.form.get('exam_date'));returned=parse_day(request.form.get('return_date'));typ=request.form.get('test_type');sort=request.form.get('sort_order');filtering=request.form.get('student_filter')
             if not 1<=len(name)<=180 or typ not in ('Written','Oral','Practical') or sort not in ('sid','roll','section') or filtering not in ('class','subject') or returned<day:raise ValueError('Check exam name, dates, assessment type and sorting.')
@@ -228,11 +229,11 @@ def configure_teacher_app(app,db,Student,Employee):
 
     @bp.get('/classes/<int:cid>/exams')
     def exam_list(cid):
-        c=cohort(cid,'exam.view');q=request.args.get('q','').strip()[:120].casefold();rows=[r for r in exams(c) if not q or q in (' '.join([str(r[0].id),str(r[0].data.get('name','')),c.data['class_name'],r[2]['subject']])).casefold()]
+        c=cohort(cid,'exam.view',subject_required=True);q=request.args.get('q','').strip()[:120].casefold();rows=[r for r in exams(c) if not q or q in (' '.join([str(r[0].id),str(r[0].data.get('name','')),c.data['class_name'],r[2]['subject']])).casefold()]
         return render('exams',cohort=c,exams=rows,search=request.args.get('q','')[:120])
     @bp.route('/classes/<int:cid>/marks/<int:aid>/<int:paper>',methods=['GET','POST'])
     def marks(cid,aid,paper):
-        c=cohort(cid,'exam.update' if request.method=='POST' else 'exam.view');selected=next(((a,i,p) for a,i,p in exams(c) if a.id==aid and i==paper),None)
+        c=cohort(cid,'exam.update' if request.method=='POST' else 'exam.view',subject_required=True);selected=next(((a,i,p) for a,i,p in exams(c) if a.id==aid and i==paper),None)
         if not selected:abort(403,'This exam subject is not assigned to you.')
         a,i,p=selected
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
@@ -347,7 +348,7 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('requests',kind=kind,rows=rows,review_token=token,first=first,last=last)
     @bp.get('/diaries')
     def diaries():
-        assigned=cohorts('student_extras.view');first=parse_day(request.args.get('from_date',str(school_today())));last=parse_day(request.args.get('to_date',str(school_today())))
+        assigned=[c for c in cohorts('student_extras.view') if c.data.get('subject')];first=parse_day(request.args.get('from_date',str(school_today())));last=parse_day(request.args.get('to_date',str(school_today())))
         if last<first or (last-first).days>30 or last>school_today():raise ValueError('Choose a diary range of up to 31 days through today.')
         filters={k:request.args.get(k,'').strip() for k in ('class_name','section','subject')};search=request.args.get('q','').strip()[:120].casefold();choices={k:sorted({c.data[k] for c in assigned}) for k in filters}
         E=app.extensions['student_extras_models']['entry'];entries=E.query.filter(E.kind=='diary',E.starts>=first,E.starts<=last,E.campus.in_({c.data['campus'] for c in assigned})).all();keys={(r.campus,r.data.get('class_name'),r.data.get('section'),r.data.get('subject'),r.starts) for r in entries};cards=[]

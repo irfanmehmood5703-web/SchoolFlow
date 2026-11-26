@@ -41,8 +41,10 @@ class SystemAuditTests(unittest.TestCase):
         self.assertGreater(len(seen),250)
     def test_empty_catalogs_remain_selects_and_new_unknown_choices_do_not_save(self):
         page=self.c.get('/workspace/register/teacher-classes');p=Links();p.feed(page.text)
-        for name in ('employee_id','campus','class_name','section','subject'):self.assertIn(name,p.selects);self.assertNotIn(name,p.inputs)
-        self.assertIn(b'No Subject configured',page.data)
+        for name in ('employee_id','campus','section','subject'):self.assertIn(name,p.selects);self.assertNotIn(name,p.inputs)
+        self.assertIn('class_name',p.inputs);self.assertNotIn('class_name',p.selects)
+        self.assertIn(b'No subject',page.data)
+        self.assertNotRegex(page.text,r'<select[^>]*name="subject"[^>]*required')
         values=dict(employee_id='1',campus='North',class_name='One',section='A',subject='Unknown subject')
         self.assertEqual(self.post('/workspace/register/teacher-classes',values).status_code,422)
         def seed():db.session.add(self.rm['settings'](category='subject',value='Math',class_name=''))
@@ -50,6 +52,22 @@ class SystemAuditTests(unittest.TestCase):
         for key in ('campus','class_name','section'):
             self.assertEqual(self.post('/workspace/register/teacher-classes',{**values,'subject':'Math',key:'Unknown choice'}).status_code,422)
         self.assertEqual(self.post('/workspace/register/teacher-classes',{**values,'subject':'Math'}).status_code,302)
+    def test_multiple_class_assignments_optional_subject_and_atomic_validation(self):
+        path='/workspace/register/teacher-classes';W=self.ops['workflow']
+        base=dict(employee_id='1',campus='North',section='A')
+        self.assertEqual(self.post(path,{**base,'class_name':['One','Two']}).status_code,302)
+        def class_only():
+            return sorted((r.data['class_name'],r.data.get('subject')) for r in W.query.filter_by(kind='teacher-classes',status='Active').all())
+        self.assertEqual(self.tenant(class_only),[('One',''),('One','Math'),('Two','')])
+        self.assertIn(b'Class only',self.c.get(path).data)
+        self.assertEqual(self.post(path,{**base,'class_name':['One','Two','Two'],'subject':''}).status_code,302)
+        self.assertEqual(self.tenant(class_only),[('One',''),('One','Math'),('Two','')])
+        for values in ({**base,'class_name':['One','UNKNOWN']},{**base,'class_name':[]},{**base,'class_name':['One','Two'],'subject':'UNKNOWN'}):
+            self.assertEqual(self.post(path,values).status_code,422)
+        self.assertEqual(self.tenant(class_only),[('One',''),('One','Math'),('Two','')])
+        self.tenant(lambda:db.session.add(self.rm['settings'](category='subject',value='English',class_name='')))
+        self.assertEqual(self.post(path,{**base,'class_name':['One','Two'],'subject':'English'}).status_code,302)
+        self.assertEqual(self.tenant(class_only),[('One',''),('One','English'),('One','Math'),('Two',''),('Two','English')])
     def test_free_text_register_fields_are_not_accidentally_dropdowns(self):
         page=self.c.get('/workspace/register/increments');p=Links();p.feed(page.text)
         self.assertIn('employee_id',p.selects)

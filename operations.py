@@ -300,6 +300,37 @@ def configure_operations(app, db, Student, Employee):
             return redirect(url_for('fee_setup.schedules'))
         if kind=='shifts':return redirect(url_for('school_settings.assign_shifts'),code=307 if request.method=='POST' else 302)
         schema=SCHEMAS[kind]
+        if kind=='teacher-classes' and request.method=='POST':
+            if request.form.get('action','save')!='save':raise ValueError('Choose a valid assignment action.')
+            employee_id=request.form.get('employee_id','').strip()
+            campus=request.form.get('campus','').strip()
+            section=request.form.get('section','').strip()
+            subject=request.form.get('subject','').strip()
+            classes=list(dict.fromkeys(v.strip() for v in request.form.getlist('class_name') if v.strip()))
+            if not classes or len(classes)>200:raise ValueError('Select between 1 and 200 classes.')
+            if employee_id not in dict(choices('teacher')):raise ValueError('Choose a valid teacher.')
+            teacher=db.session.get(Employee,int(employee_id))
+            if not teacher or teacher.status!='Active':raise ValueError('Choose an active teacher.')
+            for value,typ in ((campus,'campus'),(section,'section')):
+                if not value or value not in dict(choices(typ)):raise ValueError('Choose a configured '+typ+'.')
+            if any(cls not in dict(choices('class_name')) for cls in classes):raise ValueError('Choose configured classes.')
+            if subject and (subject not in dict(choices('subject')) or any(not app.extensions['school_settings_helpers']['subject_allowed'](campus,cls,subject) for cls in classes)):
+                raise ValueError('Choose a subject configured for every selected class, or leave Subject blank.')
+            # Lock and validate the complete batch before adding anything. Save
+            # one normal workflow per class, keeping existing IDs and links.
+            app.extensions['admission_capacity']['lock']()
+            existing={(str(r.data.get('employee_id')),r.data.get('campus'),r.data.get('class_name'),r.data.get('section'),r.data.get('subject') or '') for r in Workflow.query.filter_by(kind=kind,status='Active').all()}
+            saved=0
+            for cls in classes:
+                key=(employee_id,campus,cls,section,subject)
+                if key in existing:continue
+                row=Workflow(kind=kind,status='Active',data=dict(employee_id=employee_id,campus=campus,class_name=cls,section=section,subject=subject))
+                db.session.add(row);db.session.flush()
+                audit('Create '+kind,assignment_id=row.id,campus=campus,employee_id=employee_id,class_name=cls,section=section,subject=subject)
+                saved+=1
+            commit()
+            flash(f'{saved} class assignment(s) saved. {len(classes)-saved} already assigned; no duplicates created.','success')
+            return redirect(url_for('ops.register',kind=kind))
         query_extra_fields=('mother_name','mother_phone','guardian_name','guardian_relation','alternate_phone','gender','date_of_birth','address','previous_school','visitor_name','source','remarks','section','session')
         def query_extras():
             extras={}
