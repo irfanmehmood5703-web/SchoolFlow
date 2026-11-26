@@ -7,3 +7,6 @@
 .timetable-lecture-row [data-remove-lecture]{margin-top:8px}
 .timetable-add-lecture{margin:0 0 5px}
 @media(max-width:600px){.timetable-lecture-fields{grid-template-columns:minmax(0,1fr)}}
+.timetable-lecture-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.timetable-assignment-hint{margin:8px 0 0;font-size:12px;line-height:1.4}
+@media(max-width:480px){.timetable-lecture-fields{grid-template-columns:minmax(0,1fr)}}

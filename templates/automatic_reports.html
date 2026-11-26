@@ -16,18 +16,32 @@
 </form></section>
 <section class="form-card"><h2>Available reports</h2>{% for event in events %}<article class="form-card"><strong>{{event.title}}</strong><p>{{event.detail}}</p></article>{% else %}<p>No enabled report is due yet.</p>{% endfor %}</section>
 <section class="form-card"><h2>Scheduled report history</h2><p>{{'Scheduler enabled' if worker else 'Scheduler disabled on host — inbox reports still available on refresh.'}}</p>{% for row in history %}<article><strong>{{row.data.title}}</strong><p>{{row.data.detail}}</p><small>{{row.data.captured}}</small></article>{% else %}<p>No scheduled report captured yet.</p>{% endfor %}</section>
-<section class="form-card"><h2>Teacher timetable &amp; period reminders</h2><p>Set Full Class responsibility, individual lectures, or both for the same teacher. Only active class assignments appear. Timetable entries appear in the Teacher App; lecture reminders appear before their start time.</p>
+<section class="form-card"><h2>Teacher timetable &amp; period reminders</h2><p>Set Full Class responsibility, individual lectures, or both for the same teacher. Full Class uses existing whole-class assignments. Lectures may be assigned to any configured class within the teacher’s campus access. Timetable entries appear in the Teacher App; lecture reminders appear before their start time.</p>
 <div class="dashboard-grid">
 <div class="form-card"><h3>Full Class (all day)</h3><p class="muted">For the teacher responsible for the whole class. No subject or period time is needed. Choose one or more days. Separate lectures can still be scheduled.</p>
 <form method="post" action="{{url_for('automatic_reports.periods')}}"><input type="hidden" name="_csrf" value="{{record_csrf}}"><input type="hidden" name="action" value="add_full_class">
 <label>Teacher / full class<select name="assignment_id" required><option value="">Choose class-only assignment</option>{% for a in assignments if a.data.employee_id|string in employees and not a.data.get('subject') %}<option value="{{a.id}}">{{employees[a.data.employee_id|string]}} · {{a.data.campus}} · {{a.data.class_name}} / {{a.data.section}}</option>{% endfor %}</select></label>
 <fieldset><legend>Weekdays</legend><div class="check-grid">{% for name in weekdays %}<label><input type="checkbox" name="weekdays" value="{{loop.index0}}"> {{name}}</label>{% endfor %}</div></fieldset>
 <button type="submit">Save full class schedule</button></form></div>
-<div class="form-card"><h3>Lecture / Period</h3><p class="muted">Add one or more subjects or timed class periods, including lectures taken by a full-class teacher. Each lecture has its own start time. All entries repeat on the selected teaching days.</p>
+<div class="form-card"><h3>Lecture / Period</h3><p class="muted">Choose the class and subject independently for each lecture, even when the teacher has Full Class in another class. A new lecture automatically creates the matching subject assignment. Each lecture has its own start time.</p>
 <form method="post" action="{{url_for('automatic_reports.periods')}}" class="timetable-lecture-form" data-lecture-form><input type="hidden" name="_csrf" value="{{record_csrf}}"><input type="hidden" name="action" value="add">
-<div data-lecture-rows><fieldset class="timetable-lecture-row" data-lecture-row><legend data-lecture-label>Lecture 1</legend><div class="timetable-lecture-fields"><label>Teacher / class / subject<select name="assignment_id" required><option value="">Choose assignment</option>{% for a in assignments if a.data.employee_id|string in employees %}<option value="{{a.id}}">{{employees[a.data.employee_id|string]}} · {{a.data.campus}} · {{a.data.class_name}} / {{a.data.section}} · {{a.data.subject or 'Class period'}}</option>{% for subject in assignment_subjects.get(a.id,[]) %}<option value="{{a.id}}:{{subject}}">{{employees[a.data.employee_id|string]}} · {{a.data.campus}} · {{a.data.class_name}} / {{a.data.section}} · {{subject}}</option>{% endfor %}{% endfor %}</select></label><label>Starts (PKT)<input type="time" name="time" required></label></div><button type="button" class="secondary" data-remove-lecture hidden>Remove lecture</button></fieldset></div>
+<div data-lecture-catalog="{{lecture_catalog|tojson|forceescape}}" hidden></div>
+<div data-lecture-rows>
+<fieldset class="timetable-lecture-row" data-lecture-row><legend data-lecture-label>Lecture 1</legend>
+<div class="timetable-lecture-fields">
+<label>Teacher<select name="lecture_teacher" data-lecture-teacher required disabled><option value="">Choose teacher</option>{% for t in lecture_catalog.teachers %}<option value="{{t.id}}">{{t.name}}</option>{% endfor %}</select></label>
+<label>Campus<select name="lecture_campus" data-lecture-campus required disabled><option value="">Choose campus</option></select></label>
+<label>Class<select name="lecture_class" data-lecture-class required disabled><option value="">Choose class</option></select></label>
+<label>Section<select name="lecture_section" data-lecture-section required disabled><option value="">Choose section</option></select></label>
+<label>Subject<select name="lecture_subject" data-lecture-subject required disabled><option value="">Choose subject</option></select></label>
+<label>Starts (PKT)<input type="time" name="time" required></label>
+</div>
+<p class="muted timetable-assignment-hint" data-lecture-hint aria-live="polite">Choose a teacher, then the class for this lecture.</p>
+<noscript><p>Enable JavaScript to choose new classes directly, or select a saved assignment below.</p><label>Teacher / class / subject<select name="assignment_id" required><option value="">Choose assignment</option>{% for a in assignments if a.data.employee_id|string in employees %}<option value="{{a.id}}">{{employees[a.data.employee_id|string]}} · {{a.data.campus}} · {{a.data.class_name}} / {{a.data.section}} · {{a.data.subject or 'Class period'}}</option>{% for subject in assignment_subjects.get(a.id,[]) %}<option value="{{a.id}}:{{subject}}">{{employees[a.data.employee_id|string]}} · {{a.data.campus}} · {{a.data.class_name}} / {{a.data.section}} · {{subject}}</option>{% endfor %}{% endfor %}</select></label></noscript>
+<button type="button" class="secondary" data-remove-lecture hidden>Remove lecture</button>
+</fieldset></div>
 <button type="button" class="secondary timetable-add-lecture" data-add-lecture hidden>+ Add another subject / lecture</button>
-<p class="muted">Choose the same teacher again for a different subject or assigned class. Set a different start time for each lecture.</p>
+<p class="muted">Add another lecture for the same teacher or a different teacher, class or subject. Set a different start time for each lecture. New subject access is saved under HRM → Assign Classes for Teacher App.</p>
 <fieldset><legend>Teaching days (weekly)</legend><div class="check-grid">{% for name in weekdays %}<label><input type="checkbox" name="weekdays" value="{{loop.index0}}"> {{name}}</label>{% endfor %}</div></fieldset>
 <label>Remind before<select name="lead">{% for n in (0,5,10,15,30) %}<option value="{{n}}" {% if n==5 %}selected{% endif %}>{{n}} minutes</option>{% endfor %}</select></label><button type="submit">Save weekly lectures / periods</button></form></div></div>
 <h3>Saved timetable</h3>
