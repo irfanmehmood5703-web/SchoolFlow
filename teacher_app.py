@@ -105,7 +105,13 @@ def configure_teacher_app(app,db,Student,Employee):
         for c in classes:
             rows=roster(c,False);ids=[s.id for s,d in rows];marked=Daily.query.filter_by(kind='student',day=today).filter(Daily.person_id.in_(ids)).count() if c.data['campus'] in grants('attendance.view') else None
             details.append(dict(row=c,count=len(rows),marked=marked))
-        return render('home',cards=details)
+        # Count distinct class/section/campus combinations, not assignment rows.
+        # A full-class teacher may also have several assigned subjects, including
+        # subjects within the same class. Keep the two responsibilities distinct.
+        assigned_sections={(c.data['campus'],c.data['class_name'],c.data['section']) for c in classes}
+        full_classes={(c.data['campus'],c.data['class_name'],c.data['section']) for c in classes if not c.data.get('subject')}
+        subject_assignments={(c.data['campus'],c.data['class_name'],c.data['section'],c.data['subject']) for c in classes if c.data.get('subject')}
+        return render('home',cards=details,assigned_class_count=len(assigned_sections),full_class_count=len(full_classes),subject_assignment_count=len(subject_assignments))
     def period_notice(row,day):
         return dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(day),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time_label'])
     def teacher_notification_events():

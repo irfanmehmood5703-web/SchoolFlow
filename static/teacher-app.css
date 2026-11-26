@@ -74,3 +74,7 @@
 .timetable-time{color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px}
 .timetable-full-class{background:#edf7f1;border-radius:8px;padding:9px 8px;margin:3px 0;border:1px solid #dbe9e0}
 .timetable-full-class .badge{font-size:10px;padding:2px 6px;display:inline-block}
+
+/* Keep class-section counts separate from subject responsibilities. */
+.teacher-assignment-metric .teacher-assignment-link{color:var(--green);font-weight:650;margin-top:6px}
+.teacher-assignment-metric:focus-visible{outline:2px solid var(--green);outline-offset:2px}
