@@ -9,11 +9,11 @@ public final class MainActivity extends Activity {
   if("sms".equals(BuildConfig.ROLE)){sms=new SmsScreen(this);sms.show();}else{portal=new PortalScreen(this);portal.show(state);}
   NoticeJob.setup(this);
  }
- @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(portal!=null)portal.permissions(request,results);if(sms!=null)sms.permissions(request);if(request==7313)NoticeJob.schedule(this);}
+ @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(portal!=null)portal.permissions(request,results);if(sms!=null)sms.permissions(request);if(request==7313){NoticeJob.schedule(this);LectureAlerts.explainExact(this);}}
  @Override public void onBackPressed(){if(portal==null||!portal.back())super.onBackPressed();}
  @Override protected void onActivityResult(int request,int result,android.content.Intent data){super.onActivityResult(request,result,data);if(portal!=null)portal.result(request,result,data);}
  @Override protected void onPause(){updates.pause();if(portal!=null)portal.pause();if(sms!=null)sms.pause();super.onPause();}
- @Override protected void onResume(){super.onResume();if(portal!=null)portal.resume();if(sms!=null)sms.resume();updates.resume();NoticeJob.schedule(this);}
+ @Override protected void onResume(){super.onResume();if(portal!=null)portal.resume();if(sms!=null)sms.resume();updates.resume();NoticeJob.schedule(this);LectureAlerts.restore(this);LectureAlerts.explainExact(this);}
  @Override protected void onSaveInstanceState(Bundle out){if(portal!=null)portal.save(out);super.onSaveInstanceState(out);}
  @Override protected void onDestroy(){if(portal!=null)portal.destroy();if(sms!=null)sms.destroy();super.onDestroy();}
 }
