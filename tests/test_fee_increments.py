@@ -131,7 +131,7 @@ class FeeIncrementTests(unittest.TestCase):
         self.assertIn(b'<summary>Admin Center</summary>',settings)
         self.assertIn(b'Help Center',settings)
         self.assertIn(b'Messages',settings)
-        for label in (b'School &amp; Campuses Settings',b'Exam &amp; Grading',b'Attendance Settings',b'HRM Settings'):
+        for label in (b'School &amp; Campuses Settings',b'Exam &amp; Grading',b'Attendance Settings',b'Staff Settings'):
             self.assertIn(label,settings)
         main=page.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertIn(b'Management',main)
