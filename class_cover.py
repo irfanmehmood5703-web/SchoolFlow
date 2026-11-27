@@ -4,6 +4,8 @@ from datetime import date, timedelta
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+from sqlalchemy import select
+
 from school_clock import school_today
 from workspace_actor import csrf, scopes
 
@@ -15,6 +17,19 @@ def configure_class_cover(app, db, Employee):
     bp = Blueprint('class_cover', __name__, url_prefix='/workspace/class-cover')
     models = app.extensions['ops_models']
     Workflow, Daily, Audit = (models[key] for key in ('workflow', 'daily', 'audit'))
+
+    def absence_conditions(table, day):
+        return (table.c.kind == 'staff', table.c.day == day, table.c.status.in_(UNAVAILABLE))
+
+    def leave_conditions(table, day):
+        key = day.isoformat()
+        return (table.c.kind == 'leave-approvals', table.c.status == 'Approved',
+                table.c.data['from_date'].as_string() <= key, table.c.data['to_date'].as_string() >= key)
+
+    def has_unavailability(day):
+        attendance, workflows = Daily.__table__, Workflow.__table__
+        return (select(attendance.c.id).where(*absence_conditions(attendance, day)).exists()
+                | select(workflows.c.id).where(*leave_conditions(workflows, day)).exists())
 
     def cover_records(day):
         return Workflow.query.filter_by(kind=COVER, status='Active').filter(
@@ -31,12 +46,11 @@ def configure_class_cover(app, db, Employee):
         g.access_campuses = None
         try:
             date_key = day.isoformat()
-            unavailable = {row.person_id: row.status for row in Daily.query.filter_by(kind='staff', day=day)
-                           if row.status in UNAVAILABLE}
-            for row in Workflow.query.filter_by(kind='leave-approvals', status='Approved'):
-                data = row.data
-                employee = str(data.get('employee_id', ''))
-                if employee.isdigit() and data.get('from_date', '') <= date_key <= data.get('to_date', ''):
+            unavailable = {row.person_id: row.status
+                           for row in Daily.query.filter(*absence_conditions(Daily.__table__, day))}
+            for row in Workflow.query.filter(*leave_conditions(Workflow.__table__, day)):
+                employee = str(row.data.get('employee_id', ''))
+                if employee.isdigit():
                     unavailable.setdefault(int(employee), 'Approved leave')
             saved = {row.data['period_id']: row for row in cover_records(day)}
             if not unavailable and not saved:
@@ -103,10 +117,12 @@ def configure_class_cover(app, db, Employee):
         current = getattr(g, 'access_campuses', None)
         return allowed if current is None or allowed is None else allowed & current
 
-    def uncovered(day):
+    def uncovered(day, has_absence=True):
         allowed = within_scope('attendance.view')
         if allowed == set():
             return None
+        if not has_absence:
+            return 0
         return sum(bool(row['reason']) and (not row['record'] or row['conflict'])
                    for row in schedule(day, allowed, include_choices=False))
 
@@ -175,5 +191,5 @@ def configure_class_cover(app, db, Employee):
         flash('Class cover updated.', 'success')
         return redirect(url_for('class_cover.index', day=day.isoformat()))
 
-    app.extensions['class_cover_helpers'] = dict(uncovered=uncovered, teacher_assignments=teacher_assignments)
+    app.extensions['class_cover_helpers'] = dict(uncovered=uncovered, teacher_assignments=teacher_assignments, has_unavailability=has_unavailability)
     app.register_blueprint(bp)

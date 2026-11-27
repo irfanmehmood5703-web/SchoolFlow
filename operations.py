@@ -2238,7 +2238,7 @@ def configure_operations(app, db, Student, Employee):
     def readiness():
         return render('readiness.html',title='System Check & Testing',storage_backend=db.session.get_bind(mapper=Student.__mapper__).dialect.name,identity_backend=app.extensions['identity_helpers']['control_engine']().dialect.name)
 
-    def dashboard_data():
+    def dashboard_data(cover_day=None):
         # Keep request work independent of pupil/score count: no per-row ORM
         # lookups, no attachment/salary/certificate payloads, and one pass over
         # scalar financial rows rather than rescanning receipts per month.
@@ -2249,7 +2249,10 @@ def configure_operations(app, db, Student, Employee):
         classes=Counter(dict(db.session.query(class_label,db.func.count(Student.id)).filter(Student.status=='Active').group_by(class_label).order_by(class_label).all()))
         attendance=Counter(dict(db.session.query(Daily.status,db.func.count(Daily.id)).filter(Daily.kind=='student',Daily.day==today).group_by(Daily.status).all()))
         staff_counts=Counter(dict(db.session.query(Daily.status,db.func.count(Daily.id)).filter(Daily.kind=='staff',Daily.day>=today.replace(day=1),Daily.day<=today).group_by(Daily.status).all()))
-        pending,queries=db.session.query(db.func.sum(case((Workflow.status=='Pending',1),else_=0)),db.func.sum(case((Workflow.kind=='queries',1),else_=0))).one()
+        summary=db.session.query(db.func.sum(case((Workflow.status=='Pending',1),else_=0)),db.func.sum(case((Workflow.kind=='queries',1),else_=0)))
+        if cover_day is not None:
+            summary=summary.add_columns(app.extensions['class_cover_helpers']['has_unavailability'](cover_day))
+        pending,queries,*cover=summary.one()
         bill_months={};billed=Counter();remaining_months=Counter();due=0;unpaid=0;defaulters=set()
         for row in db.session.query(Bill.id,Bill.student_id,Bill.month,Bill.lines,Bill.paid,Bill.discount).all():
             total=sum(line['amount'] for line in row.lines);remaining=total-row.paid-row.discount
@@ -2270,7 +2273,8 @@ def configure_operations(app, db, Student, Employee):
         return dict(students=student_count,active=active or 0,employees=employee_count,active_employees=active_employees or 0,
                     present=attendance['Present'],marked=sum(attendance.values()),attendance=attendance,staff_counts=staff_counts,
                     collected=collected,this_month=this_month,due=due,discount=discount,unpaid=unpaid,defaulters=len(defaulters),
-                    pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months,remaining_months=dict(remaining_months))
+                    pending=pending or 0,queries=queries or 0,average=average,classes=classes,months=months,remaining_months=dict(remaining_months),
+                    **({'cover_absence':bool(cover[0])} if cover else {}))
 
     @bp.route('/dashboard')
     def dashboard():
