@@ -68,6 +68,68 @@ class WorkingPayrollTests(unittest.TestCase):
         salary=self.m['salary'].query.one();self.assertEqual((salary.earnings,salary.deductions,salary.net),(1200000,100000,1100000))
         self.assertEqual(salary.detail['attendance'][0]['count'],1)
 
+    def test_paid_calendar_days_keep_sundays_paid_and_personal_leave_configurable(self):
+        form=dict(_csrf=self.csrf,month='2026-09',version='0',working_dates=self.dates,pay_basis='calendar_days')
+        page=self.c.get('/workspace/payroll-calendar?month=2026-09').data
+        self.assertIn(b'All calendar days (paid Sundays',page)
+        self.assertIn(b'value="calendar_days" checked',page)
+        self.assertEqual(self.c.post('/workspace/payroll-calendar',data={**form,'pay_basis':'invalid'}).status_code,422)
+        self.assertEqual(self.cal.query.count(),0)
+        self.assertEqual(self.c.post('/workspace/payroll-calendar',data=form).status_code,302)
+        self.assertEqual(app.extensions['payroll_calendar_helpers']['pay_basis']('2026-09'),'calendar_days')
+        rule=dict(type='Percent',amount=10000,frequency='Recursive',jump=0,limit=0)
+        self.plan.data={**self.plan.data,'basic':3000000,'rules':[
+            dict(rule,status='Absent',allowed=0),dict(rule,status='Leave',allowed=1),
+            dict(rule,status='Late',allowed=0,amount=2500)]}
+        for n,status in [(17,'Absent'),(18,'Leave'),(20,'Absent'),(21,'Late')]:
+            db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,n),status=status))
+        db.session.commit()
+        self.assertEqual(self.generate(attendance_based='on').status_code,302)
+        salary=self.m['salary'].query.one()
+        self.assertEqual((salary.earnings,salary.deductions,salary.net),(1600000,125000,1475000))
+        self.assertEqual(salary.detail['proration']['eligible_paid_days'],16)
+        self.assertEqual(salary.detail['proration']['total_paid_days'],30)
+        self.assertEqual(salary.detail['proration']['eligible_working_days'],12)
+        self.assertEqual(salary.detail['working_calendar']['salary_divisor_days'],30)
+        deductions={r['status']:r for r in salary.detail['attendance']}
+        self.assertEqual(deductions['Absent']['count'],1)
+        self.assertEqual(deductions['Leave']['count'],1)
+        self.assertEqual(deductions['Leave']['amount'],0)
+        self.assertIn(b'Paid calendar-day joining calculation',self.c.get(f'/workspace/hrm-reports/salary/{salary.id}').data)
+        saved=self.cal.query.one();version=saved.version
+        self.assertEqual(self.c.post('/workspace/payroll-calendar',data={**form,'version':version,'pay_basis':'working_days'}).status_code,302)
+        self.assertGreater(saved.version,version)
+        self.assertEqual(self.c.post('/workspace/payroll-calendar',data={**form,'version':version}).status_code,422)
+        self.assertEqual(salary.detail['working_calendar']['pay_basis'],'calendar_days')
+        self.assertEqual(salary.net,1475000)
+
+    def test_paid_calendar_days_excess_leave_and_fixed_late_deduction(self):
+        self.details.data={'joining_date':'2026-01-01'}
+        self.plan.data={**self.plan.data,'basic':3000000,'rules':[
+            dict(status='Leave',allowed=1,type='Percent',amount=10000,frequency='Recursive',jump=0,limit=0),
+            dict(status='Late',allowed=0,type='Abs',amount=20000,frequency='Recursive',jump=0,limit=0)]}
+        for n,status in [(17,'Leave'),(18,'Leave'),(21,'Late')]:
+            db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,n),status=status))
+        db.session.commit()
+        form=dict(_csrf=self.csrf,month='2026-09',version='0',working_dates=self.dates,pay_basis='calendar_days')
+        self.assertEqual(self.c.post('/workspace/payroll-calendar',data=form).status_code,302)
+        self.assertEqual(self.generate(attendance_based='on').status_code,302)
+        salary=self.m['salary'].query.one()
+        self.assertEqual((salary.earnings,salary.deductions,salary.net),(3000000,120000,2880000))
+
+    def test_paid_calendar_bonus_does_not_require_sunday_attendance(self):
+        self.bonus_attendance()
+        saved=self.cal.query.one()
+        form=dict(_csrf=self.csrf,month='2026-09',version=saved.version,working_dates=self.dates,pay_basis='calendar_days')
+        self.assertEqual(self.c.post('/workspace/payroll-calendar',data=form).status_code,302)
+        self.assertEqual(self.generate().status_code,302)
+        salary=self.m['salary'].query.one()
+        bonus=salary.detail['all_present_bonus']
+        self.assertTrue(bonus['qualified'])
+        self.assertEqual(bonus['salary_divisor_days'],30)
+        self.assertEqual(bonus['working_days'],22)
+        self.assertEqual(bonus['amount'],80667)
+
     def test_manual_increment_is_optional_selected_approved_and_effective(self):
         self.calendar();self.increment('1000','2026-06');self.increment('1200','2026-09')
         self.increment('5000','2026-10');self.increment('7000',status='Pending');self.increment('9000',employee=999)

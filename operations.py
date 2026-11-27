@@ -11,7 +11,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
 from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
 import monthly_attendance as monthly_totals
-from payroll_calendar import joining_pay, all_present_bonus
+from payroll_calendar import joining_pay, all_present_bonus, salary_paid_dates
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 from itsdangerous import BadData,URLSafeTimedSerializer
 from exam_enrollment import enrolled
@@ -1639,7 +1639,7 @@ def configure_operations(app, db, Student, Employee):
             for i,status in enumerate(deduction_types):data['rules'].append(parse_rule(request.form,i,status,money))
             if request.form.get('action')=='preview':
                 days=request.form.get('preview_working_days','0');counts=[]
-                if not days.isdigit() or not 0<=int(days)<=31:raise ValueError('Preview working days must be 0–31.')
+                if not days.isdigit() or not 0<=int(days)<=31:raise ValueError('Preview salary-day count must be 0–31.')
                 for i in range(len(deduction_types)):
                     raw=request.form.get('preview_count_'+str(i),'0')
                     if not raw.isdigit() or not 0<=int(raw)<=31:raise ValueError('Preview attendance counts must be 0–31.')
@@ -1699,7 +1699,9 @@ def configure_operations(app, db, Student, Employee):
                                     if int(row.data['employee_id'])==eid and row.data['effective']<=m] if pays_basic and data.get('apply_manual_increments') else []
                     increment_details=[dict(id=row.id,amount=money(row.data['amount']),effective=row.data['effective'],reason=row.data.get('reason','')) for row in increment_rows]
                     monthly_basic=data['basic']+sum(row['amount'] for row in increment_details)
-                    proration=joining_pay(m,joined,monthly_basic,working_calendar.working_dates) if pays_basic and joined>month_start else None
+                    pay_basis=app.extensions['payroll_calendar_helpers']['pay_basis'](m) if working_calendar else 'calendar_days'
+                    paid_dates=salary_paid_dates(m,working_calendar.working_dates,pay_basis) if working_calendar else None
+                    proration=joining_pay(m,joined,monthly_basic,working_calendar.working_dates,pay_basis) if pays_basic and joined>month_start else None
                     base=proration['payable_basic'] if proration else monthly_basic
                     attendance=Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=max(joined,month_start),Daily.day<=month_end).all()
                     deduction_attendance=[row for row in attendance if not working_calendar or row.day.isoformat() in working_calendar.working_dates]
@@ -1712,7 +1714,7 @@ def configure_operations(app, db, Student, Employee):
                             base_counts=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
                             counts,lecture_total=monthly_totals.payroll_totals(saved_month,base_counts)
                             monthly_snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lecture_total,revision=saved_month.data['revision'])
-                    days=len(working_calendar.working_dates) if working_calendar else calendar.monthrange(int(m[:4]),int(m[5:]))[1]
+                    days=len(paid_dates) if paid_dates else calendar.monthrange(int(m[:4]),int(m[5:]))[1]
                     if request.form.get('attendance_based'):
                         for rule in data['rules']:
                             calculated=deduction(rule,counts[rule['status']],monthly_basic,days)
@@ -1730,7 +1732,7 @@ def configure_operations(app, db, Student, Employee):
                     if data.get('all_present_bonus') and pays_basic:
                         if data.get('bonus_amount'):raise ValueError('This legacy plan has a fixed all-present amount. Update it to the one-working-day bonus before generating salary.')
                         if not working_calendar:raise ValueError('Set the working calendar before calculating the all-present bonus.')
-                        bonus=all_present_bonus(m,joined,monthly_basic,data.get('allowances',[]),working_calendar.working_dates,attendance)
+                        bonus=all_present_bonus(m,joined,monthly_basic,data.get('allowances',[]),working_calendar.working_dates,attendance,pay_basis)
                         earnings+=bonus['amount']
                     advance_deduction=0
                     for a in Workflow.query.filter_by(kind='advances',status='Approved').all():
@@ -1747,7 +1749,7 @@ def configure_operations(app, db, Student, Employee):
                     if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
                     snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
                                   base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
-                                  working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates)) if working_calendar else None)
+                                  working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates),pay_basis=pay_basis,paid_dates=paid_dates,salary_divisor_days=days) if working_calendar else None)
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1;generated.append(eid)
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')
                 if request.form.get('generate_sms') and generated:queue('Salary generated',generated,audience='teacher',event='salary-generated',context={'month':m})
