@@ -69,6 +69,41 @@ class ReferenceRecordTests(unittest.TestCase):
         data.update(changes)
         return data
 
+    def test_add_student_shows_required_details_and_collapses_optional_fields(self):
+        page = self.client.get('/records/student/new').text
+        form = page.split('class="record-form"',1)[1].split('</form>',1)[0]
+        primary, optional = form.split('id="student-more-details">',1)
+        for field in ('name','gender','birth_date','admission_date','father','father_cnic','phone',
+                      'campus','class_name','section','group_name','academic_session','fee_plan','status'):
+            self.assertIn(f'data-field="{field}"',primary)
+            self.assertNotIn(f'data-field="{field}"',optional)
+        for field in ('religion','student_email','qualification_grade','mother_tongue','board_reg_no'):
+            self.assertIn(f'data-field="{field}"',optional)
+            self.assertNotIn(f'data-field="{field}"',primary)
+        for field in ('documents','guardian_photo','visitor_0_name','parent_notification'):
+            self.assertIn(f'name="{field}"',optional)
+        self.assertIn('value="view">Save and View',optional)
+
+    def test_compact_student_form_saves_with_required_fields_and_reveals_optional_errors(self):
+        core = dict(_csrf=self.csrf, name='Quick Admission', gender='Female', admission_date='2026-10-30',
+                    family_mode='new', father='Fictional Father', father_cnic='TEST-FATHER',
+                    guardian_relation='Father', phone='00000000000', campus='Demo Campus',
+                    class_name='Demo Class', section='A', group_name='General', academic_session='2026-27',
+                    fee_plan='Demo Fee Plan', status='Active', save_action='view')
+        invalid = self.client.post('/records/student/new', data={**core, 'student_email':'invalid'})
+        self.assertEqual(invalid.status_code,422)
+        self.assertIn(b'id="student-more-details" open',invalid.data)
+        self.assertIn(b'Enter a valid email address.',invalid.data)
+        self.assertEqual(Student.query.count(),0)
+        saved = self.client.post('/records/student/new',data=core)
+        self.assertEqual(saved.status_code,302)
+        student = Student.query.one()
+        self.assertEqual(student.name,'Quick Admission')
+        edit = self.client.get(f'/records/student/{student.id}/edit')
+        self.assertEqual(edit.status_code,200)
+        self.assertNotIn(b'id="student-more-details"',edit.data)
+        self.assertIn(b'data-field="qualification_grade"',edit.data)
+
     def test_left_student_can_be_filtered_and_reenrolled_on_same_record(self):
         self.assertEqual(self.client.post("/records/student/new", data=self.student(status="Left")).status_code, 302)
         student = Student.query.one()

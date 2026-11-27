@@ -168,9 +168,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (error.name !== 'AbortError') feedback.textContent = 'Could not load the family. Select it again before saving.';
     }
   }
+  const moreDetails = document.getElementById('student-more-details');
+  const familyPicker = familySelect?.closest('[data-field]');
+  function updateFamilyPicker() {
+    if (moreDetails && familyPicker) {
+      familyPicker.hidden = familyMode.value !== 'existing' && !familyPicker.classList.contains('has-error');
+    }
+  }
   familySelect?.addEventListener('change', () => loadFamily(true));
-  familyMode?.addEventListener('change', () => loadFamily(false));
+  familyMode?.addEventListener('change', () => {
+    updateFamilyPicker();
+    loadFamily(false);
+  });
+  updateFamilyPicker();
   if (familySelect?.value) loadFamily(false);
+  moreDetails?.addEventListener('invalid', () => { moreDetails.open = true; }, true);
   const classSelect = document.getElementById('class_name');
   const subjects = document.getElementById('subjects');
   const subjectCheckboxes = document.getElementById('subject-checkboxes');

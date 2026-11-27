@@ -388,8 +388,25 @@ def configure_records(app, db, Student, Employee):
         photo = next((f for f in files if f.photo), None)
         guardian_photo = RecordFile.query.filter_by(owner_kind="guardian", owner_id=obj.id, photo=True).first() if kind == "student" and obj else None
         families = RecordFamily.query.order_by(RecordFamily.number).all()
+        primary_sections, optional_sections = [], []
+        optional_keys = {'guardian_photo', 'documents'}
+        if kind == 'student' and obj is None:
+            primary_headings = {
+                'Student Personal Information': 'Student Details',
+                'Office Information': 'Admission Details',
+            }
+            for heading, fields in STUDENT_SECTIONS:
+                primary = [f for f in fields if f['required'] or f['key'] in ('birth_date', 'family_id')]
+                optional = [f for f in fields if f not in primary]
+                if primary:
+                    primary_sections.append((primary_headings.get(heading, heading), primary))
+                if optional:
+                    optional_sections.append((heading, optional))
+                    optional_keys.update(f['key'] for f in optional)
         return render_template("record_form.html", kind=kind, obj=obj, data=data, errors=errors or {},
             sections=STUDENT_SECTIONS if kind == "student" else app.extensions['school_settings_helpers']['employee_sections'](),
+            primary_sections=primary_sections, optional_sections=optional_sections,
+            show_optional_fields=bool(optional_keys.intersection(errors or ())),
             upload_settings=app.extensions['school_settings_helpers']['config']('hrm:employee-fields') if kind=='employee' else {},
             choices=setup_choices(), families=families, photo=photo, guardian_photo=guardian_photo, files=[f for f in files if not f.photo],
             communication=STUDENT_COMMUNICATION, title=("Update " if obj else "Add ")+kind.title()), response_status
