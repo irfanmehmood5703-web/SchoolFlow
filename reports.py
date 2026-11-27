@@ -253,7 +253,7 @@ def configure_reports(app,db,Student,Employee):
             staff_statuses=[s for s in statuses if s!='Sandwich Leave' or summary[s]]
             rows=[[id,p.name,p.role,*[counts[id][s] for s in staff_statuses],sum(counts[id].values())] for id,p in persons.items()]
             totals={'Employees':len(persons),'Marked days':len(records),'Present':summary['Present'],'Absent':summary['Absent'],'Late':summary['Late'],'Leave days':sum(summary[s] for s in ('Leave','Short Leave','Death Leave','Paper Leave','Sandwich Leave')),'Off days':summary['Off Day']}
-            return response(view,['ID','Name','Designation',*staff_statuses,'Marked'],rows,totals=totals,note='Counts are based on saved attendance records in the selected range. Unmarked days are not counted as absences.')
+            return response(view,['ID','Name','Designation',*staff_statuses,'Marked'],rows,totals=totals,note='Counts are based on saved day-wise attendance in the selected range. Unmarked days are not counted as absences. For undated payroll totals, use Monthly Attendance.')
         rows=[[id,p.name,p.class_name,*[counts[id][s] for s in statuses],sum(counts[id].values())] for id,p in persons.items()]
         return response(view,['ID','Name','Class / Designation',*statuses,'Marked'],rows)
 

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
 from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
+import monthly_attendance as monthly_totals
 from payroll_calendar import joining_pay, all_present_bonus
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 from itsdangerous import BadData,URLSafeTimedSerializer
@@ -1703,6 +1704,14 @@ def configure_operations(app, db, Student, Employee):
                     attendance=Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=max(joined,month_start),Daily.day<=month_end).all()
                     deduction_attendance=[row for row in attendance if not working_calendar or row.day.isoformat() in working_calendar.working_dates]
                     counts=Counter(r.status for r in deduction_attendance);deductions=0;breakdown=[]
+                    lecture_total=sum(r.lectures or 0 for r in attendance)
+                    monthly_snapshot=None
+                    if request.form.get('attendance_based') or data.get('lecture_incentive') or data.get('all_present_bonus'):
+                        saved_month=monthly_totals.summaries(Workflow,m,[eid]).get(eid)
+                        if saved_month:
+                            base_counts=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
+                            counts,lecture_total=monthly_totals.payroll_totals(saved_month,base_counts)
+                            monthly_snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lecture_total,revision=saved_month.data['revision'])
                     days=len(working_calendar.working_dates) if working_calendar else calendar.monthrange(int(m[:4]),int(m[5:]))[1]
                     if request.form.get('attendance_based'):
                         for rule in data['rules']:
@@ -1716,7 +1725,7 @@ def configure_operations(app, db, Student, Employee):
                     if pays_basic:
                         earnings+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Earning')
                         deductions+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Deduction')
-                    if data.get('lecture_incentive') and not data.get('lecture_wise'): earnings+=data['incentive_per_lecture']*sum(r.lectures for r in attendance)
+                    if data.get('lecture_incentive') and not data.get('lecture_wise'): earnings+=data['incentive_per_lecture']*lecture_total
                     bonus=None
                     if data.get('all_present_bonus') and pays_basic:
                         if data.get('bonus_amount'):raise ValueError('This legacy plan has a fixed all-present amount. Update it to the one-working-day bonus before generating salary.')
@@ -1737,7 +1746,7 @@ def configure_operations(app, db, Student, Employee):
                     deductions+=data['security_payment']+advance_deduction
                     if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
                     snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
-                                  base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,
+                                  base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
                                   working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates)) if working_calendar else None)
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1;generated.append(eid)
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')

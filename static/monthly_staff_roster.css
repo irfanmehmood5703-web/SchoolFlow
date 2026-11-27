@@ -1,0 +1,23 @@
+.monthly-roster{min-width:0;max-width:100%}
+.monthly-roster-heading{background:#15533e;color:#fff;padding:14px 16px;border-radius:9px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.monthly-roster-heading h2{color:#fff;margin:0 0 3px;font-size:17px}.monthly-roster-heading span{font-size:12px;color:#d6ebdf}
+.monthly-roster-heading button{background:#fff;color:#15533e;border:1px solid #dceee4}
+.monthly-roster-info{margin:12px 0;padding:12px 14px;background:#edf6f0;border:1px solid #c7e0d1;border-left:4px solid #17694c;border-radius:7px;color:#284b3a;font-size:13px}.monthly-roster-info strong{display:block;margin-bottom:4px}
+.monthly-roster-actions,.monthly-roster-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 0}.monthly-roster-actions small{flex-basis:100%;color:#5c7265}.monthly-roster-actions [data-monthly-count]{font-weight:700;color:#15533e}
+.monthly-roster-scroll{overflow:auto;max-height:65vh;border:1px solid #d1e0d6;border-radius:9px;position:relative;isolation:isolate;min-width:0;max-width:100%}
+.monthly-roster-table{border-collapse:separate;border-spacing:0;width:100%;min-width:1450px;table-layout:fixed}
+.monthly-roster-table th,.monthly-roster-table td{padding:10px 8px;border-bottom:1px solid #dce7df;border-right:1px solid #e4ebe6;vertical-align:middle;text-align:center;word-break:normal}
+.monthly-roster-table th{position:sticky;top:0;background:#deeee4;color:#184d36;font-size:12px;z-index:2;height:44px;line-height:1.3}
+.monthly-roster-table tbody tr{background:#fff}.monthly-roster-table tbody tr:nth-child(even){background:#f1f7f3}.monthly-roster-table tbody tr:has([data-monthly-pick]:checked){background:#e0f2e7}
+.monthly-roster-table .monthly-employee{position:sticky;left:0;z-index:3;width:220px;text-align:left;background:inherit;box-shadow:3px 0 6px -4px #264c39;border-right:1px solid #c3d6c9}
+.monthly-roster-table thead .monthly-employee{background:#18563f;color:white;z-index:4}
+.monthly-person{display:flex;align-items:flex-start;gap:9px;line-height:1.4}.monthly-person>div{min-width:0;overflow-wrap:anywhere}.monthly-person strong,.monthly-person small,.monthly-person a{display:block}.monthly-person strong{font-size:14px;color:#173a2e}.monthly-person small{font-size:11px;color:#52695e}.monthly-person a{font-size:11px;margin-top:4px;color:#17694c;font-weight:600}
+.monthly-person input[type=checkbox]{width:17px;min-width:17px;height:17px;min-height:0;margin:4px 0 0;accent-color:#17694c}
+.monthly-source{display:inline-block;margin:5px 0 0;font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;background:#e5edf1;color:#4b6072}.monthly-source.saved{background:#d4eddf;color:#176044}.monthly-source.review{background:#fff0ca;color:#805400}
+.monthly-roster-table th:nth-child(2){width:105px}.monthly-roster-table th:nth-child(3){width:100px}.monthly-roster-table th:nth-child(4){width:100px}.monthly-roster-table th:last-child{width:170px}
+.monthly-roster-table input[type=number],.monthly-roster-table input[type=text]{width:100%;min-width:0;max-width:100%;box-sizing:border-box;padding:7px 5px;border:1px solid #b5c9bc;border-radius:6px;background:#fff;font-size:14px;min-height:36px}.monthly-roster-table input[type=number]{text-align:center}
+.monthly-roster-table td small{display:block;font-size:10px;color:#52695e;margin-top:3px}
+.monthly-roster-table th[data-monthly-status="Absent"]{background:#fce1e1;color:#8c2e35}.monthly-roster-table th[data-monthly-status="Late"]{background:#fff0cc;color:#845611}.monthly-roster-table th[data-monthly-status="Leave"],.monthly-roster-table th[data-monthly-status="Short Leave"]{background:#e4eefd;color:#355886}.monthly-roster-table th[data-monthly-status="Present"]{background:#d4eddf;color:#176044}
+.monthly-print-value{display:none}
+@media(max-width:650px){.monthly-roster-table .monthly-employee{width:155px}.monthly-roster-scroll{max-height:70vh}.monthly-roster-heading{padding:11px}.monthly-roster-table td,.monthly-roster-table th{padding:7px 6px}}
+@media print{.monthly-roster-scroll{overflow:visible;max-height:none;border:0}.monthly-roster-table{min-width:0;table-layout:auto;font-size:7pt;width:100%}.monthly-roster-table th,.monthly-roster-table td,.monthly-roster-table .monthly-employee{position:static;width:auto;box-shadow:none;padding:3px;white-space:normal}.monthly-roster-table input{display:none!important}.monthly-print-value{display:inline}.monthly-person strong,.monthly-person small,.monthly-source{font-size:7pt}.monthly-roster-heading button{display:none}.monthly-roster-info{font-size:8pt}.monthly-roster-table th:nth-child(n){width:auto}}

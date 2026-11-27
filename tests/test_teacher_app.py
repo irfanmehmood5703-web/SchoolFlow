@@ -153,6 +153,29 @@ class TeacherAppTests(unittest.TestCase):
         page=self.c.get(path+'?from_month='+previous+'&to_month='+previous)
         self.assertIn(b'0 recorded days in this range',page.data)
         self.assertNotIn(b'08:05',page.data)
+    def test_my_monthly_attendance_shows_own_totals_separately_without_internal_notes(self):
+        import monthly_attendance as monthly
+        self.seed()
+        today=school_today();month=(today.replace(day=1)-timedelta(days=1)).strftime('%Y-%m')
+        def make():
+            staff=db.session.get(self.Staff,self.sid)
+            detail=self.rm['employee'].query.filter_by(employee_id=staff.employee_id).one()
+            detail.data={**detail.data,'joining_date':'2000-01-01'}
+            base=monthly.basis(month,'2000-01-01',today,None,[])
+            totals={s:1 if s=='Absent' else 0 for s in monthly.STATUSES}
+            db.session.add(self.ops['workflow'](kind=monthly.KIND,status='Active',data=dict(employee_id=str(staff.employee_id),campus='Campus A',month=month,counts=totals,lectures=12,notes='SECRET-MONTHLY-NOTE',revision=base['revision'])))
+            other=fixture.Employee(employee_no='E-X',name='Other monthly staff',role='Teacher',status='Active')
+            db.session.add(other);db.session.flush()
+            db.session.add(self.ops['workflow'](kind=monthly.KIND,status='Active',data=dict(employee_id=str(other.id),campus='Campus A',month=month,counts={s:7 for s in monthly.STATUSES},lectures=999,notes='SECRET-OTHER',revision=base['revision'])))
+        self.tenant(make)
+        page=self.c.get('/teacher-app/my-attendance?from_month='+month+'&to_month='+month)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Monthly payroll attendance totals',page.data)
+        self.assertIn(b'<span>Absent</span><strong>1</strong>',page.data)
+        self.assertIn(b'<span>Total lectures</span><strong>12</strong>',page.data)
+        self.assertIn(b'0 recorded days in this range',page.data)
+        self.assertNotIn(b'SECRET-',page.data)
+        self.assertNotIn(b'<strong>999</strong>',page.data)
     def test_fee_visibility_owner_publish_hide_and_employee_permissions(self):
         self.seed()
         settings='/workspace/core/teacher-app-settings';path=f'/teacher-app/classes/{self.cid}/fee-defaulters'
