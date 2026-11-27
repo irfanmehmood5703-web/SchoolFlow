@@ -575,3 +575,13 @@ button.more-action:focus-visible {
   outline: 2px solid #176b4a;
   outline-offset: 2px;
 }
+
+/* Dashboard report cards align in consistent rows, including their footers. */
+@media screen {
+  .dashboard-grid.personal-dashboard { display:grid; align-items:stretch; align-content:start; grid-auto-flow:row; gap:16px; }
+  .dashboard-grid.personal-dashboard.compact { gap:12px; }
+  .personal-dashboard > .widget { display:flex; flex-direction:column; align-self:stretch; margin:0; min-width:0; }
+  .personal-dashboard > .widget > .widget-head { min-height:76px; box-sizing:border-box; flex-shrink:0; }
+  .personal-dashboard > .widget > .widget-body { flex:1 1 auto; min-width:0; }
+  .personal-dashboard > .widget > .widget-foot { margin-top:auto; flex-shrink:0; }
+}
