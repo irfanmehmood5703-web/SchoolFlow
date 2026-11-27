@@ -19,7 +19,9 @@ def permission_for(a):
     key=a['slug'];cat=a['category']
     if cat=='Dashboard':return 'dashboard.view'
     if cat=='Admissions':return ('admissions' if key in ('queries','students','admission-approvals') else 'certificates' if key=='certificates' else 'fees')+'.view'
-    if cat=='Exam & Attendance':return ('communication' if key in ('sms-blaster','sms-report','family-sms','notifications') else 'attendance' if 'attendance' in key or key in ('absentees','attendance-sheet') else 'exam')+'.view'
+    if cat=='Exam':return 'exam.view'
+    if cat=='Attendance':return 'attendance.view'
+    if key in ('sms-blaster','sms-report','family-sms','notifications'):return 'communication.view'
     if cat=='HRM':return ('attendance' if key.startswith('staff-attendance') else 'hrm' if key in ('employees','shifts','teacher-classes','notices','leave-approvals','leave-allotments','salary-report','staff-sms') else 'payroll')+'.view'
     if cat=='Finance':return 'requisitions.view' if key.startswith('req-') else 'finance.view'
     if cat=='General':return {'app-links':'apps.view','widgets':'widgets.view','parents-app':'parents.view','ptm-events':'ptm.view'}.get(key,'student_extras.view')
