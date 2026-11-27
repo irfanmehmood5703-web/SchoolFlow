@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{{asset_url('how_to.css')}}">
 <div class="help-reader">
 <a class="help-back" href="{{url_for('how_to.index',category=article.category)}}">← {{article.category}} guides</a>
-<div class="page-heading"><div><p class="eyebrow">SchoolFlow / How To / {{article.category}}</p><h1>{{article.title}}</h1><p class="muted">{{article.summary}}</p></div><button type="button" class="button secondary" onclick="window.print()">Print / PDF</button></div>
+<div class="page-heading"><div><p class="eyebrow">SchoolFlow / Help Center / {{article.category}}</p><h1>{{article.title}}</h1><p class="muted">{{article.summary}}</p></div><button type="button" class="button secondary" onclick="window.print()">Print / PDF</button></div>
 <article class="form-card help-detail">
   <h2>Where to find it</h2><p class="help-path">{{article.location}}</p>
   <h2>Step by step</h2><ol>{% for step in article.steps %}<li>{{step}}</li>{% endfor %}</ol>
@@ -13,6 +13,6 @@
   <a class="button" href="{{article.target}}">Open {{article.title}} →</a>
 </article>
 {% if related %}<section class="help-related"><h2>Related guides</h2>{% for a in related %}<a href="{{url_for('how_to.article',slug=a.slug)}}">{{a.title}} →</a>{% endfor %}</section>{% endif %}
-<p><a href="{{url_for('how_to.index')}}">All How To articles</a></p>
+<p><a href="{{url_for('how_to.index')}}">All Help Center articles</a></p>
 </div>
 {% endblock %}

@@ -58,7 +58,7 @@ def configure_how_to(app):
         filtered = [a for a in articles if (not category or a['category'] == category)
                     and (not q or q.casefold() in ' '.join(
                         [a['title'], a['summary'], a['location'], *a['steps'], *a['fields']]).casefold())]
-        return render_template('how_to.html', title='How To', articles=filtered,
+        return render_template('how_to.html', title='Help Center', articles=filtered,
                                categories=categories, category=category, q=q,
                                counts={c:sum(a['category']==c for a in articles) for c in categories},
                                total=len(articles))
@@ -69,7 +69,7 @@ def configure_how_to(app):
         found = next((a for a in articles if a['slug'] == slug), None)
         if found is None:
             abort(404)
-        return render_template('how_to_article.html', title=found['title']+' · How To',
+        return render_template('how_to_article.html', title=found['title']+' · Help Center',
                                article=found, related=[a for a in articles
                                if a['category']==found['category'] and a['slug']!=slug][:5])
 

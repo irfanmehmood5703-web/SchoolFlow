@@ -39,7 +39,7 @@ class HowToTests(unittest.TestCase):
     def test_category_filter_search_empty_state_and_escaped_input(self):
         page = self.client.get('/workspace/how-to?category=Finance')
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b'How To', page.data)
+        self.assertIn(b'Help Center', page.data)
         self.assertIn(b'Requisition Approvals', page.data)
         self.assertNotIn(b'Write separate Classwork', page.data)
         page = self.client.get('/workspace/how-to?q=Classwork')

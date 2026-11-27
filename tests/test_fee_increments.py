@@ -119,14 +119,21 @@ class FeeIncrementTests(unittest.TestCase):
         response=self.c.post('/workspace/student-fee-plans/generate',data=dict(_csrf=self.csrf,month='2027-10',timing_mode='auto',student_ids=str(self.s.id)))
         self.assertEqual(response.status_code,302);self.assertEqual(Bill.query.count(),1)
 
-    def test_sidebar_replaces_management_link_and_keeps_configuration_in_header(self):
+    def test_workspace_groups_management_settings_and_header_actions(self):
         page=self.c.get('/workspace/dashboard').data
         utility=page.split(b'<div class="workspace-utility"',1)[1].split(b'<div class="brand-row"',1)[0]
         self.assertNotIn(b'Management',utility)
-        self.assertIn(b'class="nav-menu configuration-menu"',utility)
+        self.assertIn(b'Support Team',utility)
+        self.assertIn(b'Notifications',utility)
+        self.assertNotIn(b'Configuration',utility)
+        settings=page.split(b'<nav class="workspace-settings no-print"',1)[1].split(b'</nav>',1)[0]
+        self.assertIn(b'class="nav-menu configuration-menu"',settings)
+        self.assertIn(b'Help Center',settings)
+        self.assertIn(b'Messages',settings)
         for label in (b'Institute Setup',b'Exam Settings',b'HRM Settings'):
-            self.assertIn(label,utility)
+            self.assertIn(label,settings)
         main=page.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
+        self.assertIn(b'Management',main)
         self.assertNotIn(b'Configuration',main);self.assertNotIn(b'Core Settings',main)
         self.assertEqual(page.count(b'class="nav-menu configuration-menu"'),1)
         self.assertIn(b'class="workspace-sidebar no-print"',page)

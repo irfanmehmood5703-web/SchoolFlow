@@ -14,11 +14,13 @@
   .app-header .brand-account { flex-wrap: wrap; }
   .workspace-shell {
     display: grid;
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: 232px minmax(0, 1fr) 166px;
+    grid-template-areas: "management content settings";
     align-items: start;
   }
-  .workspace-shell > main { min-width: 0; }
+  .workspace-shell > main { grid-area: content; min-width: 0; }
   .workspace-sidebar {
+    grid-area: management;
     position: sticky;
     top: 0;
     max-height: 100vh;
@@ -73,7 +75,6 @@
     outline-offset: -2px;
   }
   @media (max-width: 900px) {
-    .workspace-shell { grid-template-columns: minmax(0, 1fr); }
     .workspace-sidebar {
       position: static;
       min-height: 0;
@@ -89,4 +90,78 @@
 }
 @media print {
   .workspace-sidebar { display: none !important; }
+}
+
+@media screen {
+  .workspace-sidebar-heading {
+    margin: 0 12px 8px;
+    color: #48685a;
+    font-size: 12px;
+    font-weight: 750;
+  }
+  .workspace-settings {
+    grid-area: settings;
+    position: sticky;
+    top: 0;
+    display: grid;
+    gap: 6px;
+    padding: 18px 12px;
+    background: #fff;
+    border-left: 1px solid var(--line);
+    border-radius: 0 0 0 10px;
+    z-index: 20;
+  }
+  .workspace-settings > a,
+  .workspace-settings .configuration-menu > summary {
+    display: block;
+    padding: 9px 10px;
+    border-radius: 7px;
+    color: #1c4435;
+    background: #f0f7f2;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .workspace-settings .configuration-menu > summary::after { color: inherit; }
+  .workspace-settings .configuration-menu .menu-panel {
+    left: auto;
+    right: 0;
+    width: min(290px, calc(100vw - 32px));
+  }
+  .workspace-settings > a:hover,
+  .workspace-settings > a[aria-current="page"],
+  .workspace-settings .configuration-menu[open] > summary {
+    background: #dcefe4;
+  }
+  .workspace-settings :is(a, summary):focus-visible {
+    outline: 2px solid #26895c;
+    outline-offset: -2px;
+  }
+  @media (max-width: 1050px) {
+    .workspace-shell {
+      grid-template-columns: 205px minmax(0, 1fr);
+      grid-template-areas: "management settings" "management content";
+      grid-template-rows: auto 1fr;
+    }
+    .workspace-settings {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      padding: 8px 16px;
+      border-left: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .workspace-settings .configuration-menu .menu-panel { left: 0; right: auto; }
+  }
+  @media (max-width: 900px) {
+    .workspace-shell {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "management" "settings" "content";
+    }
+    .workspace-sidebar[data-nav-ready] .workspace-sidebar-heading { display: none; }
+    .workspace-settings { justify-content: flex-start; }
+  }
+}
+@media print {
+  .workspace-settings { display: none !important; }
 }
