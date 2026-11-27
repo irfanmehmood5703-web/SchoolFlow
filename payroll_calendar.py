@@ -9,6 +9,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from school_clock import school_today
 
 PAY_BASES = ("calendar_days", "working_days")
+FIXED_SALARY_DAYS = 30
 
 
 def month_dates(value):
@@ -25,6 +26,13 @@ def salary_paid_dates(month,working_dates,pay_basis='working_days'):
     if not working or not set(working)<=valid:raise ValueError('Configure valid working dates for this salary month first.')
     if pay_basis not in PAY_BASES:raise ValueError('Choose a valid salary pay basis.')
     return sorted(valid) if pay_basis=='calendar_days' else working
+
+
+def salary_rate_days(pay_basis,working_dates=None):
+    """Normal monthly pay has a fixed 30-day daily rate, regardless of month length."""
+    if pay_basis=='calendar_days':return FIXED_SALARY_DAYS
+    if pay_basis=='working_days' and working_dates:return len(set(working_dates))
+    raise ValueError('Configure a valid working calendar for the salary rate.')
 
 
 def joining_pay(month,joined,basic,working_dates,pay_basis='working_days'):
@@ -103,7 +111,8 @@ def configure_payroll_calendar(app,db):
         saved=db.session.get(PayrollCalendar,month)
         return render_template('payroll_calendar.html',title='Payroll Working Calendar',month=month,days=days,
                                selected=saved.working_dates if saved else [],version=saved.version if saved else 0,
-                               weekdays=list(calendar.day_name),pay_basis=pay_basis(month) if saved else 'calendar_days')
+                               weekdays=list(calendar.day_name),pay_basis=pay_basis(month) if saved else 'calendar_days',
+                               fixed_salary_days=FIXED_SALARY_DAYS)
 
     app.register_blueprint(bp)
 
@@ -117,5 +126,6 @@ def all_present_bonus(month,joined,monthly_basic,allowances,working_dates,attend
     disqualified=sorted(day for day,status in records.items() if status not in ('Present','Off Day') and (pay_basis=='working_days' or day in eligible))
     qualifies=bool(eligible) and not missing and not disqualified and any(records.get(day)=='Present' for day in eligible)
     basis=monthly_basic+sum(line['amount'] for line in allowances if line.get('type')=='Earning' and line.get('bonusable'))
-    amount=int((Decimal(basis)/calendar['total_paid_days']).quantize(Decimal('1'),rounding=ROUND_HALF_UP)) if qualifies else 0
-    return dict(method='one-working-day',amount=amount,basis=basis,working_days=calendar['total_working_days'],salary_divisor_days=calendar['total_paid_days'],pay_basis=pay_basis,eligible_dates=sorted(eligible),missing_dates=missing,disqualified_dates=disqualified,qualified=qualifies)
+    rate_days=salary_rate_days(pay_basis,calendar['working_dates'])
+    amount=int((Decimal(basis)/rate_days).quantize(Decimal('1'),rounding=ROUND_HALF_UP)) if qualifies else 0
+    return dict(method='one-working-day',amount=amount,basis=basis,working_days=calendar['total_working_days'],salary_divisor_days=rate_days,pay_basis=pay_basis,eligible_dates=sorted(eligible),missing_dates=missing,disqualified_dates=disqualified,qualified=qualifies)
