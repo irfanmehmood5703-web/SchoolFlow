@@ -15,10 +15,12 @@
     justify-self: center;
     max-width: 100%;
     min-width: 0;
-    padding: 2px 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
+    width: fit-content;
+    box-sizing: border-box;
+    padding: 4px 12px;
+    border: 1px solid #a8ddbb38;
+    border-radius: 9px;
+    background: linear-gradient(100deg, #173d32, #235340, #173d32);
     box-shadow: none;
     text-align: center;
   }
