@@ -294,3 +294,35 @@
     padding-inline: clamp(14px, 2vw, 32px);
   }
 }
+
+/* Keep utility navigation above content at all desktop widths. */
+@media screen {
+  .workspace-shell {
+    grid-template-columns: clamp(220px, 19vw, 280px) minmax(0, 1fr);
+    grid-template-areas: "management settings" "management content";
+    grid-template-rows: auto 1fr;
+  }
+  .workspace-settings {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 8px 16px;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    min-width: 0;
+  }
+  .workspace-settings .configuration-menu .menu-panel { left: auto; right: 0; }
+  .workspace-shell > main .page-content { width: 100%; max-width: none; box-sizing: border-box; }
+  @media (max-width: 900px) {
+    .workspace-shell {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "management" "settings" "content";
+      grid-template-rows: auto auto 1fr;
+    }
+    .workspace-settings { justify-content: flex-start; }
+    .workspace-settings .configuration-menu .menu-panel { left: 0; right: auto; }
+  }
+}
