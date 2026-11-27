@@ -81,6 +81,31 @@
     color: #fff;
     box-shadow: inset 4px 0 #81dab1;
   }
+  .workspace-navigation .workspace-tool-link {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid #bedbc9;
+    border-radius: 8px;
+    line-height: 1.35;
+  }
+  .workspace-tool-link small { color: inherit; }
+  .workspace-navigation .workspace-migration-link {
+    margin-top: 12px;
+    background: #176b4b;
+    border-color: #176b4b;
+    color: #fff;
+  }
+  .workspace-navigation .workspace-migration-link:hover,
+  .workspace-navigation .workspace-migration-link[aria-current="page"] {
+    background: #104834;
+    color: #fff;
+  }
+  .workspace-navigation .workspace-apps-link {
+    background: #edf7f1;
+    color: #1c4435;
+  }
+  .workspace-navigation .workspace-apps-link:hover { background: #dcefe4; }
   .workspace-header-actions {
     display: flex;
     align-items: center;

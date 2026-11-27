@@ -25,7 +25,8 @@ def permission_for(a):
     if key in ('sms-blaster','sms-report','family-sms','notifications'):return 'communication.view'
     if cat=='HRM':return ('attendance' if key.startswith('staff-attendance') else 'hrm' if key in ('employees','shifts','teacher-classes','notices','leave-approvals','leave-allotments','salary-report','staff-sms') else 'payroll')+'.view'
     if cat=='Finance':return 'requisitions.view' if key.startswith('req-') else 'finance.view'
-    if cat=='General':return {'app-links':'apps.view','widgets':'widgets.view','parents-app':'parents.view','ptm-events':'ptm.view'}.get(key,'student_extras.view')
+    if cat=='School Tools':return 'apps.view' if key=='app-links' else 'admissions.view'
+    if cat=='General':return {'widgets':'widgets.view','parents-app':'parents.view','ptm-events':'ptm.view'}.get(key,'student_extras.view')
     if cat=='Configuration':return {'setup-users':'access.view','setup-logs':'logs.view','setup-certificates':'certificates.view'}.get(key,'core.view')
     if key=='support-help':return 'support.view'
     if key.startswith('message-') or key=='internal-messages':return 'messages.manage' if key=='message-settings' else 'messages.report' if key=='message-reports' else 'messages.view'

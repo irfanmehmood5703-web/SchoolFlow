@@ -131,7 +131,7 @@ def configure_general_tools(app,db,Student,Employee):
             db.session.add(Audit(action='Update app release',data=dict(app=key,owner_id=session.get('owner_id'),staff_id=session.get('staff_id'))));db.session.commit();flash('Release registry saved. No app file was generated or message sent.','success');return redirect(url_for('general_tools.app_links'))
         p=getattr(g,'staff_principal',None);helper=app.extensions['staff_access_helpers']
         can_edit=not session.get('demo') and (p is None or helper['grant'](p,'apps.update')==set(helper['campuses']()))
-        return render_template('app_links.html',title='SchoolFlow App Links',apps=releases(),can_edit=can_edit,school_apps=app.extensions['school_app_helpers']['view_model']())
+        return render_template('app_links.html',title='School App Links',apps=releases(),can_edit=can_edit,school_apps=app.extensions['school_app_helpers']['view_model']())
     @bp.get('/widgets')
     def widgets():
         current,row=prefs();visible=allowed();selected=[k for k in current['order'] if k in current['selected'] and k in visible]

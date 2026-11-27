@@ -12,7 +12,7 @@ from student_performance_schema import PERFORMANCE_CATEGORIES
 from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
 import monthly_attendance as monthly_totals
 from payroll_calendar import joining_pay, all_present_bonus, salary_paid_dates, salary_rate_days, FIXED_SALARY_DAYS
-from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
+from module_catalog import MENUS, SIDEBAR_TOOLS, TITLES, SCHEMAS, STATUSES
 from itsdangerous import BadData,URLSafeTimedSerializer
 from exam_enrollment import enrolled
 from payroll_rules import parse_rule,deduction,JUMP_MODES,CAP_MODES
@@ -229,7 +229,7 @@ def configure_operations(app, db, Student, Employee):
                          if w.status not in ('Voided','Converted','Closed')
                          and (w.data or {}).get('follow_up')
                          and (w.data or {})['follow_up']<=today]
-        return dict(module_menus=MENUS,menu_url=menu_url,
+        return dict(module_menus=MENUS,sidebar_tools=SIDEBAR_TOOLS,menu_url=menu_url,
                     admission_followup_due=due_queries,
                     build_label='Pre-test • fictional records only')
 
@@ -247,6 +247,7 @@ def configure_operations(app, db, Student, Employee):
 
     def menu_url(key):
         if key in ('general-library','general-leaves','general-feedback'):return url_for('general_portal.index',section=key.removeprefix('general-'))
+        if key=='school-migration':return url_for('student_import.index')
         if key in ('app-links','widgets'):return url_for('general_tools.app_links' if key=='app-links' else 'general_tools.widgets')
         if key=='parents-app':return url_for('parents.analytics')
         if key=='ptm-events':return url_for('ptm.events')

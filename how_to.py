@@ -1,6 +1,6 @@
 """Read-only help for the actual SchoolFlow menu; no school records are loaded."""
 from flask import Blueprint, abort, g, render_template, request, session, url_for
-from module_catalog import MENUS, SCHEMAS
+from module_catalog import MENUS, SIDEBAR_TOOLS, SCHEMAS
 from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES, TOOLS_GUIDES
 
 
@@ -14,7 +14,7 @@ def configure_how_to(app):
         identity = getattr(g, 'school_identity', None) or {}
         private_owner = (not identity.get('demo') and identity.get('scope')
                          and session.get('owner_id') and not session.get('staff_id'))
-        for category, groups in MENUS.items():
+        for category, groups in {**MENUS, 'School Tools': [('', SIDEBAR_TOOLS)]}.items():
             for section, items in groups:
                 for title, key in items:
                     if key.startswith('general-') and not private_owner:

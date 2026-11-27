@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}
-{{m.heading(title,'General / Install an app or share its published link')}}
+{{m.heading(title,'Download your school’s apps or share their published links.')}}
 <p>SchoolFlow releases are listed here when a real public download or store link is configured. Version and size are maintained with each release.</p>
 {% if school_identity and not school_identity.get('demo') %}<section class="form-card"><h2>Parent Web Portal</h2><p>The browser portal is available now. A native Android download is published separately.</p><a class="button" href="{{url_for('parent_portal.login',code=school_identity.code)}}" target="_blank" rel="noopener">Open Parent Web Portal</a></section>{% endif %}
 {% if session.get('owner_id') and not session.get('demo') %}<p><a class="button secondary" href="{{url_for('sms_gateway.index')}}">Connect school SIM SMS</a></p>{% endif %}

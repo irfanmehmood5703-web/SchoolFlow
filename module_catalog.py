@@ -7,9 +7,14 @@ MENUS = {
  'HRM': [('Manage Employees',[('Manage Employees','employees'),('Manage Time In/Out','shifts'),('Assign Classes for Teacher App','teacher-classes')]),('Add Approval',[('Salary Plan Approvals','salary-approvals'),('Increment','increments'),('Advance Salary','advances')]),('Salary',[('Payroll Deduction Policy','payroll-policy'),('Create Salary Plan','salary-plans'),('Update Salary Plan','update-salary'),('Calculate/Generate Salary','generate-salary'),('Pay/Print Salary','pay-salary'),('Lecture Delivery','lecture-delivery'),('Lecture Rates','lecture-rates'),('Lecture Register','lecture-register'),('Lecture-Wise Salary Report','lecture-report'),('Employee Salary Report','salary-report'),('Security Payment & Return','security')]),('Employee Extras',[('Employee Notice Board','notices'),('Leave Approval','leave-approvals'),('Leave Allotments','leave-allotments'),('SMS Report','staff-sms')])]
 }
 MENUS['Finance']=[('Finance',[('Ledger','ledger-home'),('Journal Inquiry','finance-journal-inquiry'),('General Ledger','finance-general-ledger'),('Day Wise P & L','finance-daily-profit'),('Cash Report','finance-cash'),('Shareholders','finance-shareholders'),('Daily Snapshot Report','finance-snapshots'),('My Requisitions','req-mine'),('Requisition Approvals','req-approvals'),('Issue Requisition Payment','req-issue'),('Settle Requisition','req-settle'),('Requisition Reports','req-reports'),('Requisition Settings','req-settings'),('Fee Audit Report','finance-fee-audit'),('Voided Transactions','finance-voided'),('Voided Challan Transactions','finance-voided-challans')])]
-MENUS['General']=[('',[('SchoolFlow App Links','app-links'),('Widgets','widgets')]),('Student Extras',[('Parents App','parents-app'),('Notice Board','student-notices'),('PTM (Parent Teacher Meeting)','ptm-events'),('Student Diary','student-diary'),('Student Leave Approval','general-leaves'),('Complaints & Suggestions','general-feedback'),('Library','general-library')])]
+MENUS['General']=[('',[('Widgets','widgets')]),('Student Extras',[('Parents App','parents-app'),('Notice Board','student-notices'),('PTM (Parent Teacher Meeting)','ptm-events'),('Student Diary','student-diary'),('Student Leave Approval','general-leaves'),('Complaints & Suggestions','general-feedback'),('Library','general-library')])]
 MENUS['General'].append(('Messages',[('SMS Blaster','sms-blaster'),('SMS Report','sms-report'),('Family SMS Report','family-sms'),('App Notification Report','notifications')]))
+SIDEBAR_TOOLS = [
+    ('School Migration Center', 'school-migration'),
+    ('School App Links', 'app-links'),
+]
 TITLES = {key:title for groups in MENUS.values() for _,items in groups for title,key in items}
+TITLES.update({key: title for title, key in SIDEBAR_TOOLS})
 # Supplemental setup forms are a pre-test implementation; exact unknown dialogs are not claimed.
 SCHEMAS = {
  'queries': [('name','Student Name','text',True),('father','Father Name','text',False),('phone','Contact','text',True),('class_name','Class','class_name',False),('follow_up','Follow-up Date','date',False),('notes','Notes','textarea',False)],

@@ -34,5 +34,15 @@
       </div>
     </details>
     {% endfor %}
+    {% for label, key in sidebar_tools %}
+      {% set migration = key == 'school-migration' %}
+      {% if utility_allowed('admissions' if migration else 'apps') %}
+        {% set current = request.blueprint == 'student_import' if migration else request.endpoint == 'general_tools.app_links' %}
+        <a class="workspace-tool-link {{'workspace-migration-link' if migration else 'workspace-apps-link'}}" href="{{menu_url(key)}}"{% if current %} aria-current="page"{% endif %}>
+          <strong>{{label}}</strong>
+          <small>{{'Transfer students and fee records' if migration else 'Download school apps'}}</small>
+        </a>
+      {% endif %}
+    {% endfor %}
   </nav>
 </div>

@@ -6,7 +6,7 @@ from flask import g
 
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 from app import app, db
-from module_catalog import MENUS
+from module_catalog import MENUS, SIDEBAR_TOOLS
 from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES, TOOLS_GUIDES
 
 
@@ -23,6 +23,7 @@ class HowToTests(unittest.TestCase):
 
     def test_every_current_menu_has_a_guide_and_real_destination(self):
         keys = {key for groups in MENUS.values() for _, items in groups for _, key in items}
+        keys.update(key for _, key in SIDEBAR_TOOLS)
         self.assertEqual(set(GUIDES), keys)
         with app.test_request_context('/workspace/how-to'):
             g.school_identity = dict(scope='fictional', demo=False)

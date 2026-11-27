@@ -29,7 +29,7 @@ class OperationTests(unittest.TestCase):
         data=dict(employee_id=str(self.e.id),basic=1000000,security_return=0,security_payment=0,incentive_per_lecture=0,annual_increment=0,bonus_amount=0,rules=[dict(status='Absent',allowed=0,type='Abs',amount=10000,frequency='Recursive',jump=0,limit=0)])
         data.update(changes);p=self.m['workflow'](kind='salary-plans',status='Approved',data=data);db.session.add(p);db.session.commit();return p
     def test_all_menu_entries_render_and_keep_order(self):
-        self.assertEqual([len([x for _,items in g for x in items]) for g in MENUS.values()],[5,16,4,9,21,16,13])
+        self.assertEqual([len([x for _,items in g for x in items]) for g in MENUS.values()],[5,16,4,9,21,16,12])
         for groups in MENUS.values():
             for _,items in groups:
                 for _,key in items:
@@ -53,6 +53,13 @@ class OperationTests(unittest.TestCase):
         for label in (b'Combine Attendance Report',b'Combine Day Wise Attendance Report',b'Individual Attendance Report',b'Attendance Summary',b'Absentees',b'Attendance Sheet'):
             self.assertIn(label,nav)
         self.assertIn(b'<summary>Exam</summary>',nav)
+        self.assertNotIn(b'School App Links',sections[b'General'])
+        tools = nav.rsplit(b'</details>',1)[1]
+        self.assertEqual(re.findall(rb'<strong>([^<]+)</strong>',tools),
+                         [b'School Migration Center',b'School App Links'])
+        for path in ('/workspace/core/institute/student-import','/workspace/general/app-links'):
+            self.assertIn(path.encode(),tools)
+            self.assertEqual(self.client.get(path).status_code,200)
         self.assertIn(b'<summary>Attendance</summary>',nav)
         self.assertNotIn(b'<summary>Exam & Attendance</summary>',nav)
     def test_student_filters_apply_to_fee_lists_and_history(self):
