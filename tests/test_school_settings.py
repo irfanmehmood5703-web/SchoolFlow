@@ -176,6 +176,43 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertNotIn(b'name="designations" value="Class Teacher" checked',edit.data)
         self.assertNotIn(b'name="designations" value="Clerk" checked',edit.data)
         self.assertEqual(self.c.get('/workspace/core/hrm/assign-shifts').status_code,200)
+    def test_hrm_attendance_uses_builtin_and_school_departments_without_catalog_writes(self):
+        from html import escape
+        from record_schema import STANDARD_CHOICES
+        # Reproduce an older school with only Academics stored in its catalog.
+        self.assertEqual([r.value for r in self.rm['settings'].query.filter_by(category='department')],['Academics'])
+        db.session.add(self.rm['settings'](category='department',value='Special Programs',class_name=''))
+        detail=self.rm['employee'].query.filter_by(employee_id=self.clerk.id).one()
+        detail.data={**detail.data,'department':'Administration'}
+        db.session.commit()
+        before=self.rm['settings'].query.count()
+        path='/workspace/attendance/staff?day=2026-09-07'
+        expected=STANDARD_CHOICES['department']+['Special Programs']
+        for mode in ('take','update'):
+            page=self.c.get(path+'&mode='+mode)
+            self.assertEqual(page.status_code,200)
+            selector=re.search(rb'<select id="department"[^>]*>(.*?)</select>',page.data,re.S)[1]
+            for label in expected:
+                self.assertIn(('value="'+escape(label)+'"').encode(),selector)
+            self.assertEqual(selector.count(b'value="Academics"'),1)
+            self.assertIn(b'value="Cleaner"',page.data)
+        filtered=self.c.get(path+'&mode=take&department=Administration')
+        self.assertIn(b'Fictional Clerk',filtered.data)
+        self.assertNotIn(b'Fictional Teacher',filtered.data)
+        empty=self.c.get(path+'&mode=take&department=Security')
+        self.assertIn(b'No pending employees match these filters.',empty.data)
+        self.assertNotIn(b'Fictional Clerk',empty.data)
+        for view in ('staff-attendance-report','staff-attendance-sheet'):
+            page=self.c.get('/workspace/reports/attendance/'+view+'?from=2026-09-07&to=2026-09-07')
+            self.assertEqual(page.status_code,200)
+            for label in expected:
+                self.assertIn(('name="department" value="'+escape(label)+'"').encode(),page.data)
+        page=self.c.get('/workspace/core/hrm/departments')
+        self.assertIn(b'Available departments',page.data)
+        for label in expected:self.assertIn(escape(label).encode(),page.data)
+        self.assertEqual(self.rm['settings'].query.count(),before)
+        self.assertEqual(self.ops['daily'].query.count(),0)
+
     def test_staff_attendance_relevant_filters_ignore_student_criteria(self):
         path='/workspace/attendance/staff'
         # A stale Class filter sent by a saved URL must not hide the employee.

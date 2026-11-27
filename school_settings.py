@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from certificates import clean_html as clean_base_html
 from branding_values import make_branding_values, expand_tags, missing_tags
-from record_schema import EMPLOYEE_SECTIONS
+from record_schema import EMPLOYEE_SECTIONS, HRM_CATALOG_CATEGORIES, hrm_catalog_values
 from exam_enrollment import included,recorded
 from school_clock import normalize_clock,attendance_clock,school_today
 
@@ -213,6 +213,7 @@ def configure_school_settings(app,db,Student,Employee):
         cache=getattr(request,'school_settings_options',{}) if has_request_context() and request.method=='GET' else None
         if cache is not None and category in cache:return list(cache[category])
         values=sorted({r.value for r in rm['settings'].query.filter_by(category=category).all()})
+        if category in HRM_CATALOG_CATEGORIES:values=hrm_catalog_values(category,values)
         if category=='subject':
             # Merge the shared subject catalog with Exam Settings subject definitions.
             # Older schools may have catalog-only subjects; newly configured subjects
