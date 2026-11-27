@@ -20,11 +20,11 @@
     <div class="form-card"><strong id="attendance-working-count">{{selected|length}}</strong><p>Attendance working days selected</p></div>
   </div>
   <h2>Working dates (attendance only)</h2>
-  <p>Select the actual school working dates. Uncheck Sundays or school holidays when attendance is not required. This does not remove their pay when all calendar days are selected.</p>
-  <div class="check-grid">{% for name in weekdays %}<label class="check"><input type="checkbox" data-working-weekday value="{{loop.index0}}">{{name}}</label>{% endfor %}</div>
+  <p>A new month is preselected Monday through Saturday, with paid Sundays off. Review the working dates and uncheck any other school holidays before saving. This does not remove their pay when all calendar days are selected.</p>
+  <div class="check-grid">{% for name in weekdays %}<label class="check"><input type="checkbox" data-working-weekday value="{{loop.index0}}" {{'checked' if loop.index0 in selected_weekdays else ''}}>{{name}}</label>{% endfor %}</div>
   <button type="button" class="button secondary" id="apply-working-weekdays">Select dates for these weekdays</button>
   <div class="working-calendar">{% for day in days %}<label class="check"><input type="checkbox" name="working_dates" value="{{day.isoformat()}}" data-weekday="{{day.weekday()}}" {{'checked' if day.isoformat() in selected else ''}}>{{day.strftime('%d %b · %a')}}</label>{% endfor %}</div>
-  <p><strong>{{selected|length}} saved attendance working days.</strong> For a new employee’s first partial month, basic salary is prorated using actual eligible paid dates. This is separate from the 30-day deduction rate. Saving does not change existing generated salaries.</p>
+  <p><strong>{{saved_count}} saved attendance working days.</strong> For a new employee’s first partial month, basic salary is prorated using actual eligible paid dates. This is separate from the 30-day deduction rate. Saving does not change existing generated salaries.</p>
   <button>Save working calendar</button>
 </form>
 <script src="{{asset_url('payroll_calendar.js')}}" defer></script>

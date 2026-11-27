@@ -1,0 +1,17 @@
+.payroll-preview-heading{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;background:#e6f3ec;padding:16px;border:1px solid #c0dcd0;border-radius:10px;margin-bottom:12px}
+.payroll-preview-heading h2{margin:0 0 5px;color:#14543e}
+.payroll-preview-scroll{overflow:auto;margin:14px 0}
+.payroll-preview-table{min-width:1330px}
+.payroll-preview-table th{white-space:nowrap;background:#e9f3ee;color:#164b3b}
+.payroll-preview-table td{vertical-align:top}
+.payroll-preview-table td small,.payroll-preview-table th small{display:block;font-size:11px;margin-top:4px;color:#54685e}
+.payroll-preview-table td a{display:block;margin-top:5px;font-size:12px}
+.payroll-preview-table td[data-pay-status]{text-align:center;font-variant-numeric:tabular-nums}
+.payroll-preview-table th[data-pay-status="Absent"],.payroll-preview-table td[data-pay-status="Absent"]{background:#fbe9e7}
+.payroll-preview-table th[data-pay-status="Late"],.payroll-preview-table td[data-pay-status="Late"]{background:#fff1cf}
+.payroll-preview-table th[data-pay-status="Leave"],.payroll-preview-table td[data-pay-status="Leave"]{background:#eaf1ff}
+.payroll-preview-table th[data-pay-status="Short Leave"],.payroll-preview-table td[data-pay-status="Short Leave"]{background:#f4edfc}
+.payroll-preview-table td.payroll-net{font-weight:700;color:#14543e;background:#e6f3ec;white-space:nowrap}
+.payroll-source{display:inline-block;font-size:12px;border-radius:6px;background:#eef2f0;padding:5px 8px;color:#315b4c}
+.payroll-source.saved{background:#d9f4e4;color:#135637}.payroll-source.review,.payroll-alert{background:#fff1d9;color:#815010}
+.payroll-alert{padding:10px;border-radius:6px}
