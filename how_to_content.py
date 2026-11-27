@@ -140,7 +140,7 @@ GUIDES = {
         'Open HRM → Salary → Payroll Deduction Policy.',
         'For each attendance status, set the paid allowed days and either a fixed PKR amount or a percentage of daily basic salary.',
         'Use advanced frequency, grouping or limits only when needed. Click Save & apply to all staff.',
-        'All existing and future employees use these shared rules during salary calculation. Review the preview before generation.',
+        'All existing and future employees use these shared rules. On the same page choose the salary month, review each employee’s Present, Absent, Late, Leave and salary totals, then select staff and click Generate selected salaries. Only completed months can be generated.',
         note='The shared policy applies to all not-yet-generated salary months. Existing saved salaries and individual basic salaries are unchanged.'),
     'salary-plans': guide('Create a salary plan and send it for approval.',
         'Choose the employee and enter basic salary, security amounts and applicable pay heads.',
