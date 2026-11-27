@@ -57,7 +57,7 @@ class PerformanceTests(unittest.TestCase):
         self.assertEqual(page.headers['Cache-Control'],'no-store');self.assertIn('app;dur=',page.headers['Server-Timing'])
     def test_main_menu_targets_skip_alias_redirects(self):
         page=self.c.get('/records/student')
-        nav=page.data.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
+        nav=page.data.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertNotIn(b'Student 360',nav)
         self.assertNotIn(b'/workspace/student-360',nav)
         for href in re.findall(rb'href="([^"]+)"',nav):

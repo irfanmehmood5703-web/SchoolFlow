@@ -58,3 +58,15 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeprint',place);
  });
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar = document.querySelector('[data-workspace-sidebar]');
+  if (!sidebar) return;
+  const toggle = sidebar.querySelector('.workspace-nav-toggle');
+  sidebar.querySelector('.workspace-module a[aria-current="page"]')?.closest('details').setAttribute('open', '');
+  toggle.setAttribute('aria-expanded', 'false');
+  sidebar.setAttribute('data-nav-ready', '');
+  toggle.addEventListener('click', () => {
+    toggle.setAttribute('aria-expanded', String(toggle.getAttribute('aria-expanded') === 'false'));
+  });
+});

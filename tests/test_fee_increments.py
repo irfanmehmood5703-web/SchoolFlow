@@ -119,17 +119,17 @@ class FeeIncrementTests(unittest.TestCase):
         response=self.c.post('/workspace/student-fee-plans/generate',data=dict(_csrf=self.csrf,month='2027-10',timing_mode='auto',student_ids=str(self.s.id)))
         self.assertEqual(response.status_code,302);self.assertEqual(Bill.query.count(),1)
 
-    def test_management_and_configuration_live_in_separate_header_positions(self):
+    def test_sidebar_replaces_management_link_and_keeps_configuration_in_header(self):
         page=self.c.get('/workspace/dashboard').data
         utility=page.split(b'<div class="workspace-utility"',1)[1].split(b'<div class="brand-row"',1)[0]
-        self.assertLess(utility.index(b'Management'),utility.index(b'Configuration'))
+        self.assertNotIn(b'Management',utility)
         self.assertIn(b'class="nav-menu configuration-menu"',utility)
         for label in (b'Institute Setup',b'Exam Settings',b'HRM Settings'):
             self.assertIn(label,utility)
-        main=page.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
+        main=page.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertNotIn(b'Configuration',main);self.assertNotIn(b'Core Settings',main)
         self.assertEqual(page.count(b'class="nav-menu configuration-menu"'),1)
-        self.assertNotIn(b'<aside',main)
+        self.assertIn(b'class="workspace-sidebar no-print"',page)
 
     def test_batch_selection_is_paginated_and_database_queries_are_bounded(self):
         from sqlalchemy import event

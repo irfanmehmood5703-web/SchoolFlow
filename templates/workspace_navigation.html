@@ -1,0 +1,25 @@
+<div class="workspace-sidebar no-print" data-workspace-sidebar>
+  <button class="workspace-nav-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="true">Modules</button>
+  <nav class="workspace-navigation" id="workspace-navigation" aria-label="Main navigation">
+    <a href="/workspace/dashboard"{% if request.endpoint == 'ops.dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
+    {% for module, groups in module_menus.items() %}
+    <details class="workspace-module">
+      <summary>{{module}}</summary>
+      <div class="workspace-module-links">
+        {% for section, items in groups %}
+          {% if section %}<p>{{section}}</p>{% endif %}
+          {# The attendance screen links to its own reports. #}
+          {% for label, key in items %}
+            {% if not (module == 'Exam & Attendance' and key in ['combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet']) %}
+              {% if not key.startswith('general-') or (school_identity and not school_identity.demo and session.get('owner_id') and not session.get('staff_id')) %}
+                {% set target = menu_url(key) %}
+                <a href="{{target}}"{% if request.path == target %} aria-current="page"{% endif %}>{{label}}</a>
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+  </nav>
+</div>

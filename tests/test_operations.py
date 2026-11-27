@@ -38,7 +38,7 @@ class OperationTests(unittest.TestCase):
                     if key.startswith('general-'):continue
                     r=self.client.get('/workspace/'+key,follow_redirects=True)
                     self.assertEqual(r.status_code,200,key)
-        nav=self.client.get('/workspace/dashboard').data.split(b'<nav class="top-navigation"',1)[1].split(b'</nav>',1)[0]
+        nav=self.client.get('/workspace/dashboard').data.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertNotIn(b'<aside',nav)
         self.assertIn(b'Student Attendance',nav)
         for label in (b'Combine Attendance Report',b'Combine Day Wise Attendance Report',b'Individual Attendance Report',b'Attendance Summary',b'Absentees',b'Attendance Sheet'):

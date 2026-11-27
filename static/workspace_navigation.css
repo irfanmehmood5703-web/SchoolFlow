@@ -1,0 +1,92 @@
+@media screen {
+  .app-header .brand-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    padding-block: 12px;
+  }
+  .app-header .school-header-name {
+    color: #d5ecdd;
+    font-size: clamp(14px, 1.5vw, 20px);
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+  .app-header .brand-account { flex-wrap: wrap; }
+  .workspace-shell {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    align-items: start;
+  }
+  .workspace-shell > main { min-width: 0; }
+  .workspace-sidebar {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow: auto;
+    padding: 18px 12px;
+    background: #fff;
+    border-right: 1px solid var(--line);
+    min-height: 70vh;
+  }
+  .workspace-nav-toggle { display: none; }
+  .workspace-navigation {
+    display: grid;
+    gap: 5px;
+  }
+  .workspace-navigation > a,
+  .workspace-module > summary {
+    display: block;
+    padding: 11px 12px;
+    border-radius: 8px;
+    color: #1c4435;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .workspace-module > summary { cursor: pointer; }
+  .workspace-module[open] > summary { background: #f0f7f2; }
+  .workspace-module-links { padding: 3px 0 5px 12px; }
+  .workspace-module-links p {
+    margin: 10px 8px 3px;
+    font-size: 11px;
+    font-weight: 750;
+    color: #48685a;
+  }
+  .workspace-module-links a {
+    display: block;
+    padding: 8px;
+    border-radius: 6px;
+    color: #294b3d;
+    line-height: 1.4;
+  }
+  .workspace-navigation a:hover,
+  .workspace-navigation summary:hover {
+    background: #f0f7f2;
+  }
+  .workspace-navigation a[aria-current="page"] {
+    background: #e0f2e7;
+    color: #124c34;
+    box-shadow: inset 3px 0 #26895c;
+    font-weight: 750;
+  }
+  .workspace-navigation :is(a, summary):focus-visible {
+    outline: 2px solid #26895c;
+    outline-offset: -2px;
+  }
+  @media (max-width: 900px) {
+    .workspace-shell { grid-template-columns: minmax(0, 1fr); }
+    .workspace-sidebar {
+      position: static;
+      min-height: 0;
+      max-height: none;
+      padding: 8px 16px;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .workspace-sidebar[data-nav-ready] .workspace-nav-toggle { display: inline-block; }
+    .workspace-sidebar[data-nav-ready] .workspace-navigation { margin-top: 8px; }
+    .workspace-nav-toggle[aria-expanded="false"] + .workspace-navigation { display: none; }
+  }
+}
+@media print {
+  .workspace-sidebar { display: none !important; }
+}
