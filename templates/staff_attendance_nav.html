@@ -1,0 +1,10 @@
+<nav class="form-card no-print staff-attendance-nav" aria-label="Staff attendance navigation">
+  <h2>Staff Attendance</h2>
+  <div class="award-actions">
+    <a class="button {{'' if attendance_tab=='take' else 'secondary'}}" href="{{url_for('ops.take_attendance',kind='staff',mode='take',day=nav_day)}}" {% if attendance_tab=='take' %}aria-current="page"{% endif %}>Take Attendance</a>
+    <a class="button {{'' if attendance_tab=='update' else 'secondary'}}" href="{{url_for('ops.take_attendance',kind='staff',mode='update',day=nav_day)}}" {% if attendance_tab=='update' %}aria-current="page"{% endif %}>Update Attendance</a>
+    <a class="button {{'' if attendance_tab=='sheet' else 'secondary'}}" href="{{url_for('reports.attendance',view='staff-attendance-sheet',**{'from':nav_month,'to':nav_month})}}" {% if attendance_tab=='sheet' %}aria-current="page"{% endif %}>Attendance Sheet</a>
+    <a class="button {{'' if attendance_tab=='monthly' else 'secondary'}}" href="{{url_for('school_settings.monthly_attendance',month=nav_month)}}" {% if attendance_tab=='monthly' %}aria-current="page"{% endif %}>Monthly Attendance</a>
+    <a class="button {{'' if attendance_tab=='report' else 'secondary'}}" href="{{url_for('reports.attendance',view='staff-attendance-report',**{'from':nav_month,'to':nav_month})}}" {% if attendance_tab=='report' %}aria-current="page"{% endif %}>Staff Attendance Report</a>
+  </div>
+</nav>

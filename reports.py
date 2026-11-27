@@ -9,7 +9,7 @@ from module_catalog import TITLES
 from report_exports import report_xlsx
 
 FEE_REPORTS={'fee-sheet','fee-report','daily-fees','class-fees','student-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'}
-ATTENDANCE_REPORTS={'combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'}
+ATTENDANCE_REPORTS={'combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report','staff-attendance-sheet'}
 
 def configure_reports(app,db,Student,Employee):
     bp=Blueprint('reports',__name__,url_prefix='/workspace/reports')
@@ -50,7 +50,7 @@ def configure_reports(app,db,Student,Employee):
         if request.args.get('export')=='xlsx':
             try:return report_xlsx(headers,rows,view)
             except ValueError as error:fail(str(error))
-        return render_template('reports.html',title=TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=school_today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
+        return render_template('reports.html',title='Staff Attendance Sheet' if view=='staff-attendance-sheet' else TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=school_today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
     def cash(value):return f'{value/100:,.2f}'.rstrip('0').rstrip('.')
 
     @bp.route('/fees/<view>')
@@ -192,7 +192,7 @@ def configure_reports(app,db,Student,Employee):
     @bp.route('/attendance/<view>')
     def attendance(view):
         if view not in ATTENDANCE_REPORTS:abort(404)
-        start,end=bounds();kind='staff' if view=='staff-attendance-report' else 'student';cls=Employee if kind=='staff' else Student;person_kind='employee' if kind=='staff' else 'student'
+        start,end=bounds();kind='staff' if view in ('staff-attendance-report','staff-attendance-sheet') else 'student';cls=Employee if kind=='staff' else Student;person_kind='employee' if kind=='staff' else 'student'
         persons={p.id:p for p in cls.query.all() if match(p,person_kind)}
         if kind=='staff':
             sort=request.args.get('sort','employee_no')
@@ -215,14 +215,14 @@ def configure_reports(app,db,Student,Employee):
         if view=='daily-attendance':
             rows=[[str(d),*[c[s] for s in statuses],sum(c.values()),max(0,len(persons)-sum(c.values()))] for d,c in sorted(byday.items())]
             return response(view,['Date',*statuses,'Marked','Unmarked'],rows)
-        if view=='attendance-sheet':
+        if view in ('attendance-sheet','staff-attendance-sheet'):
             if (end-start).days>92:fail('Printable attendance sheet supports up to 93 days per sheet.')
             dates=[start+timedelta(days=i) for i in range((end-start).days+1)]
             if not request.args.get('saturday','1')=='1':dates=[d for d in dates if d.weekday()!=5]
             if not request.args.get('sunday','1')=='1':dates=[d for d in dates if d.weekday()!=6]
             abbreviations=dict(zip(statuses,['P','A','L','LV','SL','OD','DL','PL','SdL']))
-            rows=[[id,details(p,person_kind).get('roll_no',''),p.name,*[abbreviations.get(lookup.get((id,d)),'—') for d in dates]] for id,p in persons.items()]
-            return response(view,['ID','Roll No','Name',*[d.strftime('%d-%b') for d in dates]],rows)
+            rows=[[id,p.employee_no if kind=='staff' else details(p,person_kind).get('roll_no',''),p.name,*[abbreviations.get(lookup.get((id,d)),'—') for d in dates]] for id,p in persons.items()]
+            return response(view,['ID','Code' if kind=='staff' else 'Roll No','Name',*[d.strftime('%d-%b') for d in dates]],rows,note='Saved attendance only. P = Present, A = Absent, L = Late, LV = Leave, SL = Short Leave, OD = Off Day, DL = Death Leave, PL = Paper Leave; — = Unmarked.' if kind=='staff' else None)
         if view=='absentees':
             minimum=request.args.get('absence_count','1')
             if not minimum.isdigit() or int(minimum)<1:fail('Absence count must be a positive integer.')

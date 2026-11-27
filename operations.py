@@ -194,6 +194,8 @@ def configure_operations(app, db, Student, Employee):
         except ValueError: raise ValueError('Invalid selection.')
     def queue(subject, ids, audience='parent', event=None, context=None):
         prefs={k: request.form.get(k)=='on' for k in ['father_contact','mother_contact','student_contact','app_sms','branded_sms','whatsapp_sms','parent_notification','teacher_notification']}
+        if audience in ('staff','teacher'):
+            prefs.update({k:request.form.get(k)=='on' for k in ('personal_mobile','home_phone','emergency_contact')})
         snapshots=app.extensions['school_settings_helpers']['message_snapshots'](subject,ids,audience,event=event,context=context)
         school_identity=getattr(g,'school_identity',None) or {}
         profile_model=app.extensions.get('institute_setup_models',{}).get('profile') or app.extensions.get('school_profile_model')
@@ -265,7 +267,8 @@ def configure_operations(app, db, Student, Employee):
         if key=='fee-plans': return url_for('student_plans.index')
         if key=='payment-history': return url_for('ops.history')
         if key in ('student-fees','fee-report','daily-fees','class-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder','fee-sheet'): return url_for('reports.fees',view=key)
-        if key in ('student-attendance','staff-attendance'): return url_for('ops.take_attendance',kind='staff' if key.startswith('staff') else 'student')
+        if key=='staff-attendance': return url_for('ops.take_attendance',kind='staff',mode='take')
+        if key=='student-attendance': return url_for('ops.take_attendance',kind='student')
         if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return url_for('reports.attendance',view=key)
         if key=='salary-plans': return url_for('ops.plans')
         if key=='update-salary': return url_for('ops.plans',view='update')
@@ -950,10 +953,63 @@ def configure_operations(app, db, Student, Employee):
         codes={'Present':'P','Absent':'A','Late':'L','Leave':'LV','Short Leave':'SL','Off Day':'OD','Death Leave':'DL','Paper Leave':'PL'}
         return render('student_attendance_grid.html',title='Student Attendance',kind='student',mode=mode,start=start,end=end,rows=rows,codes=codes,summary=Counter(r['status'] or 'Unmarked' for r in rows),saved_count=saved_count,scope_filters=scope_filters,roster_count=len(pupils))
     
+    def staff_attendance_grid():
+        d=day(request.values.get('day',school_today().isoformat()))
+        mode=request.values.get('mode','')  # Older direct links still show the combined roster.
+        if mode not in ('','take','update'):raise ValueError('Choose a valid staff attendance view.')
+        filter_keys=('campus','designation','department')
+        if request.method=='POST':app.extensions['admission_capacity']['lock']()
+        objs=people('employee',active=mode!='update',filter_keys=filter_keys)
+        search=request.values.get('search','').strip().casefold()
+        if search:objs=[p for p in objs if search in ' '.join((str(p.id),p.employee_no or '',p.name or '',p.role or '')).casefold()]
+        existing={r.person_id:r for r in Daily.query.filter_by(kind='staff',day=d).all()}
+        saved_count=sum(p.id in existing for p in objs);roster_count=len(objs)
+        if mode=='take':objs=[p for p in objs if p.id not in existing]
+        elif mode=='update':objs=[p for p in objs if p.id in existing]
+        def token(row):
+            return hashlib.sha256(json.dumps([row.id,row.status,row.time_in,row.time_out,row.lectures] if row else [],separators=(',',':')).encode()).hexdigest()
+        if request.method=='POST':
+            app.extensions['school_settings_helpers']['attendance_guard']('staff',d)
+            grid=request.form.get('staff_grid')=='1'
+            picked=set(selected('employee_ids')) if grid else {p.id for p in objs if request.form.get('status_'+str(p.id))}
+            if grid and (not picked or not picked<={p.id for p in objs}):raise ValueError('Select employees from the loaded roster. Reload if attendance has changed.')
+            send=bool(request.form.get('send'))
+            if grid and send:
+                sms=any(request.form.get(k)=='on' for k in ('app_sms','branded_sms','whatsapp_sms'))
+                if sms and not any(request.form.get(k)=='on' for k in ('personal_mobile','home_phone','emergency_contact')):raise ValueError('Choose at least one employee SMS destination.')
+                if not sms and request.form.get('teacher_notification')!='on':raise ValueError('Choose a notification channel or use Save Attendance.')
+            count=0;notify=[]
+            for p in objs:
+                if p.id not in picked:continue
+                pid=str(p.id);row=existing.get(p.id)
+                if grid and request.form.get('original_'+pid)!=token(row):raise ValueError('Staff attendance has changed. Reload before saving.')
+                status=request.form.get('status_'+pid,'')
+                if not status:continue
+                if status not in STATUSES or not app.extensions['attendance_control_helpers']['allowed']('staff',status,row.status if row else None):raise ValueError('Invalid or disabled attendance status.')
+                if not row:row=Daily(kind='staff',person_id=p.id,day=d);db.session.add(row)
+                row.status=status
+                app.extensions['attendance_device_helpers']['manual_write'](row)
+                val=request.form.get('lectures_'+pid,'0')
+                if not val.isdigit() or int(val)>1000:raise ValueError('Invalid lecture count.')
+                row.lectures=int(val)
+                for k in ('time_in','time_out'):setattr(row,k,normalize_clock(request.form.get(k+'_'+pid,'')))
+                count+=1;notify.append(p.id)
+            if send and notify:
+                db.session.flush()
+                queue('Attendance',notify,audience='staff',event='attendance',context={'day':d.isoformat()})
+            audit('Save attendance',kind='staff',day=str(d),count=count);commit()
+            flash(f'{count} staff attendance records saved.'+(' Notification request recorded; no SMS sent.' if send and notify else ''),'success')
+            return redirect(url_for('ops.take_attendance',kind='staff',day=d.isoformat(),**{k:request.form[k] for k in (*filter_keys,'mode','search') if request.form.get(k)}))
+        raw=app.extensions['record_helpers']['raw_many']('employee',objs)
+        schedules={p.id:app.extensions['school_settings_helpers']['shift']('staff',p,raw.get(p.id,{}),d) for p in objs}
+        cutoff=app.extensions['school_settings_helpers']['config']('hrm:attendance-lock').get('daily','')
+        return render('staff_attendance_grid.html',title='Staff Attendance',kind='staff',mode=mode,day=d,people=objs,filter_keys=filter_keys,existing=existing,schedules=schedules,locked=bool(cutoff and str(d)<=cutoff),tokens={p.id:token(existing.get(p.id)) for p in objs},roster_count=roster_count,saved_count=saved_count,codes={'Present':'P','Absent':'A','Late':'L','Leave':'LV','Short Leave':'SL','Off Day':'OD','Death Leave':'DL','Paper Leave':'PL'})
+
     @bp.route('/attendance/<kind>',methods=['GET','POST'])
     def take_attendance(kind):
         if kind not in ('student','staff'): abort(404)
         if kind=='student' and (request.method=='GET' or request.form.get('grid_mode')=='1'):return student_attendance_grid()
+        if kind=='staff':return staff_attendance_grid()
         d=day(request.values.get('day',school_today().isoformat()));people_kind='student' if kind=='student' else 'employee'
         filter_keys=('campus','designation','department') if kind=='staff' else ('campus','class_name','section','academic_session')
         objs=people(people_kind,filter_keys=filter_keys)

@@ -202,6 +202,59 @@ class SchoolSettingsTests(unittest.TestCase):
         self.assertNotIn('class_name=',saved.location)
         self.assertEqual([(row.person_id,row.status) for row in self.ops['daily'].query.all()],[(self.e.id,'Present')])
 
+    def test_staff_attendance_navigation_selection_updates_month_and_staff_sheet(self):
+        path='/workspace/attendance/staff'
+        query='?mode=take&day=2026-09-07'
+        page=self.c.get(path+query)
+        self.assertEqual(page.status_code,200)
+        for label in (b'Take Attendance',b'Update Attendance',b'Attendance Sheet',b'Monthly Attendance',b'Mark selected employees',b'SMS destination'):
+            self.assertIn(label,page.data)
+        self.assertIn(b'data-staff-mark="Absent"',page.data)
+        tokens=dict(re.findall(rb'name="original_(\d+)" value="([a-f0-9]+)"',page.data))
+        token=lambda p:tokens[str(p.id).encode()].decode()
+        data={'_csrf':self.csrf,'day':'2026-09-07','mode':'take','staff_grid':'1','employee_ids':str(self.e.id),f'original_{self.e.id}':token(self.e),f'status_{self.e.id}':'Absent',f'status_{self.clerk.id}':'Present'}
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        row=self.ops['daily'].query.one()
+        self.assertEqual((row.person_id,row.status),(self.e.id,'Absent'))
+        self.assertEqual(self.c.post(path,data=data).status_code,422)
+        pending=self.c.get(path+query).data
+        self.assertNotIn(b'Fictional Teacher',pending)
+        self.assertIn(b'Fictional Clerk',pending)
+        update=self.c.get(path+'?mode=update&day=2026-09-07').data
+        self.assertIn(b'Fictional Teacher',update);self.assertNotIn(b'Fictional Clerk',update)
+        fresh=re.search(rb'name="original_'+str(self.e.id).encode()+rb'" value="([a-f0-9]+)"',update)[1].decode()
+        data.update(mode='update',**{f'original_{self.e.id}':fresh,f'status_{self.e.id}':'Leave'})
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        self.assertEqual(self.ops['daily'].query.one().status,'Leave')
+        # Save & request records selected destinations, never sends SMS.
+        update=self.c.get(path+'?mode=update&day=2026-09-07').data
+        fresh=re.search(rb'name="original_'+str(self.e.id).encode()+rb'" value="([a-f0-9]+)"',update)[1].decode()
+        data.update(send='1',app_sms='on',personal_mobile='on',**{f'original_{self.e.id}':fresh})
+        self.assertEqual(self.c.post(path,data=data).status_code,302)
+        message=self.ops['workflow'].query.filter_by(kind='message').one()
+        self.assertEqual(message.data['ids'],[self.e.id]);self.assertTrue(message.data['preferences']['personal_mobile'])
+        self.assertEqual(message.status,'Provider not configured')
+        monthly='/workspace/core/hrm/monthly-attendance'
+        monthpage=self.c.get(monthly+f'?month=2026-09&employee_id={self.e.id}').data
+        self.assertIn(b'Mark selected dates',monthpage);self.assertIn(b'name="status_2026-09-07"',monthpage)
+        self.assertEqual(self.c.post(monthly,data={'_csrf':self.csrf,'month':'2026-09','employee_id':str(self.e.id),'status_2026-09-08':'Late'}).status_code,302)
+        self.assertEqual({r.day.day:r.status for r in self.ops['daily'].query.all()},{7:'Leave',8:'Late'})
+        sheet='/workspace/reports/attendance/staff-attendance-sheet?from=2026-09-07&to=2026-09-08'
+        report=self.c.get(sheet)
+        self.assertEqual(report.status_code,200);self.assertIn(b'Staff Attendance Sheet',report.data)
+        self.assertNotIn(b'Fictional Pupil',report.data);self.assertNotIn(b'name="class_name"',report.data)
+        self.assertIn(b'Fictional Teacher,LV,L',self.c.get(sheet+'&export=csv').data)
+    def test_monthly_attendance_preserves_unsubmitted_and_timed_rows(self):
+        row=self.ops['daily'](kind='staff',person_id=self.e.id,day=date(2026,9,7),status='Present',time_in='08:00')
+        db.session.add(row);db.session.commit()
+        base={'_csrf':self.csrf,'month':'2026-09','employee_id':str(self.e.id)}
+        path='/workspace/core/hrm/monthly-attendance'
+        self.assertEqual(self.c.post(path,data={**base,'status_2026-09-08':'Late'}).status_code,302)
+        self.assertEqual(row.time_in,'08:00')
+        self.assertEqual(self.c.post(path,data={**base,'status_2026-09-07':''}).status_code,422)
+        self.assertEqual(row.status,'Present')
+        self.assertEqual(self.c.post(path,data={**base,'status_2026-09-07':'Leave'}).status_code,302)
+        self.assertEqual((row.status,row.time_in),('Leave','08:00'))
     def test_attendance_clock_formats_shift_form_report_and_preserves_storage(self):
         from school_clock import normalize_clock,attendance_clock
         for canonical,label in [('00:00','12:00 AM'),('08:00','08:00 AM'),('12:00','12:00 PM'),('14:00','02:00 PM'),('23:59','11:59 PM'),('','')]:
