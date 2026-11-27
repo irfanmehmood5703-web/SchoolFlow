@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% from 'admission_filters.html' import field with context %}
-{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}"><script src="{{asset_url('workspace-list-tools.js')}}" defer></script>{% endblock %}
 {% block content %}
 <style>
 .family-number{white-space:nowrap;font-weight:650;color:#176344}

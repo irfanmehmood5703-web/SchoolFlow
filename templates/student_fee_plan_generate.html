@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% from 'admission_filters.html' import field, fee_students with context %}
-{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}"><script src="{{asset_url('workspace-list-tools.js')}}" defer></script>{% endblock %}
 {% block content %}{{m.heading(title,'Uses the student plan effective for the selected month, after its saved discounts.')}}<nav class="tab-strip"><a href="{{url_for('student_plans.index',mode='update')}}">Manage Fee Plans</a><a href="/workspace/fees/payments">Pay or Print</a></nav><form class="admission-filter-bar" method="get" aria-label="Filter students for challan generation">
 {{field('month','Challan Month',type='month',value=selected_month)}}
 {{field('q','Search students')}}

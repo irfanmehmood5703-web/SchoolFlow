@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% from 'admission_filters.html' import field, fee_students with context %}
-{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}"><script src="{{asset_url('workspace-list-tools.js')}}" defer></script>{% endblock %}
 {% block content %}
 {{m.heading(title,'Create and update each student’s dated fee plan.')}}
 <nav class="tab-strip"><a href="{{url_for('fee_increments.index')}}">Bulk fee increment</a><a href="{{url_for('student_plans.index',mode='create')}}">Create Fee Plan</a><a href="{{url_for('student_plans.index',mode='update')}}">Update Fee Plan</a><a href="/workspace/register/fee-plans">Configure fee schedules</a><a href="{{url_for('student_plans.generate')}}">Generate assigned challans</a></nav>

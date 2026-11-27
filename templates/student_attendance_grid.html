@@ -1,7 +1,8 @@
-{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}">{% endblock %}
+{% block content %}
 {{m.heading(title,'Take, review and update daily attendance. One record per student per date.')}}
 {% set filter_keys=['campus','class_name','section','academic_session','gender','search','status_filter','origin_filter'] %}
-<section class="form-card attendance-methods no-print">
+<section class="form-card attendance-methods schoolflow-attendance-nav no-print">
 <nav class="award-actions" aria-label="Attendance navigation">
 {% for value,label in [('take','Take Attendance'),('bulk','Take Bulk Attendance'),('update','View / Update Attendance')] %}<a class="button {{'' if mode==value else 'secondary'}}" data-att-mode-link href="{{url_for('ops.take_attendance',kind='student',mode=value,day=start,**scope_filters)}}" {{'aria-current=page' if mode==value else ''}}>{{label}}</a>{% endfor %}
 <a class="button secondary" href="{{url_for('attendance_devices.scanner')}}">QR Attendance / Scan Student Card</a><a class="button secondary" href="{{url_for('attendance_devices.scans',kind='student')}}">Scan History</a></nav>
