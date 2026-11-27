@@ -100,6 +100,10 @@
     background: #e2f2e9;
     border-color: #a9cfb9;
   }
+  .workspace-quick-reports > summary {
+    background: #e8f5ee;
+    border-color: #b8dbc8;
+  }
   .workspace-navigation .workspace-dashboard-link {
     display: block;
     margin-bottom: 10px;

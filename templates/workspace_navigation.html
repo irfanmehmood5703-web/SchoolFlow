@@ -34,6 +34,23 @@
       </div>
     </details>
     {% endfor %}
+    {% set report_groups = [] %}
+    {% for section, permission, reports in quick_report_groups() %}
+      {% if utility_allowed(permission) %}{% set _ = report_groups.append((section, reports)) %}{% endif %}
+    {% endfor %}
+    {% if report_groups %}
+    <details class="workspace-module workspace-quick-reports">
+      <summary>One-Click Reports</summary>
+      <div class="workspace-module-links">
+        {% for section, reports in report_groups %}
+        <p>{{section}}</p>
+        {% for label, target, current in reports %}
+        <a href="{{target}}"{% if current %} aria-current="page"{% endif %}>{{label}}</a>
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
     {% for label, key in sidebar_tools %}
       {% set migration = key == 'school-migration' %}
       {% if utility_allowed('admissions' if migration else 'apps') %}

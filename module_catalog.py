@@ -9,6 +9,25 @@ MENUS = {
 MENUS['Finance']=[('Finance',[('Ledger','ledger-home'),('Journal Inquiry','finance-journal-inquiry'),('General Ledger','finance-general-ledger'),('Day Wise P & L','finance-daily-profit'),('Cash Report','finance-cash'),('Shareholders','finance-shareholders'),('Daily Snapshot Report','finance-snapshots'),('My Requisitions','req-mine'),('Requisition Approvals','req-approvals'),('Issue Requisition Payment','req-issue'),('Settle Requisition','req-settle'),('Requisition Reports','req-reports'),('Requisition Settings','req-settings'),('Fee Audit Report','finance-fee-audit'),('Voided Transactions','finance-voided'),('Voided Challan Transactions','finance-voided-challans')])]
 MENUS['General']=[('',[('Widgets','widgets')]),('Student Extras',[('Parents App','parents-app'),('Notice Board','student-notices'),('PTM (Parent Teacher Meeting)','ptm-events'),('Student Diary','student-diary'),('Student Leave Approval','general-leaves'),('Complaints & Suggestions','general-feedback'),('Library','general-library')])]
 MENUS['General'].append(('Messages',[('SMS Blaster','sms-blaster'),('SMS Report','sms-report'),('Family SMS Report','family-sms'),('App Notification Report','notifications')]))
+QUICK_REPORTS = (
+    ('Fees', 'fees', (
+        ('Today’s Fee Collection', 'daily-fees', 'today'),
+        ('This Month’s Fee Collection', 'daily-fees', 'month'),
+        ('Family Dues This Month', 'family-defaulters', 'bill_month'),
+        ('Class-wise Fee Summary', 'class-fees', 'bill_month'),
+    )),
+    ('Attendance', 'attendance', (
+        ('Today’s Student Absentees', 'absentees', 'today'),
+        ('Monthly Student Attendance', 'attendance-summary', 'month'),
+        ('Monthly Staff Attendance Report', 'staff-attendance-report', 'month'),
+    )),
+    ('Examination', 'exam', (
+        ('Exam Marks & Results', 'awards', None),
+    )),
+    ('HRM', 'hrm', (
+        ('Employee Salary Report', 'salary-report', 'previous_month'),
+    )),
+)
 SIDEBAR_TOOLS = [
     ('School Migration Center', 'school-migration'),
     ('School App Links', 'app-links'),

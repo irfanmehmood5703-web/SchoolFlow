@@ -1,5 +1,7 @@
 """Workflow integration tests use fictional people and isolated in-memory storage."""
 import os,re,unittest
+from html import unescape
+from unittest.mock import patch
 from datetime import date
 os.environ['DATABASE_URL']='sqlite:///:memory:'
 from app import app,db,Student,Employee
@@ -62,6 +64,21 @@ class OperationTests(unittest.TestCase):
             self.assertEqual(self.client.get(path).status_code,200)
         self.assertIn(b'<summary>Attendance</summary>',nav)
         self.assertNotIn(b'<summary>Exam & Attendance</summary>',nav)
+    def test_one_click_reports_link_to_existing_pages_with_school_dates(self):
+        with patch('operations.school_today', return_value=date(2026, 1, 8)):
+            page = self.client.get('/workspace/dashboard')
+        shortcuts = page.text.split('<summary>One-Click Reports</summary>',1)[1].split('</details>',1)[0]
+        links = {label: unescape(path) for path, label in re.findall(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', shortcuts)}
+        self.assertEqual(len(links), 9)
+        self.assertEqual(links['Today’s Fee Collection'], '/workspace/reports/fees/daily-fees?from=2026-01-08&to=2026-01-08')
+        self.assertEqual(links['This Month’s Fee Collection'], '/workspace/reports/fees/daily-fees?from=2026-01-01&to=2026-01-08')
+        self.assertEqual(links['Family Dues This Month'], '/workspace/reports/fees/family-defaulters?from=2026-01&to=2026-01')
+        self.assertEqual(links['Today’s Student Absentees'], '/workspace/reports/attendance/absentees?from=2026-01-08&to=2026-01-08')
+        self.assertEqual(links['Employee Salary Report'], '/workspace/hrm-reports/salary-report?from=2025-12&to=2025-12')
+        for label, path in links.items():
+            with self.subTest(report=label):
+                self.assertEqual(self.client.get(path).status_code, 200)
+
     def test_student_filters_apply_to_fee_lists_and_history(self):
         self.bill()
         other=Student(admission_no='SECOND-FEE',name='Another Pupil',class_name='Other Class',status='Active')

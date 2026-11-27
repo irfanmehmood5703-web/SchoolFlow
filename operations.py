@@ -1,7 +1,8 @@
 """SchoolFlow pre-test workflows. Amounts use integer paisa; no external messages are sent."""
 import calendar, csv, hmac, io, json, re, secrets, hashlib
 from collections import Counter, defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from urllib.parse import urlencode
 from school_clock import school_today,normalize_clock,attendance_clock
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for, has_request_context, send_file, make_response
@@ -12,7 +13,7 @@ from student_performance_schema import PERFORMANCE_CATEGORIES
 from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
 import monthly_attendance as monthly_totals
 from payroll_calendar import joining_pay, all_present_bonus, salary_paid_dates, salary_rate_days, FIXED_SALARY_DAYS
-from module_catalog import MENUS, SIDEBAR_TOOLS, TITLES, SCHEMAS, STATUSES
+from module_catalog import MENUS, QUICK_REPORTS, SIDEBAR_TOOLS, TITLES, SCHEMAS, STATUSES
 from itsdangerous import BadData,URLSafeTimedSerializer
 from exam_enrollment import enrolled
 from payroll_rules import parse_rule,deduction,JUMP_MODES,CAP_MODES
@@ -230,6 +231,7 @@ def configure_operations(app, db, Student, Employee):
                          and (w.data or {}).get('follow_up')
                          and (w.data or {})['follow_up']<=today]
         return dict(module_menus=MENUS,sidebar_tools=SIDEBAR_TOOLS,menu_url=menu_url,
+                    quick_report_groups=quick_report_groups,
                     admission_followup_due=due_queries,
                     build_label='Pre-test • fictional records only')
 
@@ -295,6 +297,28 @@ def configure_operations(app, db, Student, Employee):
         if key=='teacher-performance': return url_for('reports.teacher_performance')
         if key=='student-360': return url_for('student_overview.index')
         return url_for('ops.entry',key=key)
+
+    def quick_report_groups():
+        today = school_today()
+        first = today.replace(day=1)
+        bill_month = today.strftime('%Y-%m')
+        previous = (first - timedelta(days=1)).strftime('%Y-%m')
+        dates = {
+            'today': {'from': today.isoformat(), 'to': today.isoformat()},
+            'month': {'from': first.isoformat(), 'to': today.isoformat()},
+            'bill_month': {'from': bill_month, 'to': bill_month},
+            'previous_month': {'from': previous, 'to': previous},
+            None: {},
+        }
+        for section, permission, reports in QUICK_REPORTS:
+            shortcuts = []
+            for label, key, period in reports:
+                path = menu_url(key)
+                args = dates[period]
+                target = path + '?' + urlencode(args) if args else path
+                current = request.path == path and all(request.args.get(k) == v for k, v in args.items())
+                shortcuts.append((label, target, current))
+            yield section, permission, shortcuts
 
     app.extensions['workspace_menu_url'] = menu_url
 

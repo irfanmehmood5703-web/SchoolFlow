@@ -63,7 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.querySelector('[data-workspace-sidebar]');
   if (!sidebar) return;
   const toggle = sidebar.querySelector('.workspace-nav-toggle');
-  sidebar.querySelector('.workspace-module a[aria-current="page"]')?.closest('details').setAttribute('open', '');
+  const currentReport = sidebar.querySelector('.workspace-quick-reports a[aria-current="page"]');
+  const currentLink = currentReport || sidebar.querySelector('.workspace-module a[aria-current="page"]');
+  currentLink?.closest('details').setAttribute('open', '');
   toggle.setAttribute('aria-expanded', 'false');
   sidebar.setAttribute('data-nav-ready', '');
   toggle.addEventListener('click', () => {

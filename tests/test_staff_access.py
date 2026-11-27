@@ -71,6 +71,19 @@ class StaffAccessTests(unittest.TestCase):
         self.assertNotIn(b'data-general-widget="active-students"',self.c.get('/workspace/general/widgets').data)
         self.assertNotIn(b'data-dashboard-widget="active"',self.c.get('/workspace/dashboard').data)
 
+    def test_one_click_reports_show_only_permitted_sections(self):
+        def allow():
+            row=db.session.get(self.Staff,self.sid)
+            row.data={**row.data,'permissions':{'dashboard.view':['Campus A'],'fees.view':['Campus A']}}
+        self.tenant(allow)
+        self.login()
+        page = self.c.get('/workspace/dashboard')
+        shortcuts = page.data.split(b'<summary>One-Click Reports</summary>',1)[1].split(b'</details>',1)[0]
+        self.assertIn(b'Family Dues This Month', shortcuts)
+        for hidden in (b'Student Absentees', b'Monthly Staff Attendance Report', b'Exam Marks', b'Employee Salary Report'):
+            self.assertNotIn(hidden, shortcuts)
+        self.assertEqual(self.c.get('/workspace/hrm-reports/salary-report').status_code, 403)
+
     def test_how_to_is_read_only_and_does_not_grant_target_permissions(self):
         self.login()
         for path in ('/workspace/how-to', '/workspace/how-to/pay-salary', '/workspace/how-to/setup-users'):
