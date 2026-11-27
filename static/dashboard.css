@@ -330,16 +330,7 @@ a.dashboard-metric:hover {
   --widget-gap: 10px;
 }
 
-@media screen and (min-width: 651px) {
-  .school-dashboard .personal-dashboard.is-packed {
-    grid-auto-rows: var(--widget-row-unit);
-    row-gap: 0;
-  }
 
-  .school-dashboard .personal-dashboard.is-packed > [data-dashboard-widget] {
-    grid-row-end: span var(--widget-rows);
-  }
-}
 
 .school-dashboard .widget {
   display: flex;
@@ -565,4 +556,11 @@ a.dashboard-metric:hover {
   .school-dashboard .widget-expand {
     display: none;
   }
+}
+
+@media screen {
+  .school-dashboard .personal-dashboard { grid-auto-rows:auto; align-items:stretch; align-content:start; }
+  .school-dashboard .personal-dashboard > .widget { grid-row-end:auto; align-self:stretch; height:auto; min-height:0; }
+  .school-dashboard .widget-head { min-height:56px; padding:10px 14px; }
+  .school-dashboard .widget-body { flex:1 0 auto; padding:12px 14px; }
 }
