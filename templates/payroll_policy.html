@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% import 'ops_macros.html' as m with context %}
+{% block content %}
+{{m.heading(title,'Set attendance deduction rules once for your entire school. No employee-by-employee assignment is needed.')}}
+<div class="heading-actions">
+  <a class="button secondary" href="{{url_for('ops.plans')}}">Salary plans</a>
+  <a class="button secondary" href="{{url_for('ops.payroll',view='generate-salary')}}">Calculate / Generate Salary</a>
+  <a class="button secondary" href="{{url_for('payroll_calendar.edit')}}">Working calendar</a>
+</div>
+<section class="form-card">
+  <h2>Assignment <span class="status-pill">{{'Active · All staff' if policy else 'Not assigned yet'}}</span></h2>
+  <div class="flash info"><strong>All campuses · All departments · All designations</strong><br>Saving this policy applies it to every existing and future employee automatically, regardless of the old individual deduction settings. Individual basic salary, allowances, increments and security amounts remain separate. It applies to all salary months that have not yet been generated. Existing generated salaries are never changed.</div>
+  <p><strong>Allowed days</strong> are paid without deduction for that status. Only extra days are charged. A zero deduction means no deduction for that status. Percent uses each employee’s daily basic salary (monthly basic ÷ 30 under the paid-calendar-days policy). Paid Sundays and school holidays are not automatically marked Absent.</p>
+  <form method="post" id="school-payroll-policy">
+    {{m.csrf()}}
+    <input type="hidden" name="version" value="{{policy.version if policy else 0}}">
+    <div class="table"><table>
+      <thead><tr><th>Status</th><th>Allowed days (paid)</th><th>Deduction type</th><th>Deduction per extra day</th><th>Advanced (optional)</th></tr></thead>
+      <tbody>{% for status in deduction_types %}{% set i=loop.index0 %}{% set r=policy.rules[i] if policy else {} %}
+        <tr><th scope="row">{{status}}</th>
+          <td><input name="allowed_{{i}}" aria-label="{{status}} allowed days" type="number" min="0" max="3660" required value="{{r.get('allowed',0)}}"></td>
+          <td><select name="type_{{i}}" aria-label="{{status}} deduction type"><option value="Percent" {{'selected' if r.get('type','Percent')=='Percent' else ''}}>Percentage of daily basic</option><option value="Abs" {{'selected' if r.get('type')=='Abs' else ''}}>Fixed amount (Rs)</option></select></td>
+          <td><input name="deduction_{{i}}" aria-label="{{status}} deduction rate" type="number" min="0" step="0.01" required value="{{r.get('amount',0)/100}}"></td>
+          <td><details {{'open' if r.get('jump',0) or r.get('cap_mode','none')!='none' or r.get('frequency','Recursive')!='Recursive' else ''}}><summary>Frequency / limits</summary>
+              <label>Frequency<select name="frequency_{{i}}"><option>Recursive</option><option {{'selected' if r.get('frequency')=='Once' else ''}}>Once</option></select></label>
+              <label>Grouping<select name="jump_mode_{{i}}">{% for key,label in jump_modes.items() %}<option value="{{key}}" {{'selected' if r.get('jump_mode','per_event')==key else ''}}>{{label}}</option>{% endfor %}</select></label>
+              <label>Group size (0 for every extra day)<input name="jump_{{i}}" type="number" min="0" max="3660" value="{{r.get('jump',0)}}"></label>
+              <label>Maximum mode<select name="cap_mode_{{i}}">{% for key,label in cap_modes.items() %}<option value="{{key}}" {{'selected' if r.get('cap_mode','none')==key else ''}}>{{label}}</option>{% endfor %}</select></label>
+              <label>Maximum limit (0 for no cap)<input name="limit_{{i}}" type="number" min="0" step="0.01" value="{{r.get('max_amount',0)/100 if r.get('cap_mode')=='amount' else r.get('limit',0)}}"></label>
+            </details></td>
+        </tr>
+      {% endfor %}</tbody>
+    </table></div>
+    <p class="muted">Example: Absent allowed 0 at 100% deducts one daily basic rate per absence. Leave allowed 2 at 100% pays the first two leave days; deductions start with the third. Late can use a separate percentage or a fixed amount. These are examples, not automatically assigned defaults.</p>
+    <div class="form-actions"><button type="submit" name="action" value="assign">Save &amp; apply to all staff</button></div>
+  </form>
+</section>
+{% endblock %}

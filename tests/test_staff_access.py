@@ -41,6 +41,18 @@ class StaffAccessTests(unittest.TestCase):
         self.assertEqual(self.c.post('/workspace/finance/ledger/entry/journal',data={'_csrf':self.token()}).status_code,403)
         self.assertIn('/teacher-app',self.c.get(entry).location)
 
+    def test_shared_payroll_policy_requires_all_campus_update_grants(self):
+        def allow(campuses):
+            row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'payroll.view':['Campus A'],'payroll.update':campuses}}
+        self.tenant(lambda:allow(['Campus A']));self.login()
+        self.assertEqual(self.c.get('/workspace/payroll-policy').status_code,200)
+        form=dict(_csrf=self.token(),action='assign',version='0')
+        for i in range(6):form.update({f'allowed_{i}':'0',f'type_{i}':'Abs',f'deduction_{i}':'0'})
+        self.assertEqual(self.c.post('/workspace/payroll-policy',data=form).status_code,403)
+        self.tenant(lambda:allow(['Campus A','Campus B']));self.login()
+        form['_csrf']=self.token()
+        self.assertEqual(self.c.post('/workspace/payroll-policy',data=form).status_code,302)
+
     def test_widget_sources_and_legacy_visibility_follow_role_and_campus(self):
         def allow():
             row=db.session.get(self.Staff,self.sid);row.data={**row.data,'permissions':{'dashboard.view':['Campus A'],'widgets.view':['Campus A'],'admissions.view':['Campus A'],'fees.view':['Campus A'],'finance.view':['Campus A']}}

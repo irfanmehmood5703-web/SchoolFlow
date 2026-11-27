@@ -275,6 +275,7 @@ def configure_operations(app, db, Student, Employee):
         if key=='student-attendance': return url_for('ops.take_attendance',kind='student')
         if key in ('combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report'): return url_for('reports.attendance',view=key)
         if key=='salary-plans': return url_for('ops.plans')
+        if key=='payroll-policy': return url_for('ops.payroll_policy')
         if key=='update-salary': return url_for('ops.plans',view='update')
         if key=='lecture-delivery': return url_for('hrm_reports.lecture_delivery')
         if key in ('salary-report','lecture-report'): return url_for('hrm_reports.report',view=key)
@@ -1686,10 +1687,46 @@ def configure_operations(app, db, Student, Employee):
                 return render('roll_print.html',title=title,students=students,details=details,roll_context=context,exam_date=exam_date,exam_from=exam_from,exam_to=exam_to)
         return render('rolls.html',title='Roll Number Slip',students=people(),details=details)
 
+    # SchoolSetting is tenant-scoped by the existing institute session.
+    deduction_types=['Absent','Late','Leave','Short Leave','Death Leave','Paper Leave']
+    payroll_policy_key='hrm:payroll-deduction-policy'
+
+    def school_attendance_policy():
+        model=app.extensions['school_settings_models']['setting']
+        row=db.session.get(model,payroll_policy_key)
+        return dict(version=row.version,rules=row.data['rules']) if row else None
+
+    @bp.route('/payroll-policy',methods=['GET','POST'])
+    def payroll_policy():
+        model=app.extensions['school_settings_models']['setting']
+        if request.method=='POST':
+            app.extensions['admission_capacity']['lock']()
+            row=db.session.get(model,payroll_policy_key,populate_existing=True)
+            if request.form.get('version')!=str(row.version if row else 0):
+                raise ValueError('The school payroll policy changed. Reload and review before saving.')
+            if request.form.get('action')!='assign':
+                raise ValueError('Choose Save & apply to all staff.')
+            # Require all core fields: an incomplete/old submission must never
+            # silently replace the school's rules with zero deductions.
+            for i in range(len(deduction_types)):
+                if any(k+'_'+str(i) not in request.form for k in ('allowed','type','deduction')):
+                    raise ValueError('Complete all six attendance deduction rules.')
+            rules=[parse_rule(request.form,i,status,money) for i,status in enumerate(deduction_types)]
+            before=dict(row.data) if row else None
+            data=dict(rules=rules)
+            if row:row.data=data
+            else:db.session.add(model(key=payroll_policy_key,data=data))
+            audit('Assign school-wide payroll deduction policy',before=before,after=data,scope='all staff')
+            commit()
+            flash('School-wide deduction policy saved. All staff salary calculations now use these rules automatically. Previously generated salaries are unchanged.','success')
+            return redirect(url_for('ops.payroll_policy'))
+        policy=school_attendance_policy()
+        return render('payroll_policy.html',title='School-wide Payroll Deduction Policy',policy=policy,deduction_types=deduction_types,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
+
     @bp.route('/salary-plans',methods=['GET','POST'])
     def plans():
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
-        deduction_types=['Absent','Late','Leave','Short Leave','Death Leave','Paper Leave']
+        policy=school_attendance_policy()
         view=request.args.get('view','')
         if view not in ('','approvals','update'):abort(404)
         edit=request.values.get('edit','');obj=db.session.get(Workflow,int(edit)) if edit else None
@@ -1721,8 +1758,13 @@ def configure_operations(app, db, Student, Employee):
                 if amount:data['allowances'].append(dict(id=head.id,name=head.name,amount=amount,**head.data))
             data['increment_month']=request.form.get('increment_month','')
             data['increment_type']=request.form.get('increment_type','Abs')
-            data['rules']=[]
-            for i,status in enumerate(deduction_types):data['rules'].append(parse_rule(request.form,i,status,money))
+            # Retain historical employee rules rather than rewriting approved
+            # records. Once a school policy is saved, they are not used.
+            data['rules']=list(obj.data.get('rules',[])) if policy and obj else []
+            if not policy:
+                for i,status in enumerate(deduction_types):data['rules'].append(parse_rule(request.form,i,status,money))
+            if policy and request.form.get('action')=='preview':
+                raise ValueError('Review shared deduction rules in School-wide Payroll Deduction Policy.')
             if request.form.get('action')=='preview':
                 days=request.form.get('preview_working_days',str(FIXED_SALARY_DAYS));counts=[]
                 if not days.isdigit() or not 0<=int(days)<=31:raise ValueError('Preview salary-day count must be 0–31.')
@@ -1732,12 +1774,12 @@ def configure_operations(app, db, Student, Employee):
                     counts.append(int(raw))
                 if sum(counts)>31 or (int(days)>0 and int(days)!=FIXED_SALARY_DAYS and sum(counts)>int(days)):raise ValueError('Preview attendance counts cannot exceed the selected working/calendar days.')
                 preview=[deduction(rule,count,data['basic'],int(days)) for rule,count in zip(data['rules'],counts)]
-                response=render('salary_plans.html',title='Salary rule preview · not saved',rows=Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all(),employee=lambda id:db.session.get(Employee,int(id)),data=data,edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=preview,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
+                response=render('salary_plans.html',title='Salary rule preview · not saved',rows=Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all(),employee=lambda id:db.session.get(Employee,int(id)),data=data,edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=preview,jump_modes=JUMP_MODES,cap_modes=CAP_MODES,policy=policy)
                 db.session.rollback();return response
             if obj: obj.data=data;obj.status='Pending'
             else: db.session.add(Workflow(kind='salary-plans',data=data,status='Pending'))
             audit('Save salary plan',employee=employee_id);commit();flash('Salary plan saved for approval.','success');return redirect(url_for('ops.plans'))
-        return render('salary_plans.html',title='Update Salary Plan' if obj else 'Create Salary Plan',rows=plan_rows(),employee=lambda id:db.session.get(Employee,int(id)),data=obj.data if obj else {},edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=None,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
+        return render('salary_plans.html',title='Update Salary Plan' if obj else 'Create Salary Plan',rows=plan_rows(),employee=lambda id:db.session.get(Employee,int(id)),data=obj.data if obj else {},edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=None,jump_modes=JUMP_MODES,cap_modes=CAP_MODES,policy=policy)
 
     def lecture_amount(entry,month_value):
         if entry.data.get('rate_override'): return money(entry.data['rate_override'])*int(entry.data['lectures'])
@@ -1750,7 +1792,7 @@ def configure_operations(app, db, Student, Employee):
         ids=[e.id for e in staff]
         start=day(m+'-01');end=day(m+'-'+str(calendar.monthrange(start.year,start.month)[1]))
         calendar_row=db.session.get(app.extensions['payroll_calendar_model'],m)
-        source=dict(calendar=calendar_row,pay_basis=app.extensions['payroll_calendar_helpers']['pay_basis'](m) if calendar_row else 'calendar_days',
+        source=dict(policy=school_attendance_policy(),calendar=calendar_row,pay_basis=app.extensions['payroll_calendar_helpers']['pay_basis'](m) if calendar_row else 'calendar_days',
                     staff={e.id:e for e in staff},details=app.extensions['record_helpers']['raw_many']('employee',staff),
                     monthly=monthly_totals.summaries(Workflow,m,ids),daily=defaultdict(list),history=defaultdict(list),
                     increments=defaultdict(list),advances=defaultdict(list),lectures=defaultdict(list))
@@ -1765,7 +1807,10 @@ def configure_operations(app, db, Student, Employee):
 
     def calculate_salary(p,m,today,attendance_based=True,source=None):
         eid=int(p.data['employee_id'])
-        data=p.data
+        policy=source['policy'] if source else school_attendance_policy()
+        data={**p.data,'rules':policy['rules'] if policy else p.data.get('rules',[])}
+        # School-wide assignment cannot be bypassed by the old opt-out checkbox.
+        attendance_based=bool(policy) or attendance_based
         staff=source['staff'].get(eid) if source else db.session.get(Employee,eid)
         if not staff:raise ValueError('Employee is unavailable.')
         joining=(source['details'].get(eid,{}) if source else details(staff,'employee')).get('joining_date')
@@ -1835,6 +1880,7 @@ def configure_operations(app, db, Student, Employee):
         deductions+=data['security_payment']+advance_deduction
         if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
         snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
+                      attendance_policy=dict(scope='school',version=policy['version']) if policy else None,
                       base_plan_basic=data['basic'],monthly_basic=monthly_basic,pay_basis=pay_basis,salary_divisor_days=days,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
                       working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates),pay_basis=pay_basis,paid_dates=paid_dates,salary_divisor_days=days) if working_calendar else None)
         return dict(earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot,counts=dict(counts),source=attendance_source,attendance_deduction=sum(r['amount'] for r in breakdown))
@@ -1879,7 +1925,7 @@ def configure_operations(app, db, Student, Employee):
             preview.append(row)
         return render('payroll.html',title=TITLES.get(view,'Pay / Print Salary'),view=view,month=m,rows=rows,employees=active,
                       employee=lambda id:db.session.get(Employee,id),preview=preview,filters=filters,filter_options=options,
-                      complete=complete,page=page,pages=pages,total=len(staff))
+                      complete=complete,page=page,pages=pages,total=len(staff),policy=source['policy'])
 
     @bp.route('/payroll',methods=['GET','POST'])
     def payroll():
@@ -1895,16 +1941,17 @@ def configure_operations(app, db, Student, Employee):
                 if not chosen: raise ValueError('Select employees.')
                 approved={int(p.data['employee_id']) for p in plans_list}
                 if not set(chosen)<=approved: raise ValueError('Every selected employee needs an approved salary plan. No payroll was saved.')
+                source=payroll_inputs(m,Employee.query.filter(Employee.id.in_(chosen)).all())
                 for p in plans_list:
                     eid=int(p.data['employee_id'])
                     if eid in seen or eid not in chosen: continue
                     seen.add(eid)
                     if Salary.query.filter_by(employee_id=eid,month=m).first(): continue
-                    result=calculate_salary(p,m,today,bool(request.form.get('attendance_based')))
+                    result=calculate_salary(p,m,today,bool(request.form.get('attendance_based')),source)
                     if request.form.get('reviewed_preview')=='1':
                         expected=request.form.get('preview_'+str(eid),'')
                         # The review table always uses attendance deductions; ensure its data has not changed.
-                        reviewed=result if request.form.get('attendance_based') else calculate_salary(p,m,today,True)
+                        reviewed=result if source['policy'] or request.form.get('attendance_based') else calculate_salary(p,m,today,True,source)
                         if not expected or not hmac.compare_digest(expected,salary_preview_token(reviewed)):
                             raise ValueError('Salary preview changed. Reload payroll and review the latest attendance and deductions.')
                     earnings,deductions,snapshot=result['earnings'],result['deductions'],result['detail']
