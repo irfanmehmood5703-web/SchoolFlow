@@ -15,7 +15,7 @@ android {
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
         buildConfigField 'String','SCHOOL_SCOPE',school ? '"'+school.school_key+'"' : '""'
-        manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/schoolflow_icon']
+        manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/schoolflow_icon', launcherLabel:'@string/app_name']
         if(school){ versionCode (school.sequence as int); versionName '0.3-school-test.'+school.sequence }
     }
     if(school){
@@ -44,6 +44,11 @@ android {
         def names=[parents:'Parents',teacher:'Teacher',owner:'Owner',sms:'SMS',qr:'QR Attendance']
         flavor.applicationId='com.schoolflow.schools.s'+school.school_key+'.'+flavor.name
         flavor.resValue 'string','app_name',resourceText(school.name+' '+names[flavor.name])
+        def label=school.launcher_labels?.get(flavor.name)
+        if (label) {
+            flavor.resValue 'string','launcher_name',resourceText(label)
+            flavor.manifestPlaceholders = [launcherLabel:'@string/launcher_name']
+        }
     } }
     buildTypes { debug { applicationIdSuffix '.test'; if(school) { debuggable false; signingConfig signingConfigs.schoolKey } }; acceptance { initWith debug; applicationIdSuffix '.acceptance'; matchingFallbacks=['debug'] }
         release { minifyEnabled false } }

@@ -13,7 +13,8 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder,QR_WORKFLOW,REPOSITORY
 from itsdangerous import BadData, URLSafeTimedSerializer
 
-SOURCE_VERSION=28
+SOURCE_VERSION=29
+LAUNCHER_LABELS={'parents':'Parent App','teacher':'Teacher App','owner':'Owner App','sms':'SMS App','qr':'QR Attendance'}
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance','face':'Face Attendance'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -156,7 +157,7 @@ def configure_school_apps(app,db):
         profile=db.session.get(Profile,1);row=Item.query.filter_by(kind='school-app-branding',scope='',name='launcher').first()
         name=display_name((row.data.get('display_name') if row else '') or ' '.join(str((profile.data.get('name') if profile else '') or school.name).split())[:80])
         logo=bytes(profile.logo) if profile and profile.logo_mime and profile.logo else b''
-        spec=dict(name=name,code=school.code,school_key=school.storage_key,logo_sha256=hashlib.sha256(logo).hexdigest(),source_version=SOURCE_VERSION)
+        spec=dict(name=name,code=school.code,school_key=school.storage_key,logo_sha256=hashlib.sha256(logo).hexdigest(),source_version=SOURCE_VERSION,launcher_labels=LAUNCHER_LABELS)
         if face_storage():spec['face_storage']=True
         fingerprint=hashlib.sha256(json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
         return spec,logo,fingerprint,row
@@ -186,7 +187,7 @@ def configure_school_apps(app,db):
             if row['key'] not in required_roles(spec):continue
             role=row['key'];file=files.get(role)
             row.pop('official_qr',None)
-            row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school name and icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
+            row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school’s icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
         return rows
     def owner():
         school=private_school()
@@ -387,7 +388,8 @@ def configure_school_apps(app,db):
         if data.get('source_sha')!=claims['sha']:raise ValueError('Build provenance does not match this workflow.')
         for f in files:
             role=f['role'];expected='com.schoolflow.schools.s'+row.school_key+'.'+role+'.test'
-            if f.get('package')!=expected or f.get('label')!=row.spec['name']+' '+ROLES[role] or f.get('version_code')!=row.sequence or f.get('signing_sha256')!=key.fingerprint:raise ValueError('APK branding, package, version or signing identity does not match its school.')
+            label=row.spec.get('launcher_labels',{}).get(role) or row.spec['name']+' '+ROLES[role]
+            if f.get('package')!=expected or f.get('label')!=label or f.get('version_code')!=row.sequence or f.get('signing_sha256')!=key.fingerprint:raise ValueError('APK branding, package, version or signing identity does not match its school.')
             if role=='face':
                 storage=face_storage()
                 if not storage:abort(503,'Face Attendance build storage is unavailable.')

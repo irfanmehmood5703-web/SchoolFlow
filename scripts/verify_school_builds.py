@@ -15,6 +15,7 @@ def verify():
         from app import app,db
         import app_builder_auth
         from scripts.school_app_worker import run,build,inspect_apks,make_key,CLIENTS
+        from school_apps import SOURCE_VERSION, LAUNCHER_LABELS
         import shutil
         from werkzeug.serving import make_server
         app.config.update(TESTING=True,IDENTITY_ENFORCE_IN_TESTS=True,SECRET_KEY='fictional-build-test-only')
@@ -55,7 +56,7 @@ def verify():
                     artifact=models['artifact'].query.filter_by(build_id=one.id,role='parents').one();assert artifact.size>10000
                     public_token=db.session.get(models['signing'],scope).download_token
                     anonymous=app.test_client();assert anonymous.get('/apps/school/'+public_token+'/parents.apk').status_code==200
-                # Rebuild with a new label: package/key stay stable, version rises.
+                # Rebuild with new school branding: package/key stay stable, version rises.
                 client=clients[0]
                 with client.session_transaction() as session:csrf=session['record_csrf']
                 assert client.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'version':'1','display_name':'ISF & "Academy"'}).status_code==302
@@ -72,16 +73,18 @@ def verify():
                 assert run(base,fixture_token=token)
                 with app.app_context():
                     latest=models['build'].query.filter_by(school_key=scope).order_by(models['build'].sequence.desc()).first()
-                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==28
+                    assert latest.state=='ready' and latest.sequence==3 and latest.spec['source_version']==SOURCE_VERSION
                     assert db.session.get(models['signing'],scope).fingerprint==first_key
             with tempfile.TemporaryDirectory(prefix='face-build-qa-') as folder:
                 path=Path(folder)/'test.p12'
                 key_password=secrets.token_urlsafe(24)
                 make_key(path,key_password)
-                sample=dict(name='Fictional Academy',code='FACE-APP-QA',school_key='a'*32,sequence=1,face_storage=True)
+                sample=dict(name='Fictional Academy',code='FACE-APP-QA',school_key='a'*32,sequence=1,face_storage=True,launcher_labels=LAUNCHER_LABELS)
                 try:
                     build(sample,b'',path,key_password)
                     results=inspect_apks(sample,sha)
+                    assert {item['role']:item['label'] for item in results['artifacts'] if item['role']!='face'}=={
+                        'parents':'Parent App','teacher':'Teacher App','owner':'Owner App','sms':'SMS App','qr':'QR Attendance'}
                     face=next(item for item in results['artifacts'] if item['role']=='face')
                     assert face['label']=='Fictional Academy Face Attendance' and 100<face['size']<170*1024*1024
                 finally:

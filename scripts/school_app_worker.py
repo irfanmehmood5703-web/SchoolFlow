@@ -85,7 +85,8 @@ def inspect_apks(branding,source_sha,upload_face=None):
         if os.environ.get('SCHOOLFLOW_FIXTURE_BUILD')=='1':print('Fictional APK verification:',observed,flush=True)
         if not package or package[1]!=expected:raise RuntimeError('APK package does not match its school')
         if int(package[2])!=branding['sequence']:raise RuntimeError('APK version does not match its school build')
-        if label_text!=branding['name']+' '+title:raise RuntimeError('APK launcher name does not match its school')
+        expected_label=branding.get('launcher_labels',{}).get(role) or branding['name']+' '+title
+        if label_text!=expected_label:raise RuntimeError('APK launcher name does not match its build')
         if not fingerprint:raise RuntimeError('APK signing certificate could not be verified')
         with zipfile.ZipFile(path) as archive:
             verify_school_icon(archive,CLIENTS/'generated-school-res'/'drawable'/'school_icon_foreground.png')
@@ -133,7 +134,7 @@ def run_gradle(args,directory,password):
         time.sleep(delay)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{'source_version':28},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':29},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:
