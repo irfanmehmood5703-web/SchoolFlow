@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded',()=>{
  const dates=Array.from(document.querySelectorAll('input[name="working_dates"]'));
+ const salaryCount=document.getElementById('salary-paid-count');
  const update=()=>{
   const working=dates.filter(el=>el.checked).length;
-  const paid=document.querySelector('input[name="pay_basis"]:checked')?.value==='calendar_days'?dates.length:working;
+  const paid=document.querySelector('input[name="pay_basis"]:checked')?.value==='calendar_days'?Number(salaryCount.dataset.fixedSalaryDays):working;
   document.getElementById('attendance-working-count').textContent=working;
-  document.getElementById('salary-paid-count').textContent=paid;
+  salaryCount.textContent=paid;
  };
  document.getElementById('apply-working-weekdays')?.addEventListener('click',()=>{
   const selected=new Set(Array.from(document.querySelectorAll('[data-working-weekday]:checked'),el=>el.value));

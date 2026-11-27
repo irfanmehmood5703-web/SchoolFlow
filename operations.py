@@ -11,7 +11,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
 from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
 import monthly_attendance as monthly_totals
-from payroll_calendar import joining_pay, all_present_bonus, salary_paid_dates
+from payroll_calendar import joining_pay, all_present_bonus, salary_paid_dates, salary_rate_days, FIXED_SALARY_DAYS
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 from itsdangerous import BadData,URLSafeTimedSerializer
 from exam_enrollment import enrolled
@@ -1638,13 +1638,13 @@ def configure_operations(app, db, Student, Employee):
             data['rules']=[]
             for i,status in enumerate(deduction_types):data['rules'].append(parse_rule(request.form,i,status,money))
             if request.form.get('action')=='preview':
-                days=request.form.get('preview_working_days','0');counts=[]
+                days=request.form.get('preview_working_days',str(FIXED_SALARY_DAYS));counts=[]
                 if not days.isdigit() or not 0<=int(days)<=31:raise ValueError('Preview salary-day count must be 0–31.')
                 for i in range(len(deduction_types)):
                     raw=request.form.get('preview_count_'+str(i),'0')
                     if not raw.isdigit() or not 0<=int(raw)<=31:raise ValueError('Preview attendance counts must be 0–31.')
                     counts.append(int(raw))
-                if sum(counts)>31 or (int(days)>0 and sum(counts)>int(days)):raise ValueError('Preview attendance counts cannot exceed the selected working/calendar days.')
+                if sum(counts)>31 or (int(days)>0 and int(days)!=FIXED_SALARY_DAYS and sum(counts)>int(days)):raise ValueError('Preview attendance counts cannot exceed the selected working/calendar days.')
                 preview=[deduction(rule,count,data['basic'],int(days)) for rule,count in zip(data['rules'],counts)]
                 response=render('salary_plans.html',title='Salary rule preview · not saved',rows=Workflow.query.filter_by(kind='salary-plans').order_by(Workflow.id.desc()).all(),employee=lambda id:db.session.get(Employee,int(id)),data=data,edit=edit,deduction_types=deduction_types,allowances=app.extensions['school_settings_helpers']['items']('allowance'),rule_preview=preview,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
                 db.session.rollback();return response
@@ -1714,7 +1714,7 @@ def configure_operations(app, db, Student, Employee):
                             base_counts=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
                             counts,lecture_total=monthly_totals.payroll_totals(saved_month,base_counts)
                             monthly_snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lecture_total,revision=saved_month.data['revision'])
-                    days=len(paid_dates) if paid_dates else calendar.monthrange(int(m[:4]),int(m[5:]))[1]
+                    days=salary_rate_days(pay_basis,working_calendar.working_dates if working_calendar else None)
                     if request.form.get('attendance_based'):
                         for rule in data['rules']:
                             calculated=deduction(rule,counts[rule['status']],monthly_basic,days)
@@ -1748,7 +1748,7 @@ def configure_operations(app, db, Student, Employee):
                     deductions+=data['security_payment']+advance_deduction
                     if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
                     snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
-                                  base_plan_basic=data['basic'],monthly_basic=monthly_basic,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
+                                  base_plan_basic=data['basic'],monthly_basic=monthly_basic,pay_basis=pay_basis,salary_divisor_days=days,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
                                   working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates),pay_basis=pay_basis,paid_dates=paid_dates,salary_divisor_days=days) if working_calendar else None)
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1;generated.append(eid)
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')

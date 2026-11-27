@@ -130,6 +130,58 @@ class WorkingPayrollTests(unittest.TestCase):
         self.assertEqual(bonus['working_days'],22)
         self.assertEqual(bonus['amount'],80667)
 
+    def test_fixed_30_day_rate_in_february_leap_february_and_31_day_month(self):
+        self.details.data={'joining_date':'2024-01-01'}
+        self.plan.data={**self.plan.data,'basic':2000000,'rules':[
+            dict(status='Absent',allowed=0,type='Percent',amount=10000,frequency='Recursive',jump=0,limit=0),
+            dict(status='Late',allowed=0,type='Percent',amount=2500,frequency='Recursive',jump=0,limit=0),
+            dict(status='Leave',allowed=2,type='Percent',amount=10000,frequency='Recursive',jump=0,limit=0)]}
+        db.session.commit()
+        for month,actual in [('2024-02',29),('2026-02',28),('2026-09',30),('2026-10',31)]:
+            with self.subTest(month=month):
+                dates=month_dates(month)
+                working=[d for d in dates if d.weekday()!=6]
+                form=dict(_csrf=self.csrf,month=month,version='0',working_dates=[d.isoformat() for d in working],pay_basis='calendar_days')
+                self.assertEqual(self.c.post('/workspace/payroll-calendar',data=form).status_code,302)
+                page=self.c.get('/workspace/payroll-calendar?month='+month).data
+                self.assertIn(b'data-fixed-salary-days="30">30</strong>',page)
+                self.assertEqual(page.count(b'name="working_dates"'),actual)
+                for d,status in zip(working,['Absent','Late','Leave','Leave']):
+                    db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=d,status=status))
+                db.session.commit()
+                self.assertEqual(self.generate(month=month,attendance_based='on').status_code,302)
+                salary=self.m['salary'].query.filter_by(month=month).one()
+                self.assertEqual(salary.earnings,2000000)
+                self.assertEqual(salary.detail['salary_divisor_days'],30)
+                self.assertEqual(len(salary.detail['working_calendar']['paid_dates']),actual)
+                deductions={r['status']:r['amount'] for r in salary.detail['attendance']}
+                self.assertEqual(deductions,{'Absent':66667,'Late':16667,'Leave':0})
+                self.assertEqual(salary.net,1916666)
+
+    def test_fixed_30_day_bonus_and_full_basic_across_month_lengths(self):
+        self.details.data={'joining_date':'2026-01-01'}
+        self.plan.data={**self.plan.data,'basic':3000000,'all_present_bonus':True}
+        db.session.commit()
+        for month in ['2026-02','2026-09','2026-10']:
+            working=[d for d in month_dates(month) if d.weekday()!=6]
+            form=dict(_csrf=self.csrf,month=month,version='0',working_dates=[d.isoformat() for d in working],pay_basis='calendar_days')
+            self.assertEqual(self.c.post('/workspace/payroll-calendar',data=form).status_code,302)
+            for d in working:
+                db.session.add(self.m['daily'](kind='staff',person_id=self.e.id,day=d,status='Present'))
+            db.session.commit()
+            self.assertEqual(self.generate(month=month).status_code,302)
+            salary=self.m['salary'].query.filter_by(month=month).one()
+            self.assertEqual(salary.detail['all_present_bonus']['amount'],100000)
+            self.assertEqual(salary.detail['all_present_bonus']['salary_divisor_days'],30)
+            self.assertEqual(salary.earnings,3100000)
+
+    def test_partial_joining_month_keeps_actual_paid_date_proration(self):
+        dates=[d.isoformat() for d in month_dates('2026-10') if d.weekday()!=6]
+        result=joining_pay('2026-10',date(2026,10,16),3100000,dates,'calendar_days')
+        self.assertEqual(result['total_paid_days'],31)
+        self.assertEqual(result['eligible_paid_days'],16)
+        self.assertEqual(result['payable_basic'],1600000)
+
     def test_manual_increment_is_optional_selected_approved_and_effective(self):
         self.calendar();self.increment('1000','2026-06');self.increment('1200','2026-09')
         self.increment('5000','2026-10');self.increment('7000',status='Pending');self.increment('9000',employee=999)
