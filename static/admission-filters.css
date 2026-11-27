@@ -82,3 +82,154 @@
 .admission-results td small {
   color: #526b60;
 }
+
+/* SchoolFlow's list workspaces use an ink-and-mint command panel. */
+.admission-filter-bar {
+  --filter-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  grid-template-columns: var(--filter-columns);
+  gap: 12px 14px;
+  padding: clamp(14px, 2vw, 21px);
+  background: #fff;
+  border-color: #d5e4de;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px #152f2710;
+}
+
+.schoolflow-filter-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #183e34;
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+
+.admission-filter-field :is(input, select) {
+  min-height: 42px;
+  border-color: #bfd1c8;
+  border-radius: 8px;
+  color: #173c32;
+  background: #f8fbf9;
+}
+
+.schoolflow-filter-chips {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.schoolflow-filter-chips a {
+  display: block;
+  padding: 5px 9px;
+  border: 1px solid #b4dac8;
+  border-radius: 30px;
+  background: #e4f4ec;
+  color: #194f3e;
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.schoolflow-more-filters {
+  grid-column: 1 / -1;
+  padding: 8px 0;
+  border-block: 1px solid #e2ebe6;
+}
+
+.schoolflow-more-filters summary {
+  cursor: pointer;
+  color: #195943;
+  font-weight: 700;
+}
+
+.schoolflow-filter-fields {
+  display: grid;
+  grid-template-columns: var(--filter-columns);
+  gap: 12px 14px;
+  padding-top: 12px;
+}
+
+.schoolflow-result-count {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  background: #e6f4ec;
+  color: #16523d;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.schoolflow-selected-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #d2e4dc;
+  border-radius: 12px;
+  background: #f5faf7;
+  color: #1a493a;
+}
+
+.schoolflow-selected-review.has-selection {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: #e2f5eb;
+  border-color: #8bbca7;
+}
+
+.schoolflow-selected-review small {
+  display: block;
+  color: #40665a;
+  font-variant-numeric: tabular-nums;
+}
+
+.schoolflow-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media print {
+  .schoolflow-selected-review { display: none; }
+}
+
+.query-action-grid .query-next-action {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  padding-inline: 10px;
+  background: #e6f5ed;
+  border-color: #a8d2bd;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.schoolflow-attendance-nav {
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid #c7dbd2;
+  border-inline-start: 4px solid #1e7355;
+  border-radius: 14px;
+  background: #f4faf6;
+}
+
+.schoolflow-attendance-nav .attendance-reports-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #d8e6df;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.schoolflow-attendance-nav .attendance-report-buttons a {
+  color: #1c5241;
+  border-color: #c0d8cd;
+  background: #f0f8f3;
+  font-weight: 700;
+}

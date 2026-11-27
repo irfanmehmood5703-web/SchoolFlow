@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% from 'admission_filters.html' import field, fee_students with context %}
-{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{{asset_url('admission-filters.css')}}"><script src="{{asset_url('workspace-list-tools.js')}}" defer></script>{% endblock %}
 {% block content %}{{m.heading(title)}}{{m.fee_tabs()}}<form method="get" class="admission-filter-bar" aria-label="Filter payment history">
 <input type="hidden" name="view" value="{{view}}">
 {% for key in ['student_id','family','detail'] %}{% if request.args.get(key) %}<input type="hidden" name="{{key}}" value="{{request.args.get(key)}}">{% endif %}{% endfor %}
