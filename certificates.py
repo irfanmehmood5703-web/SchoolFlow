@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from certificate_defaults import DOCUMENTS,CATALOG,default_content
 
-TAGS=('copyType todayDate instName instContact instEmail instLogo instAddress studentName fatherName fatherMobile rollNo regNo familyNo campusName className sectionName SessionName studentGroup CurrentStatus dob currentMonth admissionDate leavingDate admissionClass boardRegNo boardRollNo boardTotalMarks boardObtMarks stdPhoto guardianPhoto qrCode examHall examRollNo sid stdPic gender religion studentCnic studentContactNo studentEmail birthCity bloodGroup caste identificationMark fatherCnic guardianName guardianCnic currentAddress permanentAddress color_primary color_secondary color_3 color_4 institute_name institute_logo campus_address campus_city campus_open_date campus_contact campus_email currPayable tuitionFee admissionfee totalPayable totalRemPayable totalPaidAmount totalDiscountGiven currentTotal currentPaid curRemaining curDiscount refNo reference').split()
+TAGS=('copyType todayDate instName instContact instEmail instLogo instAddress studentName fatherName fatherMobile rollNo regNo admissionNo familyNo campusName className sectionName SessionName studentGroup CurrentStatus dob currentMonth admissionDate leavingDate admissionClass boardRegNo boardRollNo boardTotalMarks boardObtMarks stdPhoto guardianPhoto qrCode examHall examRollNo sid stdPic gender religion studentCnic studentContactNo studentEmail birthCity bloodGroup caste identificationMark fatherCnic guardianName guardianCnic currentAddress permanentAddress color_primary color_secondary color_3 color_4 institute_name institute_logo campus_address campus_city campus_open_date campus_contact campus_email currPayable tuitionFee admissionfee totalPayable totalRemPayable totalPaidAmount totalDiscountGiven currentTotal currentPaid curRemaining curDiscount refNo reference').split()
 HTML_TAGS=['p','div','span','b','strong','i','em','u','s','strike','br','hr','h1','h2','h3','h4','h5','h6','table','thead','tbody','tfoot','tr','td','th','ul','ol','li','blockquote','a','img','sup','sub']
 CSS=CSSSanitizer(allowed_css_properties=['color','background-color','font-family','font-size','font-weight','font-style','text-decoration','text-align','text-transform','line-height','letter-spacing','width','height','min-height','max-width','margin','margin-top','margin-bottom','margin-left','margin-right','padding','padding-top','padding-bottom','padding-left','padding-right','border','border-top','border-bottom','border-left','border-right','border-color','border-width','border-style','border-radius','border-collapse','vertical-align','display','float','object-fit'])
 
@@ -315,6 +315,11 @@ def configure_certificates(app,db,Student):
         markers = starter_markers.get(t.key)
         if markers and all(marker.casefold() in content.get('body','').casefold() for marker in markers):
             content=dict(content,body=default_content(t.key)['body'])
+        # Refresh the exact previous admission-letter default, preserving edited bodies.
+        if t.key == 'admission-confirmation':
+            previous_default = '9da93f77169098dac3ae421e1d1dfa38d704d86e0fcc9670b9670b0a0f97a994'
+            if hashlib.sha256(content.get('body', '').encode()).hexdigest() == previous_default:
+                content = dict(content, body=default_content(t.key)['body'])
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
         html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
         return html,amounts,data
@@ -334,10 +339,12 @@ def configure_certificates(app,db,Student):
         photo=photos.get(s.id)
         return dict(sid=s.id,roll=d.get('roll_no') or s.admission_no,name=s.name,father=s.father or '',campus=d.get('campus',''),**{'class':s.class_name},section=d.get('section',''),gender=d.get('gender',''),photo=url_for('records.record_file',id=photo.id) if photo else '',qr=qr_payload(s))
 
+    admission_letter_key = 'admission-confirmation'
+
     @bp.route('',methods=['GET'])
     def index():
         campus_names=campuses();campus=selected_campus(campus_names);tab=request.args.get('tab','cards')
-        if tab not in ('cards','logs','qr'):abort(404)
+        if tab not in ('cards','admission-letter','logs','qr'):abort(404)
         c=CertificateCampus.query.filter_by(campus=campus).first()
         templates=CertificateTemplate.query.filter_by(campus_id=c.id).all() if c else []
         page=num(request.args.get('page','1'),'page');size=num(request.args.get('size','100' if tab=='qr' else '25'),'page size');columns=selected_columns()
@@ -355,7 +362,10 @@ def configure_certificates(app,db,Student):
             return csv_response([dict(qr_columns)[key] for key in columns],export_rows,'student-qr' if tab=='qr' else 'certificate-students')
         photos=photos_for([s for s,d in rows]);option_rows=rm['settings'].query.filter(rm['settings'].category.in_(['class_name','section','gender'])).all()
         catalog={**CATALOG,**{t.key:dict(name=t.name,captured=True) for t in templates if t.key not in CATALOG}}
-        return render_template('certificates.html',title='Student Cards & Certificates',campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=catalog,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time,guardian_signature=guardian_signature)
+        admission_letter = tab == 'admission-letter'
+        if admission_letter:
+            catalog = {admission_letter_key: catalog[admission_letter_key]}
+        return render_template('certificates.html',title='Admission Letter' if admission_letter else 'Student Cards & Certificates',admission_letter=admission_letter,campuses=campus_names,campus=campus,config=c,tab=tab,templates={t.key:t for t in templates},catalog=catalog,qr_columns=qr_columns,columns=columns,rows=rows,issues=issues,total=total,page=page,size=size,pages=max(1,(total+size-1)//size),token=secrets.token_urlsafe(32),options=lambda category:[x.value for x in option_rows if x.category==category],photo=lambda sid:photos.get(sid),local_time=local_time,guardian_signature=guardian_signature)
     def local_time(value):
         return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p') if value.tzinfo is None else value.astimezone(ZoneInfo('Asia/Karachi')).strftime('%d-%b-%Y %I:%M %p')
 
@@ -368,7 +378,8 @@ def configure_certificates(app,db,Student):
         for key,meta in CATALOG.items():
             if not CertificateTemplate.query.filter_by(campus_id=c.id,key=key).first():db.session.add(CertificateTemplate(campus_id=c.id,key=key,name=meta['name'],**default_content(key)))
         db.session.add(Audit(action='Set up certificate templates',data=dict(campus=campus)));commit();flash('15 editable campus templates are ready. Configure the school heading and logo before printing.','success')
-        return redirect(url_for('certificates.index',campus=campus))
+        tab = 'admission-letter' if request.form.get('tab') == 'admission-letter' else 'cards'
+        return redirect(url_for('certificates.index',campus=campus,tab=tab))
 
     @bp.route('/campus/<int:cid>',methods=['GET','POST'])
     def campus_config(cid):

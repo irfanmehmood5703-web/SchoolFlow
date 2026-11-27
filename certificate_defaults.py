@@ -164,17 +164,13 @@ def default_content(key):
       'admission-confirmation':(
         '<h3>STUDENT ADMISSION DETAILS</h3>'
         '<table class="certificate-record-grid" style="width:100%"><tr><th>Student Name</th><td>[studentName]</td><th>Father / Guardian</th><td>[fatherName]</td></tr>'
-        '<tr><th>Registration No.</th><td>[regNo]</td><th>Class / Section</th><td>[className] / [sectionName]</td></tr>'
-        '<tr><th>Campus</th><td>[campusName]</td><th>Academic Session</th><td>[SessionName]</td></tr>'
+        '<tr><th>Admission No.</th><td>[admissionNo]</td><th>Family No.</th><td>[familyNo]</td></tr>'
+        '<tr><th>Class / Section</th><td>[className] / [sectionName]</td><th>Academic Session</th><td>[SessionName]</td></tr>'
+        '<tr><th>Campus</th><td>[campusName]</td><th>Date of Birth</th><td>[dob]</td></tr>'
         '<tr><th>Date of Admission</th><td>[admissionDate]</td><th>Date of Issue</th><td>[todayDate]</td></tr></table>'
         '<h3>OFFICIAL CONFIRMATION</h3>'
         '<p>This is to confirm that <b>[studentName]</b> has been admitted to <b>[instName]</b> in the class and academic session stated above, according to the school admission register.</p>'
-        '<h3>ADMISSION FEE PLAN</h3>'
-        '<table class="certificate-record-grid" style="width:100%"><tr><th>Admission Fee</th><td>[admissionfee]</td><th>Tuition Fee</th><td>[tuitionFee]</td></tr></table>'
-        '<h3>FEE ACCOUNT AT ISSUE DATE</h3>'
-        '<table class="certificate-record-grid" style="width:100%"><tr><th>Current Payable</th><td>[currPayable]</td><th>Amount Paid</th><td>[currentPaid]</td></tr>'
-        '<tr><th>Balance Remaining</th><td>[curRemaining]</td><th>Academic Session</th><td>[SessionName]</td></tr></table>'
-        '<p style="font-size:11px">This letter confirms admission only; it does not certify payment of outstanding fees or replace an official fee receipt.</p>'+copy
+        '<p>We welcome the student to [instName] and look forward to their progress during the academic session.</p>'+copy
       ),
       'birth':(
         '<h3>STUDENT BIRTH RECORD</h3>'

@@ -18,7 +18,8 @@ def words(text):
 def permission_for(a):
     key=a['slug'];cat=a['category']
     if cat=='Dashboard':return 'dashboard.view'
-    if cat=='Admissions':return ('admissions' if key in ('queries','students','admission-approvals') else 'certificates' if key=='certificates' else 'fees')+'.view'
+    if cat=='Admissions':return 'certificates.view' if key in ('certificates','admission-letter') else 'admissions.view'
+    if cat=='Fees':return 'fees.view'
     if cat=='Exam':return 'exam.view'
     if cat=='Attendance':return 'attendance.view'
     if key in ('sms-blaster','sms-report','family-sms','notifications'):return 'communication.view'

@@ -12,7 +12,9 @@
           {% for label, key in items %}
               {% if not key.startswith('general-') or (school_identity and not school_identity.demo and session.get('owner_id') and not session.get('staff_id')) %}
                 {% set target = menu_url(key) %}
-                <a href="{{target}}"{% if request.path == target and key != 'shifts' %} aria-current="page"{% endif %}>{{label}}</a>
+                {% set letter_page = request.endpoint == 'certificates.index' and request.args.get('tab') == 'admission-letter' %}
+                {% set current = (key == 'admission-letter' and letter_page) or (request.path == target and key != 'shifts' and not (key == 'certificates' and letter_page)) %}
+                <a href="{{target}}"{% if current %} aria-current="page"{% endif %}>{{label}}</a>
               {% endif %}
           {% endfor %}
         {% endfor %}

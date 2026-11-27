@@ -46,6 +46,22 @@ class CertificateTests(unittest.TestCase):
             r,ctx=self.capture(key=key);self.assertEqual(r.status_code,200,key);self.assertIn('Fictional School',ctx['html'])
             self.assertNotIn('[studentName]',ctx['html']);self.assertNotIn('Bint-e',ctx['html'])
         self.assertEqual(self.m['issue'].query.count(),0);self.assertEqual(self.m['batch'].query.count(),0)
+    def test_admission_letter_tab_selects_only_the_admission_template(self):
+        response = self.c.get('/workspace/admission-letter', follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'aria-current="page">Admission Letter</a>', response.data)
+        catalog = response.data.split(b'<div class="certificate-catalog">', 1)[1].split(b'<div class="table-toolbar">', 1)[0]
+        template_id = self.template('admission-confirmation').id
+        self.assertIn(f'name="template_id" value="{template_id}" checked'.encode(), catalog)
+        self.assertEqual(catalog.count(b'name="template_id"'), 1)
+        response, preview = self.capture(key='admission-confirmation')
+        self.assertEqual(response.status_code, 200)
+        for value in ('TEST-CERT-1', 'Fictional Certificate Pupil', 'Fictional Guardian', '2026-27'):
+            self.assertIn(value, preview['html'])
+        self.assertNotIn('ADMISSION FEE PLAN', preview['html'])
+        self.assertNotIn('FEE ACCOUNT AT ISSUE DATE', preview['html'])
+        self.assertEqual(self.action('issue', key='admission-confirmation').status_code, 302)
+
     def test_preview_previous_next_and_require_explicit_student(self):
         r,ctx=self.capture(student_ids=[str(self.s.id),str(self.s2.id)],index='1');self.assertEqual(r.status_code,200)
         self.assertIn('Second Fictional Pupil',ctx['html']);self.assertEqual(ctx['index'],1)

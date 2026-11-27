@@ -29,7 +29,7 @@ class OperationTests(unittest.TestCase):
         data=dict(employee_id=str(self.e.id),basic=1000000,security_return=0,security_payment=0,incentive_per_lecture=0,annual_increment=0,bonus_amount=0,rules=[dict(status='Absent',allowed=0,type='Abs',amount=10000,frequency='Recursive',jump=0,limit=0)])
         data.update(changes);p=self.m['workflow'](kind='salary-plans',status='Approved',data=data);db.session.add(p);db.session.commit();return p
     def test_all_menu_entries_render_and_keep_order(self):
-        self.assertEqual([len([x for _,items in g for x in items]) for g in MENUS.values()],[20,4,9,21,16,13])
+        self.assertEqual([len([x for _,items in g for x in items]) for g in MENUS.values()],[5,16,4,9,21,16,13])
         for groups in MENUS.values():
             for _,items in groups:
                 for _,key in items:
@@ -40,6 +40,15 @@ class OperationTests(unittest.TestCase):
                     self.assertEqual(r.status_code,200,key)
         nav=self.client.get('/workspace/dashboard').data.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertNotIn(b'<aside',nav)
+        self.assertLess(nav.index(b'>Dashboard</a>'),nav.index(b'<summary>Admissions</summary>'))
+        modules = re.findall(rb'<summary>([^<]+)</summary>(.*?)</details>',nav,re.S)
+        self.assertEqual([label for label,_ in modules][:4],[b'Admissions',b'Fees',b'Exam',b'Attendance'])
+        sections = dict(modules)
+        self.assertIn(b'>Manage Students</a>',sections[b'Admissions'])
+        self.assertIn(b'>Admission Letter</a>',sections[b'Admissions'])
+        for option in (b'Manage Fee Plans',b'Fee Challans',b'Fee Payments',b'Payment History',b'Detail Fee Report'):
+            self.assertNotIn(b'>'+option+b'</a>',sections[b'Admissions'])
+            self.assertIn(b'>'+option+b'</a>',sections[b'Fees'])
         self.assertIn(b'Student Attendance',nav)
         for label in (b'Combine Attendance Report',b'Combine Day Wise Attendance Report',b'Individual Attendance Report',b'Attendance Summary',b'Absentees',b'Attendance Sheet'):
             self.assertIn(label,nav)

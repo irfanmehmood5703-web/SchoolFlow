@@ -267,6 +267,7 @@ def configure_operations(app, db, Student, Employee):
             return url_for('finance.chart') if key=='finance-chart' else url_for('finance.index',kind=key.removeprefix('finance-'))
         if key in ('students','employees'): return url_for('records.record_list',kind='student' if key=='students' else 'employee')
         if key in ('challans','payments','inactive-fees','paid-challans','discount-challans'): return url_for('ops.fees',mode=key)
+        if key=='admission-letter': return url_for('certificates.index', tab='admission-letter')
         if key=='certificates': return url_for('certificates.index')
         if key=='fee-plans': return url_for('student_plans.index')
         if key=='payment-history': return url_for('ops.history')
