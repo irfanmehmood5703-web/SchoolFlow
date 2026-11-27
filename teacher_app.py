@@ -8,6 +8,7 @@ from itsdangerous import URLSafeTimedSerializer,BadData
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from school_clock import school_today,SCHOOL_TIMEZONE
+import monthly_attendance as monthly_totals
 from exam_enrollment import enrolled
 from diary_work import clean_work,plain_work
 
@@ -446,7 +447,19 @@ def configure_teacher_app(app,db,Student,Employee):
         if not own_access('attendance.own','attendance.view','attendance.self'):abort(403)
         first,last=month_range();rows=Daily.query.filter_by(kind='staff',person_id=g.teacher_employee.id).filter(Daily.day>=first,Daily.day<=min(last,school_today())).order_by(Daily.day.desc()).all()
         counts={status:sum(r.status==status for r in rows) for status in app.extensions['attendance_control_helpers']['statuses']('staff')}
-        return render('staff_attendance',attendance=rows,counts=counts,first=first,last=last)
+        saved=W.query.filter_by(kind=monthly_totals.KIND,status='Active').filter(
+            W.data['employee_id'].as_integer()==g.teacher_employee.id,
+            W.data['month'].as_string()>=first.strftime('%Y-%m'),
+            W.data['month'].as_string()<=last.strftime('%Y-%m')).order_by(W.data['month'].as_string()).all()
+        monthly=[]
+        if saved:
+            joining=employee_details().get('joining_date','')
+            for record in saved:
+                month=record.data['month']
+                calendar_row=db.session.get(app.extensions['payroll_calendar_model'],month)
+                base=monthly_totals.basis(month,joining,school_today(),calendar_row.working_dates if calendar_row else None,[r for r in rows if r.day.strftime('%Y-%m')==month])
+                monthly.append(dict(month=month,counts=record.data['counts'],lectures=record.data['lectures'],stale=record.data.get('revision')!=base['revision']))
+        return render('staff_attendance',attendance=rows,counts=counts,first=first,last=last,monthly=monthly)
     @bp.get('/my-salary')
     def own_salary():
         if not own_access('payroll.self','payroll.view'):abort(403)

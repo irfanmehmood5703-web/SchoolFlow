@@ -15,6 +15,7 @@ from branding_values import make_branding_values, expand_tags, missing_tags
 from record_schema import EMPLOYEE_SECTIONS, HRM_CATALOG_CATEGORIES, hrm_catalog_values
 from exam_enrollment import included,recorded
 from school_clock import normalize_clock,attendance_clock,school_today
+import monthly_attendance as monthly_totals
 
 def clean_html(value):
     return clean_base_html(value,report_assets=True)
@@ -964,12 +965,83 @@ def configure_school_settings(app,db,Student,Employee):
             unresolved=sorted({tag for k in ('header','body','footer') for tag in missing_tags(template.data.get(k,''),values,assets)})
         return render_template('employee_template_print.html',title=template.name,template=template,employees=employees,person=person,sections=sections,unresolved=unresolved)
 
+    def monthly_roster(month, dates):
+        today=school_today()
+        if dates[0]>today:raise ValueError('Choose the current month or an earlier month.')
+        employees=Employee.query.order_by(Employee.name,Employee.id).all()
+        raw=app.extensions['record_helpers']['raw_many']('employee',employees)
+        filters={k:request.values.get(k,'').strip() for k in ('campus','department','designation_group','employee_id','search')}
+        search=filters['search'].casefold()
+        if filters['employee_id'] and not any(str(e.id)==filters['employee_id'] for e in employees):abort(404)
+        roster=[e for e in employees if (not filters['employee_id'] or str(e.id)==filters['employee_id'])
+            and all(not filters[k] or raw.get(e.id,{}).get(k)==filters[k] for k in ('campus','department','designation_group'))
+            and (not search or search in (' '.join((e.name,e.employee_no or '',e.role or ''))).casefold())]
+        if len(search)>160:raise ValueError('Search must be 160 characters or fewer.')
+        size=50
+        try:page=max(1,int(request.values.get('page','1')))
+        except ValueError:raise ValueError('Choose a valid page.')
+        pages=max(1,(len(roster)+size-1)//size);page=min(page,pages)
+        visible=roster[(page-1)*size:page*size]
+        ids=[e.id for e in visible]
+        saved=monthly_totals.summaries(W,month,ids)
+        calendar_row=db.session.get(app.extensions['payroll_calendar_model'],month)
+        work=calendar_row.working_dates if calendar_row else None
+        daily={}
+        for r in ops['daily'].query.filter(ops['daily'].kind=='staff',ops['daily'].person_id.in_(ids),ops['daily'].day>=dates[0],ops['daily'].day<=dates[-1]).all():
+            daily.setdefault(r.person_id,[]).append(r)
+        locks=config('hrm:attendance-lock')
+        active_statuses=set(app.extensions['attendance_control_helpers']['statuses']('staff'))
+        rows=[]
+        for employee in visible:
+            detail=raw.get(employee.id,{})
+            base=monthly_totals.basis(month,detail.get('joining_date'),today,work,daily.get(employee.id,[]))
+            record=saved.get(employee.id)
+            counts={status:max(base['counts'].get(status,0),record.data.get('counts',{}).get(status,0) if record else 0) for status in monthly_totals.STATUSES}
+            locked=bool((locks.get('monthly') and month<=locks['monthly']) or (base['first'] and locks.get('daily') and str(base['first'])<=locks['daily']))
+            rows.append(dict(employee=employee,detail=detail,base=base,record=record,counts=counts,
+                lectures=max(base['lectures'],record.data.get('lectures',0) if record else 0),
+                notes=record.data.get('notes','') if record else '',
+                stale=bool(record and record.data.get('revision')!=base['revision']),
+                token=monthly_totals.token(record,base),editable=base['valid'] and not locked,locked=locked))
+        if request.method=='POST':
+            picked=request.form.getlist('employee_ids')
+            available={str(row['employee'].id):row for row in rows}
+            if not picked or len(set(picked))!=len(picked) or not set(picked)<=available.keys():raise ValueError('Select valid employees from the loaded page.')
+            for eid in picked:
+                row=available[eid];base=row['base'];record=row['record']
+                if not row['editable']:raise ValueError('Employee month is locked, outside their employment dates, or missing a joining date.')
+                if request.form.get('revision_'+eid)!=row['token']:raise ValueError('Monthly attendance changed after loading. Reload and review before saving.')
+                attendance_guard('staff',dates[0],monthly=True);attendance_guard('staff',base['first'])
+                def integer(field,limit):
+                    raw=request.form.get(field,'')
+                    if not raw.isascii() or not raw.isdigit() or len(raw)>len(str(limit)) or int(raw)>limit:raise ValueError('Enter a valid whole number for each attendance total.')
+                    return int(raw)
+                counts={status:integer('count_'+str(i)+'_'+eid,31) if status in active_statuses else row['counts'][status] for i,status in enumerate(monthly_totals.STATUSES)}
+                lectures=integer('lectures_'+eid,31000);notes=value('notes_'+eid,limit=500)
+                monthly_totals.validate_totals(counts,lectures,base)
+                previous=dict(record.data) if record else None
+                payload=dict(employee_id=eid,month=month,campus=row['detail'].get('campus',''),counts=counts,lectures=lectures,notes=notes,revision=base['revision'])
+                # Identical dated totals with no notes need no separate override.
+                if all(counts[s]==base['counts'].get(s,0) for s in counts) and lectures==base['lectures'] and not notes:
+                    if record:db.session.delete(record)
+                elif record:record.data=payload
+                else:db.session.add(W(kind=monthly_totals.KIND,status='Active',data=payload))
+                audit('Save monthly staff totals',employee=int(eid),campus=row['detail'].get('campus',''),month=month,previous=previous,counts=counts,lectures=lectures)
+            commit();flash(f'{len(picked)} employee monthly totals saved. Day-wise records have not changed.','success')
+            return redirect(url_for('school_settings.monthly_attendance',month=month,view='summary',page=page,**{k:v for k,v in filters.items() if v}))
+        return render_template('monthly_staff_roster.html',title='Monthly Staff Attendance',month=month,rows=rows,employees=employees,filters=filters,
+            options=options,statuses=monthly_totals.STATUSES,active_statuses=active_statuses,page=page,pages=pages,total=len(roster),calendar_saved=bool(calendar_row),today=today)
+
     @bp.route('/hrm/monthly-attendance',methods=['GET','POST'])
     def monthly_attendance():
         month=request.values.get('month',school_today().strftime('%Y-%m'))
         if not re.fullmatch(r'\d{4}-\d{2}',month):raise ValueError('Choose a month.')
         first=date.fromisoformat(month+'-01');dates=[first+timedelta(days=i) for i in range(calendar.monthrange(first.year,first.month)[1])]
-        employee_id=request.values.get('employee_id','');employees=Employee.query.order_by(Employee.name).all();person=next((e for e in employees if str(e.id)==employee_id),None)
+        employee_id=request.values.get('employee_id','')
+        view=request.values.get('view','day' if employee_id else 'summary')
+        if view=='summary':return monthly_roster(month,dates)
+        if view!='day':abort(404)
+        employees=Employee.query.order_by(Employee.name).all();person=next((e for e in employees if str(e.id)==employee_id),None)
         if employee_id and not person:abort(404)
         statuses=app.extensions['attendance_control_helpers']['statuses']('staff')
         if request.method=='POST':

@@ -1,0 +1,40 @@
+{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}
+<link rel="stylesheet" href="{{asset_url('monthly_staff_roster.css')}}">
+{{m.heading(title,'Enter monthly totals for multiple employees in one grid. Day-wise records remain available separately.')}}
+{% set attendance_tab='monthly' %}{% set nav_month=month %}{% set nav_day=month+'-01' %}{% include 'staff_attendance_nav.html' %}
+<form method="get" class="form-card no-print monthly-roster-filters">
+  <input type="hidden" name="view" value="summary">
+  <h2>Monthly attendance filters</h2>
+  <div class="fields-grid">
+    {{m.input('month','Month','month',month,true)}}
+    {% for key,label in [('campus','Campus'),('department','Department'),('designation_group','Designation group')] %}
+    <div class="field"><label for="{{key}}">{{label}}</label><select id="{{key}}" name="{{key}}"><option value="">All {{label|lower}}s</option>{% for v in options(key) %}<option value="{{v}}" {{'selected' if filters[key]==v else ''}}>{{v}}</option>{% endfor %}</select></div>
+    {% endfor %}
+    <div class="field"><label for="employee_id">Employee</label><select id="employee_id" name="employee_id"><option value="">All employees</option>{% for e in employees %}<option value="{{e.id}}" {{'selected' if filters.employee_id==e.id|string else ''}}>{{e.name}} · {{e.employee_no}}</option>{% endfor %}</select></div>
+    {{m.input('search','Search name / code','text',filters.search)}}
+  </div>
+  <div class="heading-actions"><button>Load month</button><a class="button secondary" href="{{url_for('school_settings.monthly_attendance',month=month)}}">Clear filters</a><a class="button secondary" href="{{url_for('payroll_calendar.edit',month=month)}}">Working calendar</a></div>
+</form>
+<form method="post" class="form-card monthly-roster" data-monthly-roster novalidate>
+  {{m.csrf()}}<input type="hidden" name="view" value="summary"><input type="hidden" name="month" value="{{month}}"><input type="hidden" name="page" value="{{page}}">
+  {% for key,value in filters.items() %}<input type="hidden" name="{{key}}" value="{{value}}">{% endfor %}
+  <div class="monthly-roster-heading"><div><h2>{{month}} · Monthly attendance</h2><span>{{total}} matching employees · Page {{page}} of {{pages}}</span></div><button data-monthly-save type="submit" {{'disabled' if not rows else ''}}>Save Attendance</button></div>
+  <div class="monthly-roster-info">
+    <strong>{{'Saved working calendar' if calendar_saved else 'Calendar days (working calendar not set)'}}</strong>
+    Enter total counts, including saved day-wise marks. The numbers are used for salary deductions; they do not create or overwrite dated records. Only elapsed, eligible days count. Use Day-wise to correct individual dates. Existing generated salaries remain unchanged. All-present bonuses still require complete dated attendance.
+  </div>
+  <div class="monthly-roster-actions no-print"><label class="check"><input type="checkbox" data-monthly-all> Select all editable employees on this page</label><span data-monthly-count aria-live="polite">0 selected</span><small>Editing a row selects it automatically. Changes are saved only when you press Save Attendance.</small></div>
+  <div class="monthly-roster-scroll" tabindex="0" role="region" aria-label="Monthly attendance totals, scroll horizontally">
+    <table class="monthly-roster-table"><thead><tr><th class="monthly-employee">Employee</th><th>Designation group</th><th>Joining date</th><th>Campus</th>{% for status in statuses %}<th data-monthly-status="{{status}}">{{status}}</th>{% endfor %}<th>Total lectures</th><th>Notes (internal)</th></tr></thead>
+    <tbody>{% for r in rows %}{% set e=r.employee %}<tr data-monthly-row>
+      <td class="monthly-employee"><div class="monthly-person"><input type="checkbox" name="employee_ids" value="{{e.id}}" data-monthly-pick aria-label="Select {{e.name}}" {{'disabled' if not r.editable}}><div><strong>{{e.name}}</strong><small>{{e.employee_no}} · {{e.role}}</small><span class="monthly-source {{'review' if r.stale else 'saved' if r.record else ''}}">{{'Review required' if r.stale else 'Monthly totals saved' if r.record else 'Day-wise totals'}}</span><small>{{r.base.marked}} dated records · {{r.base.maximum}} eligible days</small><a class="no-print" href="{{url_for('school_settings.monthly_attendance',view='day',month=month,employee_id=e.id)}}">Day-wise attendance ›</a>{% if r.locked %}<small>Attendance locked</small>{% elif not r.editable %}<small>Joining date / month not eligible</small>{% endif %}<input type="hidden" name="revision_{{e.id}}" value="{{r.token}}"></div></div></td>
+      <td>{{r.detail.get('designation_group','—') or '—'}}</td><td>{{r.detail.get('joining_date','—') or '—'}}</td><td>{{r.detail.get('campus','—') or '—'}}</td>
+      {% for status in statuses %}<td data-monthly-status="{{status}}"><input type="number" min="{{r.base.counts.get(status,0)}}" max="{{r.base.maximum}}" step="1" name="count_{{loop.index0}}_{{e.id}}" value="{{r.counts[status]}}" aria-label="{{e.name}} {{status}} days" {{'disabled' if not r.editable or status not in active_statuses}} data-monthly-number><span class="monthly-print-value">{{r.counts[status]}}</span>{% if r.base.counts.get(status,0) %}<small class="no-print">{{r.base.counts.get(status,0)}} dated</small>{% endif %}</td>{% endfor %}
+      <td><input type="number" min="{{r.base.lectures}}" max="31000" step="1" name="lectures_{{e.id}}" value="{{r.lectures}}" aria-label="{{e.name}} total lectures" data-monthly-number {{'disabled' if not r.editable}}><span class="monthly-print-value">{{r.lectures}}</span></td>
+      <td><input type="text" name="notes_{{e.id}}" value="{{r.notes}}" maxlength="500" aria-label="{{e.name}} internal notes" {{'disabled' if not r.editable}}><span class="monthly-print-value">{{r.notes}}</span></td>
+    </tr>{% else %}<tr><td colspan="14" class="empty-state">No employees match these filters.</td></tr>{% endfor %}</tbody></table>
+  </div>
+  <div class="monthly-roster-footer no-print"><div class="heading-actions">{% if page>1 %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,page=page-1,**filters)}}">Previous</a>{% endif %}{% if page<pages %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,page=page+1,**filters)}}">Next</a>{% endif %}</div><button data-monthly-save type="submit" {{'disabled' if not rows else ''}}>Save Attendance</button></div>
+</form>
+<script src="{{asset_url('monthly_staff_roster.js')}}" defer></script>
+{% endblock %}
