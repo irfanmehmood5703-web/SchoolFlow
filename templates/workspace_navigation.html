@@ -5,7 +5,7 @@
     <p class="workspace-sidebar-heading">Management</p>
     {% for module, groups in module_menus.items() %}
     <details class="workspace-module">
-      <summary>{{ {'Fees': 'Fees Section', 'Exam': 'Examination'}.get(module, module) }}</summary>
+      <summary>{{ {'Fees': 'Fees Section', 'Exam': 'Examination', 'HRM': 'Staff Management'}.get(module, module) }}</summary>
       <div class="workspace-module-links">
         {% for section, items in groups %}
           {% if section %}<p>{{section}}</p>{% endif %}
