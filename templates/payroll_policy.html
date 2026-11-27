@@ -4,8 +4,8 @@
 {{m.heading(title,'Set attendance deduction rules once for your entire school. No employee-by-employee assignment is needed.')}}
 <div class="heading-actions">
   <a class="button secondary" href="{{url_for('ops.plans')}}">Salary plans</a>
-  <a class="button secondary" href="{{url_for('ops.payroll',view='generate-salary')}}">Calculate / Generate Salary</a>
-  <a class="button secondary" href="{{url_for('payroll_calendar.edit')}}">Working calendar</a>
+  <a class="button" href="#staff-payroll">Staff-wise Salary &amp; Generate ↓</a>
+  <a class="button secondary" href="{{url_for('payroll_calendar.edit',month=month)}}">Working calendar</a>
 </div>
 <section class="form-card">
   <h2>Assignment <span class="status-pill">{{'Active · All staff' if policy else 'Not assigned yet'}}</span></h2>
@@ -35,4 +35,6 @@
     <div class="form-actions"><button type="submit" name="action" value="assign">Save &amp; apply to all staff</button></div>
   </form>
 </section>
+<link rel="stylesheet" href="{{asset_url('payroll_workspace.css')}}">
+{% include 'payroll_staff_table.html' %}
 {% endblock %}

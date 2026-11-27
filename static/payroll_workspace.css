@@ -15,3 +15,13 @@
 .payroll-source{display:inline-block;font-size:12px;border-radius:6px;background:#eef2f0;padding:5px 8px;color:#315b4c}
 .payroll-source.saved{background:#d9f4e4;color:#135637}.payroll-source.review,.payroll-alert{background:#fff1d9;color:#815010}
 .payroll-alert{padding:10px;border-radius:6px}
+
+.payroll-preview-table{min-width:1510px}
+.payroll-preview-table .salary-select{position:sticky;left:0;z-index:2;min-width:42px;width:42px;max-width:42px;box-sizing:border-box;padding:7px 5px;background:#fff}
+.payroll-preview-table .salary-employee{position:sticky;left:42px;z-index:2;width:160px;min-width:160px;max-width:190px;background:#fff;box-shadow:2px 0 4px #183e2920}
+.payroll-preview-table thead .salary-select,.payroll-preview-table thead .salary-employee{background:#e9f3ee;z-index:3}
+.payroll-preview-table th[data-pay-status="Present"],.payroll-preview-table td[data-pay-status="Present"]{background:#ddf4e5}
+.payroll-preview-table th[data-pay-status="Off Day"],.payroll-preview-table td[data-pay-status="Off Day"]{background:#edf2f5}
+.payroll-preview-table td:last-child{min-width:175px}
+
+@media print{.payroll-preview-scroll{overflow:visible}.payroll-preview-table{min-width:0;font-size:7pt}.payroll-preview-table th,.payroll-preview-table td{white-space:normal;padding:3pt!important}.payroll-preview-table .salary-select,.payroll-preview-table .salary-employee{position:static;min-width:0;width:auto;max-width:none;box-shadow:none}.payroll-preview-table td:last-child{min-width:0}.payroll-preview-table td small,.payroll-preview-table th small{font-size:6pt}.payroll-preview-table td a{display:none}}

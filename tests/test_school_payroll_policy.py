@@ -85,6 +85,61 @@ class SchoolPayrollPolicyTests(unittest.TestCase):
         self.assertEqual(saved.deductions,350000)
         self.assertEqual(saved.detail['monthly_attendance']['counts']['Absent'],2)
 
+    def test_policy_page_combines_roster_attendance_and_generate_action(self):
+        e=self.employees[0]
+        self.Daily.query.filter_by(person_id=e.id,day=date(2026,9,5)).one().status='Present'
+        self.W.query.filter_by(kind='salary-plans').filter(self.W.data['employee_id'].as_string()==str(self.employees[1].id)).delete()
+        db.session.commit()
+        url='/workspace/payroll-policy?month=2026-09'
+        page=self.c.get(url).get_data(as_text=True)
+        def row(html,employee):
+            return next(r for r in html.split('data-payroll-row') if f'aria-label="Select {employee.name}"' in r)
+        self.assertIn('Save the school-wide deduction policy first',page)
+        self.assertIn('No approved salary plan',page)
+        ar=row(page,e);br=row(page,self.employees[1])
+        self.assertIn('data-pay-status="Present"><strong>1',ar)
+        self.assertIn('data-pay-status="Absent"><strong>1',ar)
+        self.assertIn('data-pay-status="Late"><strong>1',ar)
+        self.assertIn('data-pay-status="Leave"><strong>3',br)
+        self.assertNotIn(f'name="preview_{e.id}"',page)
+        self.assertEqual(self.generate([e.id],return_to='policy',reviewed_preview='1').status_code,422)
+        self.assertEqual(self.c.post(url,data=self.settings_form()).status_code,302)
+        page=self.c.get(url).get_data(as_text=True)
+        ar=row(page,e);self.assertIn('data-pay-status="Present"><strong>1',ar)
+        self.assertIn('data-base-paisa="125000"',ar)
+        token=re.search(fr'name="preview_{e.id}" value="([^"]+)"',page).group(1)
+        response=self.generate([e.id],return_to='policy',reviewed_preview='1',**{f'preview_{e.id}':token})
+        self.assertEqual(response.status_code,302)
+        self.assertIn('/workspace/payroll-policy?month=2026-09',response.location)
+        self.assertTrue(response.location.endswith('#staff-payroll'))
+        saved=self.Salary.query.one()
+        self.assertEqual(saved.deductions,125000)
+        self.assertEqual(saved.detail['attendance_counts']['Present'],1)
+        self.Daily.query.filter_by(person_id=e.id,day=date(2026,9,5)).one().status='Absent'
+        db.session.commit()
+        ar=row(self.c.get(url).get_data(as_text=True),e)
+        self.assertIn('Already generated',ar)
+        self.assertIn('data-pay-status="Present"><strong>1',ar)
+        self.assertNotIn(f'name="preview_{e.id}"',ar)
+        self.assertEqual(self.Salary.query.count(),1)
+
+    def test_policy_roster_monthly_edit_returns_to_same_month(self):
+        from monthly_attendance import STATUSES
+        e=self.employees[0]
+        path='/workspace/core/hrm/monthly-attendance'
+        query=f'?month=2026-09&view=summary&employee_id={e.id}&return_to=policy'
+        html=self.c.get(path+query).get_data(as_text=True)
+        self.assertIn('name="return_to" value="policy"',html)
+        rev=re.search(fr'name="revision_{e.id}" value="([a-f0-9]+)"',html).group(1)
+        fields=dict(_csrf=self.csrf,view='summary',month='2026-09',page='1',employee_id=str(e.id),employee_ids=str(e.id),return_to='policy',**{f'revision_{e.id}':rev,f'lectures_{e.id}':'0',f'notes_{e.id}':''})
+        counts={'Present':4,'Absent':1,'Late':1,'Leave':3}
+        fields.update({f'count_{i}_{e.id}':str(counts.get(v,0)) for i,v in enumerate(STATUSES)})
+        response=self.c.post(path,data=fields)
+        self.assertEqual(response.status_code,302)
+        self.assertIn('/workspace/payroll-policy?month=2026-09',response.location)
+        self.assertIn(f'employee_id={e.id}',response.location)
+        self.assertIn('data-pay-status="Present"><strong>4',self.c.get(response.location).get_data(as_text=True))
+
     def test_incomplete_invalid_stale_policy_and_preview_are_rejected(self):
         self.assertEqual(self.c.post('/workspace/payroll-policy',data={'action':'assign'}).status_code,400)
         data=self.settings_form();data.pop('deduction_1')

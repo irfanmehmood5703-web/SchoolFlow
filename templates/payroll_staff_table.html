@@ -1,0 +1,70 @@
+<form method="get" action="{{url_for(roster_endpoint)}}{{'#staff-payroll' if policy_workspace else ''}}" class="form-card" id="staff-payroll">
+  {% if not policy_workspace %}<input type="hidden" name="view" value="{{view}}">{% endif %}
+  <h2>Staff salary &amp; attendance · Select month</h2>
+  <div class="fields-grid">
+    {{m.input('month','Salary Month','month',month,true)}}
+    {% for key,label in [('campus','Campus'),('department','Department'),('designation_group','Designation group')] %}
+      <div class="field"><label for="{{key}}">{{label}}</label><select name="{{key}}" id="{{key}}"><option value="">All {{label|lower}}s</option>{% for v in filter_options[key] %}<option value="{{v}}" {{'selected' if filters[key]==v else ''}}>{{v}}</option>{% endfor %}</select></div>
+    {% endfor %}
+    <div class="field"><label for="employee_id">Employee</label><select name="employee_id" id="employee_id"><option value="">All employees</option>{% for e in employees %}<option value="{{e.id}}" {{'selected' if filters.employee_id==e.id|string else ''}}>{{e.name}} · {{e.employee_no}}</option>{% endfor %}</select></div>
+    {{m.input('search','Search employee name / code','text',filters.search)}}
+  </div>
+  <div class="heading-actions">
+    <button>Fetch salary &amp; attendance</button>
+    <a class="button secondary" href="{{url_for(roster_endpoint,month=month,view=view if not policy_workspace else none)}}">Clear filters</a>
+    <a class="button secondary" href="{{url_for('school_settings.monthly_attendance',month=month,view='summary',return_to=attendance_return,**filters)}}">Enter / update monthly attendance</a>
+  </div>
+</form>
+<form method="post" action="{{url_for('ops.payroll')}}" class="form-card payroll-preview" data-payroll-preview>
+  {{m.csrf()}}
+  <input type="hidden" name="month" value="{{month}}">
+  <input type="hidden" name="view" value="{{view}}">
+  <input type="hidden" name="reviewed_preview" value="1">
+  {% if policy_workspace %}<input type="hidden" name="return_to" value="policy">{% for k,v in filters.items() %}<input type="hidden" name="{{k}}" value="{{v}}">{% endfor %}{% endif %}
+  {% set ready=complete and (not policy_workspace or policy) %}
+  <div class="payroll-preview-heading">
+    <div><h2>Staff-wise Salary Calculation · {{month}}</h2><small>{{total}} matching active employees · Page {{page}} of {{pages}}</small></div>
+    <button name="action" value="generate" data-needs-selection {{'disabled' if not ready else ''}}>Generate selected salaries</button>
+  </div>
+  {% if not complete %}<p class="payroll-alert">Preview only. Salary can be generated after this month is complete. Select an earlier month to generate now.</p>{% endif %}
+  {% if policy_workspace and not policy %}<p class="payroll-alert">Set and save the shared deduction policy above to calculate and generate salaries. Attendance totals are visible now.</p>{% endif %}
+  <p>Attendance counts are fetched automatically from saved monthly or daily attendance. Unmarked days are not counted as absences. Select staff and generate after reviewing their net salary.</p>
+  <div class="check-grid">
+    {% if policy %}<span class="status-pill">Attendance deductions applied automatically</span>{% elif not policy_workspace %}<label class="check"><input type="checkbox" name="attendance_based" checked>Apply attendance-based deductions</label>{% endif %}
+    {% if not policy_workspace %}<label class="check"><input type="checkbox" name="generate_sms">Record Generate Salary SMS advice request</label>{% endif %}
+  </div>
+  <div class="table payroll-preview-scroll">
+    <table class="payroll-preview-table">
+      <thead><tr><th scope="col" class="salary-select"><input type="checkbox" data-select-all aria-label="Select available rows"></th><th scope="col" class="salary-employee">Employee / Teacher</th>
+        {% for status in attendance_statuses %}<th scope="col" data-pay-status="{{status}}">{{status}}<small>{{'Days / deduction' if status in ['Absent','Late','Leave','Short Leave','Death Leave','Paper Leave'] else 'Days'}}</small></th>{% endfor %}
+        <th scope="col">Basic</th><th scope="col">Gross earnings</th><th scope="col">Attendance deduction</th><th scope="col">Total deductions</th><th scope="col">Net salary</th><th scope="col">Status / attendance source</th>
+      </tr></thead>
+      <tbody>{% for row in preview %}{% set e=row.employee %}{% set r=row.result %}{% set s=row.generated %}
+        <tr data-payroll-row>
+          <td class="salary-select"><input type="checkbox" name="employee_ids" value="{{e.id}}" aria-label="Select {{e.name}}" {{'disabled' if not r or not ready}}>{% if r %}<input type="hidden" name="preview_{{e.id}}" value="{{row.token}}">{% endif %}</td>
+          <td class="salary-employee"><strong>{{e.name}}</strong><small>{{e.employee_no}} · {{e.role}}</small><small>{{row.detail.get('campus','')}}</small><a href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,employee_id=e.id,return_to=attendance_return)}}">Edit monthly attendance ›</a></td>
+          {% for status in attendance_statuses %}
+            {% set rule=(r.detail.attendance if r else s.detail.get('attendance',[]) if s else [])|selectattr('status','equalto',status)|first %}
+            <td data-pay-status="{{status}}"><strong>{% if row.counts is not none %}{{row.counts.get(status,0 if row.counts_complete else '—')}}{% else %}—{% endif %}</strong>{% if rule %}<small {% if r %}data-base-paisa="{{rule.amount}}" data-no-attendance-paisa="0"{% endif %}>Rs {{rule.amount|cash}}</small>{% if rule.allowed %}<small>{{rule.allowed}} allowed</small>{% endif %}{% endif %}</td>
+          {% endfor %}
+          {% if s %}
+            <td>Rs {{s.detail.get('basic',0)|cash}}</td><td>Rs {{s.earnings|cash}}</td><td>{% if s.detail.get('attendance') %}Rs {{s.detail.attendance|sum(attribute='amount')|cash}}{% else %}—{% endif %}</td><td>Rs {{s.deductions|cash}}</td><td class="payroll-net">Rs {{s.net|cash}}</td>
+          {% elif r %}
+            <td>Rs {{r.detail.basic|cash}}</td><td>Rs {{r.earnings|cash}}</td>
+            <td data-base-paisa="{{r.attendance_deduction}}" data-no-attendance-paisa="0">Rs {{r.attendance_deduction|cash}}</td>
+            <td data-base-paisa="{{r.deductions}}" data-no-attendance-paisa="{{r.deductions-r.attendance_deduction}}">Rs {{r.deductions|cash}}</td>
+            <td class="payroll-net" data-net data-base-paisa="{{r.net}}" data-no-attendance-paisa="{{r.net+r.attendance_deduction}}">Rs {{r.net|cash}}</td>
+          {% else %}<td colspan="5">—</td>{% endif %}
+          <td>{% if s %}<span class="payroll-source saved">Already generated</span><small>Saved salary snapshot. Unknown older counts shown as —.</small>{% elif row.error %}<span class="payroll-source review">Review required</span><small>{{row.error}}</small>{% if row.error=='No approved salary plan.' %}<a href="{{url_for('ops.plans',employee_id=e.id)}}">Salary plan ›</a>{% endif %}{% elif r %}<span class="payroll-source saved">{{'Ready to generate' if complete else 'Preview'}}</span>{% endif %}
+          {% if row.attendance_source %}<small>{{row.attendance_source}}</small>{% endif %}{% if row.attendance_error and row.attendance_error!=row.error %}<small>{{row.attendance_error}}</small>{% endif %}</td>
+        </tr>
+      {% else %}<tr><td colspan="16" class="empty-state">No employees match these filters.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <div class="heading-actions">
+    {% if page>1 %}<a class="button secondary" href="{{url_for(roster_endpoint,month=month,page=page-1,view=view if not policy_workspace else none,**filters)}}{{'#staff-payroll' if policy_workspace else ''}}">Previous</a>{% endif %}
+    {% if page<pages %}<a class="button secondary" href="{{url_for(roster_endpoint,month=month,page=page+1,view=view if not policy_workspace else none,**filters)}}{{'#staff-payroll' if policy_workspace else ''}}">Next</a>{% endif %}
+    <button name="action" value="generate" data-needs-selection {{'disabled' if not ready else ''}}>Generate selected salaries</button>
+  </div>
+</form>
+<script src="{{asset_url('payroll_workspace.js')}}" defer></script>

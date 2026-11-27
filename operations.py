@@ -1699,8 +1699,11 @@ def configure_operations(app, db, Student, Employee):
     @bp.route('/payroll-policy',methods=['GET','POST'])
     def payroll_policy():
         model=app.extensions['school_settings_models']['setting']
+        today=school_today()
+        m=month(request.args.get('month',today.strftime('%Y-%m')))
         if request.method=='POST':
             app.extensions['admission_capacity']['lock']()
+            filters=payroll_filters()
             row=db.session.get(model,payroll_policy_key,populate_existing=True)
             if request.form.get('version')!=str(row.version if row else 0):
                 raise ValueError('The school payroll policy changed. Reload and review before saving.')
@@ -1719,9 +1722,9 @@ def configure_operations(app, db, Student, Employee):
             audit('Assign school-wide payroll deduction policy',before=before,after=data,scope='all staff')
             commit()
             flash('School-wide deduction policy saved. All staff salary calculations now use these rules automatically. Previously generated salaries are unchanged.','success')
-            return redirect(url_for('ops.payroll_policy'))
-        policy=school_attendance_policy()
-        return render('payroll_policy.html',title='School-wide Payroll Deduction Policy',policy=policy,deduction_types=deduction_types,jump_modes=JUMP_MODES,cap_modes=CAP_MODES)
+            return redirect(url_for('ops.payroll_policy',month=m,**filters)+'#staff-payroll')
+        context=payroll_context(m,'generate-salary',today,policy_workspace=True)
+        return render('payroll_policy.html',title='School-wide Payroll Deduction Policy',deduction_types=deduction_types,jump_modes=JUMP_MODES,cap_modes=CAP_MODES,**context)
 
     @bp.route('/salary-plans',methods=['GET','POST'])
     def plans():
@@ -1805,6 +1808,18 @@ def configure_operations(app, db, Student, Employee):
                 if eid in source['staff']:source[{'increments':'increments','advances':'advances','lecture-register':'lectures'}[r.kind]][eid].append(r)
         return source
 
+    def staff_payroll_attendance(m,today,joining,working_calendar,attendance,saved_month):
+        # Use the same inclusive totals for staff roster and salary calculations,
+        # even when an employee's salary plan has not yet been approved.
+        base=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
+        counts=Counter(base['counts']);lectures=base['lectures'];snapshot=None
+        label='Day-wise attendance' if counts else 'No attendance recorded'
+        if saved_month:
+            counts,lectures=monthly_totals.payroll_totals(saved_month,base)
+            label='Saved monthly attendance'
+            snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lectures,revision=saved_month.data['revision'])
+        return dict(counts=counts,lectures=lectures,source=label,monthly=snapshot,valid=base['valid'])
+
     def calculate_salary(p,m,today,attendance_based=True,source=None):
         eid=int(p.data['employee_id'])
         policy=source['policy'] if source else school_attendance_policy()
@@ -1837,18 +1852,10 @@ def configure_operations(app, db, Student, Employee):
         base=proration['payable_basic'] if proration else monthly_basic
         attendance=[r for r in source['daily'][eid] if max(joined,month_start)<=r.day<=min(month_end,today)] if source else Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=max(joined,month_start),Daily.day<=min(month_end,today)).all()
         attendance.sort(key=lambda r:(r.day,r.id))
-        deduction_attendance=[row for row in attendance if not working_calendar or row.day.isoformat() in working_calendar.working_dates]
-        counts=Counter(r.status for r in deduction_attendance);deductions=0;breakdown=[]
-        lecture_total=sum(r.lectures or 0 for r in attendance)
-        monthly_snapshot=None
-        attendance_source='Day-wise attendance' if deduction_attendance else 'No attendance recorded'
-        if attendance_based or data.get('lecture_incentive') or data.get('all_present_bonus'):
-            saved_month=(source['monthly'] if source else monthly_totals.summaries(Workflow,m,[eid])).get(eid)
-            if saved_month:
-                base_counts=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
-                counts,lecture_total=monthly_totals.payroll_totals(saved_month,base_counts)
-                attendance_source='Saved monthly attendance'
-                monthly_snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lecture_total,revision=saved_month.data['revision'])
+        saved_month=(source['monthly'] if source else monthly_totals.summaries(Workflow,m,[eid])).get(eid) if attendance_based or data.get('lecture_incentive') or data.get('all_present_bonus') else None
+        attendance_summary=staff_payroll_attendance(m,today,joining,working_calendar,attendance,saved_month)
+        counts=attendance_summary['counts'];lecture_total=attendance_summary['lectures'];monthly_snapshot=attendance_summary['monthly']
+        attendance_source=attendance_summary['source'];deductions=0;breakdown=[]
         days=salary_rate_days(pay_basis,working_calendar.working_dates if working_calendar else None)
         if attendance_based:
             for rule in data['rules']:
@@ -1881,6 +1888,7 @@ def configure_operations(app, db, Student, Employee):
         if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
         snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
                       attendance_policy=dict(scope='school',version=policy['version']) if policy else None,
+                      attendance_counts=dict(counts),attendance_source=attendance_source,
                       base_plan_basic=data['basic'],monthly_basic=monthly_basic,pay_basis=pay_basis,salary_divisor_days=days,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
                       working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates),pay_basis=pay_basis,paid_dates=paid_dates,salary_divisor_days=days) if working_calendar else None)
         return dict(earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot,counts=dict(counts),source=attendance_source,attendance_deduction=sum(r['amount'] for r in breakdown))
@@ -1888,12 +1896,17 @@ def configure_operations(app, db, Student, Employee):
     def salary_preview_token(result):
         return hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
 
-    def payroll_page(m,view,today):
+    def payroll_filters(values=None):
+        values=request.args if values is None else values
+        result={k:values.get(k,'').strip() for k in ('campus','department','designation_group','employee_id','search')}
+        if len(result['search'])>160:raise ValueError('Search must be 160 characters or fewer.')
+        return result
+
+    def payroll_context(m,view,today,policy_workspace=False):
         rows=Salary.query.filter_by(month=m).order_by(Salary.id.desc()).all()
         active=Employee.query.filter_by(status='Active').order_by(Employee.name,Employee.id).all()
         raw=app.extensions['record_helpers']['raw_many']('employee',active)
-        filters={k:request.args.get(k,'').strip() for k in ('campus','department','designation_group','employee_id','search')}
-        if len(filters['search'])>160:raise ValueError('Search must be 160 characters or fewer.')
+        filters=payroll_filters()
         staff=[e for e in active if (not filters['employee_id'] or filters['employee_id']==str(e.id))
                and all(not filters[k] or filters[k]==raw.get(e.id,{}).get(k) for k in ('campus','department','designation_group'))
                and (not filters['search'] or filters['search'].casefold() in ' '.join((e.name,e.employee_no or '',e.role or '')).casefold())]
@@ -1911,21 +1924,46 @@ def configure_operations(app, db, Student, Employee):
         except ValueError:raise ValueError('Choose a valid page.')
         pages=max(1,(len(staff)+49)//50);page=min(pages,page)
         visible=staff[(page-1)*50:page*50]
-        source=payroll_inputs(m,[e for e in visible if e.id not in generated and e.id in plans])
+        source=payroll_inputs(m,[e for e in visible if e.id not in generated])
         for e in visible:
-            row=dict(employee=e,detail=raw.get(e.id,{}),generated=generated.get(e.id),result=None,error=None,token=None)
-            if not row['generated']:
+            row=dict(employee=e,detail=raw.get(e.id,{}),generated=generated.get(e.id),result=None,error=None,token=None,counts=None,attendance_source=None,attendance_error=None)
+            if row['generated']:
+                d=row['generated'].detail
+                # Older generated salaries may only have the six deduction counts.
+                # Never invent historical Present/Off Day counts from current data.
+                saved_counts=d.get('attendance_counts')
+                if saved_counts is None:
+                    saved_counts=(d.get('monthly_attendance') or {}).get('counts')
+                row['counts']=saved_counts if saved_counts is not None else {r['status']:r['count'] for r in d.get('attendance',[])}
+                row['counts_complete']=saved_counts is not None
+                row['attendance_source']='Saved salary snapshot'
+            else:
+                joining=row['detail'].get('joining_date')
+                try:
+                    summary=staff_payroll_attendance(m,today,joining,source['calendar'],source['daily'][e.id],source['monthly'].get(e.id))
+                    if summary['valid']:
+                        row['counts']=dict(summary['counts']);row['counts_complete']=True;row['attendance_source']=summary['source']
+                    else:row['attendance_error']='No eligible elapsed days or joining date missing.'
+                except ValueError as exc:row['attendance_error']=str(exc)
                 if m>today.strftime('%Y-%m'):row['error']='Choose the current month or an earlier month.'
                 elif e.id not in plans:row['error']='No approved salary plan.'
+                elif policy_workspace and not source['policy']:row['error']='Save the school-wide deduction policy first.'
+                elif row['attendance_error']:row['error']=row['attendance_error']
                 else:
                     try:
                         row['result']=calculate_salary(plans[e.id],m,today,True,source)
                         row['token']=salary_preview_token(row['result'])
+                        row['counts']=row['result']['counts'];row['counts_complete']=True;row['attendance_source']=row['result']['source']
                     except ValueError as exc:row['error']=str(exc)
             preview.append(row)
-        return render('payroll.html',title=TITLES.get(view,'Pay / Print Salary'),view=view,month=m,rows=rows,employees=active,
-                      employee=lambda id:db.session.get(Employee,id),preview=preview,filters=filters,filter_options=options,
-                      complete=complete,page=page,pages=pages,total=len(staff),policy=source['policy'])
+        return dict(view=view,month=m,rows=rows,employees=active,
+                    employee=lambda id:db.session.get(Employee,id),preview=preview,filters=filters,filter_options=options,
+                    complete=complete,page=page,pages=pages,total=len(staff),policy=source['policy'],policy_workspace=policy_workspace,
+                    roster_endpoint='ops.payroll_policy' if policy_workspace else 'ops.payroll',attendance_return='policy' if policy_workspace else 'payroll',
+                    attendance_statuses=monthly_totals.STATUSES)
+
+    def payroll_page(m,view,today):
+        return render('payroll.html',title=TITLES.get(view,'Pay / Print Salary'),**payroll_context(m,view,today))
 
     @bp.route('/payroll',methods=['GET','POST'])
     def payroll():
@@ -1942,6 +1980,10 @@ def configure_operations(app, db, Student, Employee):
                 approved={int(p.data['employee_id']) for p in plans_list}
                 if not set(chosen)<=approved: raise ValueError('Every selected employee needs an approved salary plan. No payroll was saved.')
                 source=payroll_inputs(m,Employee.query.filter(Employee.id.in_(chosen)).all())
+                from_policy=request.form.get('return_to')=='policy'
+                return_filters=payroll_filters(request.form) if from_policy else {}
+                if from_policy and (not source['policy'] or request.form.get('reviewed_preview')!='1'):
+                    raise ValueError('Save the school-wide policy and review salary calculations before generating.')
                 for p in plans_list:
                     eid=int(p.data['employee_id'])
                     if eid in seen or eid not in chosen: continue
@@ -1993,6 +2035,8 @@ def configure_operations(app, db, Student, Employee):
                     group_values[campus]=values
                 return render('salary_print.html',group_values=group_values,print_groups=print_groups,details=lambda p,kind='employee':staff_details.get(p.id,{}),title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
             else: raise ValueError('Invalid salary action.')
+            if action=='generate' and request.form.get('return_to')=='policy':
+                return redirect(url_for('ops.payroll_policy',month=m,**return_filters)+'#staff-payroll')
             return redirect(url_for('ops.payroll',view=view,month=m))
         return payroll_page(m,view,today)
 
