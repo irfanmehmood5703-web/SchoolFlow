@@ -1,17 +1,55 @@
 @media screen {
   .app-header .brand-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 22px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+    grid-template-areas: "platform school account";
+    gap: 12px 20px;
     padding-block: 12px;
   }
+  .app-header .brand-row > .brand {
+    grid-area: platform;
+    justify-self: start;
+  }
+  .app-header .school-header-banner {
+    grid-area: school;
+    padding: 8px 16px;
+    border: 1px solid #a8ddbb38;
+    border-radius: 9px;
+    background: linear-gradient(100deg, #173d32, #235340, #173d32);
+    text-align: center;
+  }
   .app-header .school-header-name {
-    color: #d5ecdd;
-    font-size: clamp(14px, 1.5vw, 20px);
-    font-weight: 650;
+    display: block;
+    color: #f3fff7;
+    font-size: clamp(1.35rem, 2.2vw, 2rem);
+    font-weight: 800;
+    line-height: 1.2;
     overflow-wrap: anywhere;
   }
-  .app-header .brand-account { flex-wrap: wrap; }
+  .app-header .brand-account {
+    grid-area: account;
+    justify-self: end;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-left: 0;
+  }
+  @media (max-width: 1050px) {
+    .app-header .brand-row {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas: "platform account" "school school";
+      column-gap: 10px;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .app-header .school-header-name {
+      animation: school-header-slide-in 1.8s ease-out both;
+    }
+    @keyframes school-header-slide-in {
+      from { transform: translateX(-10px); }
+      to { transform: translateX(0); }
+    }
+  }
   .workspace-account-menu > summary {
     border: 1px solid #ffffff55;
     padding: 7px 10px;

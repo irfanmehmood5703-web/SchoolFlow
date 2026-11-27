@@ -258,7 +258,11 @@ class InstituteSetupTests(unittest.TestCase):
         self.assertEqual(self.post(action='profile',version='0',name='Fictional School Name',website='https://example.invalid',logo=(io.BytesIO(image.getvalue()),'school.png')).status_code,302)
         response=self.c.get('/workspace/core/logo');self.assertEqual(response.status_code,200);self.assertEqual(response.mimetype,'image/png');self.assertIn('no-store',response.headers['Cache-Control'])
         for path in ['/workspace/dashboard','/records/student','/workspace/examination/awards','/records/employee']:
-            page=self.c.get(path);self.assertIn(b'Fictional School Name',page.data);self.assertIn(b'/workspace/core/logo',page.data)
+            page=self.c.get(path)
+            header=page.data.split(b'<div class="brand-row">',1)[1].split(b'</header>',1)[0]
+            self.assertIn(b'<a class="brand" href="/">School<span>Flow</span></a>',header)
+            self.assertIn(b'<div class="school-header-banner"><span class="school-header-name">Fictional School Name</span></div>',header)
+            self.assertIn(b'/workspace/core/logo',header)
         self.assertEqual(self.post(action='profile',version='1',name='No overwrite',logo=(io.BytesIO(b'not an image'),'bad.png')).status_code,422)
         self.assertEqual(self.models['profile'].query.one().data['name'],'Fictional School Name')
         self.assertEqual(self.post(action='profile',version='1',name='Fictional School Name',remove_logo='1').status_code,302)
