@@ -153,6 +153,7 @@ def configure_dashboard(app, db):
         if any(item['key']=='capacity' for item in selected):stats['capacity_rows']=app.extensions['admission_capacity']['rows']()
         return render_template('dashboard.html',title='Dashboard',stats=stats,dashboard_date=today,
                                month_remaining=month_remaining,session_dues=session_dues,
+                               uncovered_periods=app.extensions['class_cover_helpers']['uncovered'](today),
                                layout=layout,layout_version=version,widgets=selected,catalog=ordered,scope=scope,
                                personal=owner_key() is not None,legacy_quick=quick,groups=list(dict.fromkeys(w[1] for w in WIDGETS)))
 

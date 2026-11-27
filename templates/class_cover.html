@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% import 'ops_macros.html' as m with context %}
+{% block content %}
+{{m.heading(title, 'Assign cover for saved timetable periods when a teacher is absent or on approved leave.')}}
+<form method="get" class="form-card filter-grid">
+  {{m.input('day','Date','date',day.isoformat(),true)}}
+  <button>View periods</button>
+</form>
+<section class="form-card">
+  <h2>Periods requiring cover</h2>
+  <div class="table"><table>
+    <thead><tr><th>Time</th><th>Class / Subject</th><th>Scheduled teacher</th><th>Cover</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><strong>{{row.time_label}}</strong></td>
+        <td><strong>{{row.subject}}</strong><br>{{row.class_name}} / {{row.section}} · {{row.campus}}</td>
+        <td>{{row.original}}{% if row.reason %}<br>{{row.reason}}{% endif %}</td>
+        <td>{{row.substitute or 'Uncovered'}}{% if row.conflict %}<br>Review conflict{% endif %}</td>
+        <td>
+          {% if editable is none or row.campus in editable %}
+            <form method="post" action="{{url_for('class_cover.save')}}" aria-label="Cover {{row.class_name}} {{row.section}} at {{row.time_label}}">
+              {{m.csrf()}}
+              <input type="hidden" name="period" value="{{row.period_id}}">
+              <input type="hidden" name="day" value="{{day.isoformat()}}">
+              <input type="hidden" name="revision" value="{{row.record.data.revision if row.record else 0}}">
+              {% if row.reason and row.available %}
+                <label>Available teacher
+                  <select name="substitute">
+                    <option value="">Select teacher</option>
+                    {% for teacher in row.available %}<option value="{{teacher.id}}"{% if row.record and row.record.data.substitute_id==teacher.id %} selected{% endif %}>{{teacher.name}}</option>{% endfor %}
+                  </select>
+                </label>
+                <button name="action" value="assign">Assign Cover</button>
+              {% elif row.reason %}No available teacher{% endif %}
+              {% if row.record %}<button name="action" value="remove" class="button secondary">Remove Cover</button>{% endif %}
+            </form>
+          {% else %}View only{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty-state">No saved timetable periods require cover for this date.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

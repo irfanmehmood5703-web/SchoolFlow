@@ -402,7 +402,7 @@ def configure_staff_access(app,db,Student,Employee):
             return 'finance.'+('create' if request.method=='POST' else 'print' if request.args.get('print')=='1' else 'view')
         if ep.startswith('finance.'):
             return 'finance.'+('print' if ep=='finance.chart' and request.args.get('print')=='1' else 'view' if request.method=='GET' else 'delete' if request.form.get('action')=='delete' else 'create' if ep=='finance.initialize' or not args.get('rid') else 'update')
-        if ep.startswith('student_follow_up.'):
+        if ep.startswith(('student_follow_up.','class_cover.')):
             return 'attendance.update' if request.method == 'POST' else 'attendance.view'
         if ep=='school_settings.monthly_attendance':return 'attendance.update' if request.method=='POST' else 'attendance.view'
         if ep=='attendance_controls.self_attendance':return 'attendance.self'

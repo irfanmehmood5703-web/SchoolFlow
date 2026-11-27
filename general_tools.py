@@ -137,7 +137,8 @@ def configure_general_tools(app,db,Student,Employee):
         current,row=prefs();visible=allowed();selected=[k for k in current['order'] if k in current['selected'] and k in visible]
         if current['mode']=='simple':selected=[k for k in ('active-students','paid-amount','attendance-donut','employee-status') if k in visible]
         summaries,start,end,period=data(selected)
-        return render_template('widget_center.html',title='Widgets',tab='dashboard',catalog=specs(visible),selected=specs(selected),summaries=summaries,layout=current,version=row.version if row else 0,start=start,end=end,period=period,groups=list(dict.fromkeys(item['group'] for item in specs(selected))))
+        uncovered_periods=app.extensions['class_cover_helpers']['uncovered'](today())
+        return render_template('widget_center.html',title='Widgets',tab='dashboard',uncovered_periods=uncovered_periods,catalog=specs(visible),selected=specs(selected),summaries=summaries,layout=current,version=row.version if row else 0,start=start,end=end,period=period,groups=list(dict.fromkeys(item['group'] for item in specs(selected))))
     @bp.get('/widgets/library')
     def library():
         current,row=prefs();visible=allowed();ordered=[k for k in current['order'] if k in visible];catalog={r['key']:r for r in specs(visible)}

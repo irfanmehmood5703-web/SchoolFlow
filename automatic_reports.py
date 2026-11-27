@@ -328,7 +328,7 @@ def configure_automatic_reports(app,db,Student,Employee):
         clock=data.get('time','')
         hour,minute=map(int,clock.split(':')) if mode=='lecture' and isinstance(clock,str) and re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]',clock) else (8,0)
         return render_template('timetable_edit.html',title='Edit timetable',teacher=employee.name,assignment=a,subject=subject or ('Full Class' if mode=='full-class' else 'Class period'),full=mode=='full-class',single=single,days=old_days,weekdays=WEEKDAYS,revision=revision,hour=hour%12 or 12,minute=minute,meridiem='AM' if hour<12 else 'PM',lead=data.get('lead',5),time_label='All day' if mode=='full-class' else clock_label(clock))
-    def teacher_timetable(cohorts):
+    def teacher_timetable(cohorts, include_ids=False):
         """Recurring weekly periods for the exact active, permitted assignments."""
         allowed={r.id:r.data for r in cohorts}
         out=[];catalog={}
@@ -338,6 +338,8 @@ def configure_automatic_reports(app,db,Student,Employee):
             weekday=d.get('weekday');clock=d.get('time','');lead=d.get('lead')
             if weekday not in range(7):continue
             scope=dict(weekday=weekday,campus=a['campus'],class_name=a['class_name'],section=a['section'])
+            if include_ids:
+                scope.update(period_id=row.id,teacher_id=int(a['employee_id']))
             if d.get('mode')=='full-class':
                 if not a.get('subject') and not d.get('subject'):
                     out.append(dict(scope,time='All day',time_label='All day',subject='Full Class',lead=0,mode='full-class'))

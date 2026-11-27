@@ -159,7 +159,10 @@ def configure_teacher_app(app,db,Student,Employee):
         periods=app.extensions['automatic_report_helpers']['teacher_timetable'](cohorts())
         days=[dict(name=name,today=index==school_today().weekday(),periods=[p for p in periods if p['weekday']==index]) for index,name in enumerate(calendar.day_name)]
         full_class_count=sum(p['mode']=='full-class' for p in periods)
-        return render('timetable',days=days,period_count=len(periods)-full_class_count,full_class_count=full_class_count,schedule_count=len(periods))
+        campuses=set(g.staff_principal.data.get('campuses',[]))&set(sh['campuses']())
+        covers=app.extensions['class_cover_helpers']['teacher_assignments'](g.teacher_employee.id,campuses,school_today())
+        return render('timetable',days=days,period_count=len(periods)-full_class_count,
+                      full_class_count=full_class_count,schedule_count=len(periods),covers=covers)
 
     @bp.route('/classes/<int:cid>/attendance',methods=['GET','POST'])
     def attendance(cid):

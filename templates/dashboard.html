@@ -11,6 +11,9 @@
   </div>
   <time datetime="{{dashboard_date.isoformat()}}"><span>{{dashboard_date.strftime('%A')}}</span>{{dashboard_date.strftime('%d %B %Y').lstrip('0')}}</time>
 </header>
+{% if uncovered_periods is not none %}
+<p><a class="button secondary" href="{{url_for('class_cover.index')}}">Uncovered Periods Today · {{uncovered_periods}}</a></p>
+{% endif %}
 {% if (layout.quick or layout.mode=='simple') and legacy_quick %}
 <section class="dashboard-overview" aria-labelledby="dashboard-overview-title">
 <h2 id="dashboard-overview-title">School overview</h2>

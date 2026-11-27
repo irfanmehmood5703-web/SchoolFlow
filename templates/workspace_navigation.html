@@ -52,6 +52,10 @@
     </details>
     {% endif %}
     {% if utility_allowed('attendance') %}
+    <a class="workspace-tool-link workspace-apps-link" href="{{url_for('class_cover.index')}}"{% if request.blueprint == 'class_cover' %} aria-current="page"{% endif %}>
+      <strong>Substitute Teacher / Class Cover</strong>
+      <small>Assign cover for uncovered periods</small>
+    </a>
     <a class="workspace-tool-link workspace-apps-link" href="{{url_for('student_follow_up.index')}}"{% if request.blueprint == 'student_follow_up' %} aria-current="page"{% endif %}>
       <strong>Student Follow-up Center</strong>
       <small>Attendance and parent calls</small>

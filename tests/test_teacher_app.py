@@ -20,6 +20,41 @@ class TeacherAppTests(unittest.TestCase):
         c=client or self.c
         with c.session_transaction() as session:token=session['record_csrf']
         return c.post('/auth/login',data={'_csrf':token,'email':login,'password':password if password is not None else self.password})
+    def test_teacher_timetable_shows_only_the_teachers_dated_class_cover(self):
+        from datetime import date
+        from unittest.mock import patch
+        from app import Employee
+
+        today = date(2026,11,23)
+        def seed():
+            W, Daily = (self.ops[k] for k in ('workflow','daily'))
+            original = Employee(employee_no='ORIG',name='Original Teacher',role='Teacher',status='Active')
+            db.session.add(original)
+            db.session.flush()
+            substitute_id = db.session.get(self.Staff,self.sid).employee_id
+            cohort = W(kind='teacher-classes',status='Active',
+                       data=dict(employee_id=str(original.id),campus='Campus A',class_name='Seven',section='A',subject='Maths'))
+            db.session.add(cohort)
+            db.session.flush()
+            period = W(kind='automatic-period-reminder',status='Active',
+                       data=dict(assignment_id=cohort.id,assignment=cohort.data,weekday=0,time='10:00',lead=5))
+            db.session.add(period)
+            db.session.add(Daily(kind='staff',person_id=original.id,day=today,status='Absent'))
+            db.session.flush()
+            db.session.add(W(kind='teacher-class-cover',status='Active',
+                data=dict(day=today.isoformat(),period_id=period.id,campus='Campus A',class_name='Seven',
+                          section='A',subject='Maths',time='10:00',time_label='10:00 AM',
+                          teacher_id=original.id,substitute_id=substitute_id,substitute_name='Fictional teacher',revision=1)))
+        self.tenant(seed)
+        self.assertEqual(self.login().status_code,302)
+        with patch('teacher_app.school_today',return_value=today):
+            page=self.c.get('/teacher-app/timetable')
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'<h2>Class Cover</h2>',page.data)
+        self.assertIn(b'2026-11-23',page.data)
+        self.assertIn(b'Seven / A',page.data)
+        self.assertIn(b'10:00 AM',page.data)
+
     def test_public_mobile_entry_documents_are_marked(self):
         for path in ('/','/mobile/teacher','/mobile/parents','/mobile/owner'):
             page=app.test_client().get(path)

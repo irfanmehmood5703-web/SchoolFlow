@@ -214,6 +214,8 @@ from assistant_service import configure_assistant
 configure_assistant(app,db,Student,Employee)
 from automatic_reports import configure_automatic_reports
 configure_automatic_reports(app,db,Student,Employee)
+from class_cover import configure_class_cover
+configure_class_cover(app,db,Employee)
 from personal_notices import configure_notices
 configure_notices(app,db,Student)
 from owner_app import configure_owner_app
