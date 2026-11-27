@@ -1,0 +1,58 @@
+/* Shared screen-only styling for records, search results and loaded rosters.
+   Print templates and existing attendance/payroll semantic colors stay intact. */
+@media screen {
+  .sf-results-banner {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap; margin:12px 0 8px; padding:10px 14px;
+    border:1px solid #b4d8c6; border-left:5px solid #176b51; border-radius:8px;
+    background:#e4f3eb; color:#174d3c; font-size:13px; font-weight:700;
+  }
+  .sf-results-banner .sf-results-count {
+    background:#185f49; color:#fff; padding:4px 10px; border-radius:6px;
+    font-size:12px; font-weight:700; font-variant-numeric:tabular-nums;
+  }
+  .sf-results-banner[data-empty="true"] {background:#fff5e2;border-color:#e7ce98;border-left-color:#a67320;color:#795316}
+  .sf-results-banner[data-empty="true"] .sf-results-count {background:#865b18}
+  .sf-result-table {border:1px solid #c7dcd0}
+  /* Keep deliberately colored attendance status headers and summary cells. */
+  table.sf-result-table tr.sf-result-heading > th:not([data-pay-status]):not([data-attendance-status]):not([data-monthly-status]):not([data-status]) {
+    background:#185d47; color:#fff; font-size:12px; font-weight:700;
+    border-bottom:2px solid #124933; border-right:1px solid #397e64;
+  }
+  table.sf-result-table tr.sf-result-heading > th:not([data-pay-status]):not([data-attendance-status]):not([data-monthly-status]):not([data-status]) small {
+    color:#e0f0e8;
+  }
+  table.sf-result-table tr.sf-result-heading input[type=checkbox] {accent-color:#1d7c5c}
+  .sf-result-table tbody > tr.sf-result-row {--sf-row:#f3faf6;--sf-row-edge:#d5e6dc}
+  .sf-result-table tbody > tr.sf-result-row:nth-child(even) {--sf-row:#e7f2ec}
+  .sf-result-table tbody > tr.sf-result-row:focus-within {--sf-row:#dfefe6}
+  @media (hover:hover) {
+    .sf-result-table tbody > tr.sf-result-row:hover {--sf-row:#dcefe4;--sf-row-edge:#b6d8c6}
+  }
+  .sf-result-table tbody > tr.sf-result-row.sf-result-selected {--sf-row:#d5eddf;--sf-row-edge:#a4cfb6}
+  table.sf-result-table tbody > tr.sf-result-row > td:not([data-pay-status]):not([data-attendance-status]):not([data-monthly-status]):not([data-status]):not(.payroll-net):not(.sf-status-cell):not([style*="background"]) {
+    background-color:var(--sf-row);
+    border-bottom-color:var(--sf-row-edge); color:#253d31;
+  }
+  table.sf-result-table tbody > tr.sf-result-row > td:first-child {box-shadow:inset 3px 0 #a9ccba}
+  table.sf-result-table tbody > tr.sf-result-row.sf-result-selected > td:first-child {box-shadow:inset 4px 0 #176b51}
+  .sf-result-table .sf-result-name {font-weight:750;color:#164f3a}
+  .sf-result-table .sf-result-name a {font-weight:750;color:#16583f}
+  .sf-result-table .sf-result-name small {font-weight:400}
+  .sf-result-table .status-pill[data-sf-tone], .sf-result-table .sf-status-cell[data-sf-tone] {
+    font-weight:700; color:var(--sf-status-ink); background-color:var(--sf-status-bg);
+  }
+  .sf-result-table .status-pill[data-sf-tone] {
+    display:inline-block;border:1px solid var(--sf-status-border);border-radius:7px;
+    padding:4px 8px;font-size:11px;white-space:normal;
+  }
+  .sf-result-table [data-sf-tone="positive"] {--sf-status-ink:#145038;--sf-status-bg:#d8f0df;--sf-status-border:#abd4b9}
+  .sf-result-table [data-sf-tone="warning"] {--sf-status-ink:#735015;--sf-status-bg:#fff0ce;--sf-status-border:#e8cf92}
+  .sf-result-table [data-sf-tone="negative"] {--sf-status-ink:#872d39;--sf-status-bg:#fbe3e5;--sf-status-border:#e9b3b9}
+  .sf-result-table [data-sf-tone="neutral"] {--sf-status-ink:#3e5264;--sf-status-bg:#e8eef3;--sf-status-border:#c9d7e0}
+  .sf-result-table .sf-result-empty > td {
+    background:#fff8e9; color:#795316; text-align:center; padding:20px 12px;
+    font-weight:650;
+  }
+}
+@media print {.sf-results-banner {display:none!important}}
