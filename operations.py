@@ -650,6 +650,15 @@ def configure_operations(app, db, Student, Employee):
         query=Bill.query.filter(Bill.student_id.in_(students.with_entities(Student.id)))
         if billing_month:=request.args.get('bill_month',''):
             query=query.filter(Bill.month==month(billing_month))
+        elif mode=='payments':
+            start_month=request.args.get('bill_month_from','')
+            end_month=request.args.get('bill_month_to','')
+            if start_month:
+                query=query.filter(Bill.month>=month(start_month))
+            if end_month:
+                query=query.filter(Bill.month<=month(end_month))
+            if start_month and end_month and start_month>end_month:
+                raise ValueError('The start month must be before or equal to the end month.')
         rows=query.order_by(Bill.id.desc()).all()
         if state:=request.args.get('bill_status',''):
             rows=[b for b in rows if b.state==state]
@@ -675,7 +684,18 @@ def configure_operations(app, db, Student, Employee):
                 from sqlalchemy import or_
                 query = query.filter(or_(Student.name.ilike(pattern, escape='\\'), Student.admission_no.ilike(pattern, escape='\\'), Student.phone.ilike(pattern, escape='\\')))
             status_students = query.order_by(Student.id.desc()).limit(100).all()
-        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students,filter_choices=app.extensions['record_helpers']['choices']())
+        family_groups=[]
+        family_by_student={}
+        if mode=='payments':
+            family_by_student=app.extensions['record_helpers']['family_numbers'](b.student_id for b in rows)
+            groups={}
+            for bill in rows:
+                family_no=family_by_student.get(bill.student_id)
+                key=('family',family_no) if family_no else ('challan',bill.id)
+                group=groups.setdefault(key,dict(family_no=family_no,bills=[]))
+                group['bills'].append(bill)
+            family_groups=list(groups.values())
+        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,family_groups=family_groups,family_by_student=family_by_student,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students,filter_choices=app.extensions['record_helpers']['choices']())
 
     @bp.route('/generate-challans',methods=['GET','POST'])
     def generate_challans():

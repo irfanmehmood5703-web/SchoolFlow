@@ -233,3 +233,11 @@
   background: #f0f8f3;
   font-weight: 700;
 }
+
+.schoolflow-challan-workspace .challan-family-total > * {
+  background: #e1f2e9;
+  color: #153c30;
+  border-top: 2px solid #86b7a3;
+  font-weight: 750;
+  white-space: nowrap;
+}

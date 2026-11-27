@@ -57,6 +57,35 @@ class OperationTests(unittest.TestCase):
             self.assertIn(b'Test Pupil',response.data,path)
             self.assertNotIn(b'Another Pupil',response.data,path)
 
+    def test_family_challan_totals_by_range_and_month(self):
+        sibling=Student(admission_no='SIBLING',name='Sibling',status='Active')
+        db.session.add(sibling)
+        db.session.flush()
+        for pupil in (self.s,sibling):
+            db.session.add(self.rm['student'](student_id=pupil.id,data={'family_no':'101'}))
+        november=self.bill(630000,'2026-11')
+        december=self.bill(680000,'2026-12')
+        december.student_id=sibling.id
+        self.bill(900000,'2027-01')
+        for bill,amount,discount in ((november,500,200),(december,1600,100)):
+            response=self.post('/workspace/pay',student_id=bill.student_id,bill_id=bill.id,
+                token=f'family_total_test_token_{bill.id}',paid_date='2026-12-15',account='Cash',
+                **{f'amount_{bill.id}':str(amount),f'discount_{bill.id}':str(discount)})
+            self.assertEqual(response.status_code,302)
+        path='/workspace/fees/payments'
+        for query,expected in (
+            ('?bill_month_from=2026-01&bill_month_to=2026-12',('13,100','300','2,100','10,700')),
+            ('?bill_month=2026-11',('6,300','200','500','5,600')),
+        ):
+            response=self.client.get(path+query)
+            self.assertEqual(response.status_code,200)
+            subtotal=re.search(rb'<tr class="challan-family-total">(.*?)</tr>',response.data,re.S)[1]
+            self.assertIn(b'Family 101 total',subtotal)
+            for amount in expected:
+                self.assertIn(f'<td>{amount}</td>'.encode(),subtotal)
+            self.assertNotIn(b'2027-01',response.data)
+        self.assertEqual(self.client.get(path+'?bill_month_from=2026-12&bill_month_to=2026-01').status_code,422)
+
     def test_payment_discount_duplicate_guard_overpayment_and_reversal(self):
         b=self.bill();token='testtoken_abcdefghijklmnop'
         args=dict(student_id=self.s.id,bill_id=b.id,token=token,paid_date='2026-10-01',account='Cash',action='save',**{f'amount_{b.id}':'400',f'discount_{b.id}':'100'})
