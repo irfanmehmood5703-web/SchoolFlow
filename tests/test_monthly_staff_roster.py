@@ -48,6 +48,8 @@ class MonthlyStaffRosterTests(unittest.TestCase):
         for name in (b'Fictional Monthly Teacher',b'Fictional Cleaner',b'Day-wise attendance',b'Total lectures',b'Notes (internal)'):
             self.assertIn(name,page.data)
         self.assertNotIn(b'Sandwich Leave',page.data)
+        self.assertIn(b'<th class="monthly-designation-group" scope="col">Designation Group</th>',page.data)
+        self.assertIn(b'<td class="monthly-designation-group">Support Staff</td>',page.data)
         self.assertIn(f'name="count_1_{self.e.id}" value="1"'.encode(),page.data)
         self.assertNotIn(b'Fictional Cleaner',self.page('&campus=Campus+A').data.split(b'<tbody>')[1])
         self.assertEqual(self.W.query.filter_by(kind=KIND).count(),0)
