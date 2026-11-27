@@ -282,3 +282,15 @@
 @media print {
   .workspace-settings { display: none !important; }
 }
+
+/* Fill the available workspace at every browser zoom level, without changing print layouts. */
+@media screen {
+  .workspace-shell { width: 100%; max-width: none; }
+  .workspace-shell > main { width: 100%; max-width: none; margin-inline: 0; }
+  .workspace-shell > main > .page-content {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: clamp(14px, 2vw, 32px);
+  }
+}
