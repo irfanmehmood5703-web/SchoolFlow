@@ -427,6 +427,37 @@ class TeacherAppTests(unittest.TestCase):
         self.assertNotIn(b'timetable-full-class',page.data)
         self.assertIn(b'English',page.data)
         self.assertNotIn(b'9:00 AM',page.data)
+    def test_native_attendance_notification_only_for_today_and_own_saved_mark(self):
+        self.seed()
+        today=school_today()
+        previous=today-timedelta(days=1)
+        def make():
+            staff=db.session.get(self.Staff,self.sid)
+            Daily=self.ops['daily']
+            other=fixture.Employee(employee_no='NOTICE-2',name='Other fictional employee',role='Teacher',status='Active')
+            db.session.add(other);db.session.flush()
+            db.session.add_all([
+                Daily(kind='staff',person_id=staff.employee_id,day=previous,status='Present'),
+                Daily(kind='staff',person_id=staff.employee_id,day=today+timedelta(days=1),status='Present'),
+                Daily(kind='staff',person_id=other.id,day=today,status='Present')])
+        self.tenant(make)
+        def events():
+            response=self.c.get('/teacher-app/notification-feed')
+            self.assertEqual(response.status_code,200)
+            return [e for e in response.get_json()['events'] if e['title']=='Your attendance']
+        self.assertEqual(events(),[])
+        history=self.c.get('/teacher-app/notifications')
+        self.assertIn((str(previous)+' · Present').encode(),history.data)
+        self.assertNotIn(str(today+timedelta(days=1)).encode(),history.data)
+        def mark():
+            staff=db.session.get(self.Staff,self.sid)
+            db.session.add(self.ops['daily'](kind='staff',person_id=staff.employee_id,day=today,status='Late'))
+        self.tenant(mark)
+        current=events()
+        self.assertEqual(len(current),1)
+        self.assertEqual(current[0]['body'],str(today)+' · Late')
+        self.assertEqual(events(),current)
+
     def test_background_lecture_feed_dated_scope_and_sync(self):
         from datetime import datetime
         from unittest.mock import patch
