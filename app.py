@@ -76,6 +76,8 @@ configure_records(app,db,Student,Employee)
 configure_operations(app,db,Student,Employee)
 from reports import configure_reports
 configure_reports(app,db,Student,Employee)
+from student_follow_up import configure_student_follow_up
+configure_student_follow_up(app,db,Student,Employee)
 from student_fee_plans import configure_student_fee_plans
 configure_student_fee_plans(app,db,Student)
 from student_overview import configure_student_overview

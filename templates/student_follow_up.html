@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% import 'ops_macros.html' as m with context %}
+{% block content %}
+{{m.heading(title, 'Review students with three or more consecutive recorded absences and track parent calls.')}}
+<nav class="tab-strip" aria-label="Follow-up status">
+  <a href="{{url_for('student_follow_up.index')}}" {% if show=='open' %}aria-current="page"{% endif %}>Open follow-ups</a>
+  <a href="{{url_for('student_follow_up.index', show='all')}}" {% if show=='all' %}aria-current="page"{% endif %}>All follow-ups</a>
+</nav>
+<section class="form-card">
+  <h2>{{rows|length}} {{'follow-up' if rows|length==1 else 'follow-ups'}}</h2>
+  <div class="table"><table>
+    <thead><tr><th>Student</th><th>Campus / Class</th><th>Absence dates</th><th>Teacher</th><th>Call status</th><th>Follow-up</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><strong>{{row.student.name}}</strong><br>{{row.student.admission_no}}{% if row.phone %}<br>{{row.phone}}{% endif %}</td>
+        <td>{{row.campus or '—'}}<br>{{row.student.class_name or '—'}}{% if row.section %} / {{row.section}}{% endif %}</td>
+        <td><strong>{{row.dates|length}} days</strong><br>{{row.dates|join(', ')}}</td>
+        <td>{{row.assignee or 'Unassigned'}}</td>
+        <td><strong>{{row.outcome}}</strong>{% if row.due %}<br>Next call {{row.due}}{% endif %}{% if row.note %}<br>{{row.note}}{% endif %}</td>
+        <td>{% if row.can_edit %}
+          <details class="more-disclosure">
+            <summary>Log parent call</summary>
+            <form method="post" action="{{url_for('student_follow_up.save')}}" aria-label="Follow up {{row.student.name}}">
+              {{m.csrf()}}
+              <input type="hidden" name="case" value="{{row.key}}">
+              <input type="hidden" name="revision" value="{{row.revision}}">
+              <label>Teacher
+                <select name="teacher_id">
+                  <option value="">Unassigned</option>
+                  {% for id, name in row.choices %}<option value="{{id}}" {% if id==row.teacher_id %}selected{% endif %}>{{name}}</option>{% endfor %}
+                  {% if row.teacher_id and row.teacher_id not in dict(row.choices) %}<option value="{{row.teacher_id}}" selected>{{row.assignee or 'Previous teacher'}}</option>{% endif %}
+                </select>
+              </label>
+              <label>Call outcome <select name="outcome">{% for outcome in outcomes %}<option {% if outcome==row.outcome %}selected{% endif %}>{{outcome}}</option>{% endfor %}</select></label>
+              <label>Next call date <input type="date" name="due" value="{{row.due}}"></label>
+              <label>Note <textarea name="note" maxlength="500" rows="2">{{row.note}}</textarea></label>
+              <button type="submit">Save follow-up</button>
+            </form>
+          </details>
+        {% else %}View only{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty-state">No {{'open ' if show=='open' else ''}}attendance follow-ups.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

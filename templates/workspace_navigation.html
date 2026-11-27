@@ -51,6 +51,12 @@
       </div>
     </details>
     {% endif %}
+    {% if utility_allowed('attendance') %}
+    <a class="workspace-tool-link workspace-apps-link" href="{{url_for('student_follow_up.index')}}"{% if request.blueprint == 'student_follow_up' %} aria-current="page"{% endif %}>
+      <strong>Student Follow-up Center</strong>
+      <small>Attendance and parent calls</small>
+    </a>
+    {% endif %}
     {% for label, key in sidebar_tools %}
       {% set migration = key == 'school-migration' %}
       {% if utility_allowed('admissions' if migration else 'apps') %}

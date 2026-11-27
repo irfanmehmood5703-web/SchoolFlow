@@ -58,7 +58,7 @@ class OperationTests(unittest.TestCase):
         self.assertNotIn(b'School App Links',sections[b'General'])
         tools = nav.rsplit(b'</details>',1)[1]
         self.assertEqual(re.findall(rb'<strong>([^<]+)</strong>',tools),
-                         [b'School Migration Center',b'School App Links'])
+                         [b'Student Follow-up Center',b'School Migration Center',b'School App Links'])
         for path in ('/workspace/core/institute/student-import','/workspace/general/app-links'):
             self.assertIn(path.encode(),tools)
             self.assertEqual(self.client.get(path).status_code,200)

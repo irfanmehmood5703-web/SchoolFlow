@@ -87,6 +87,28 @@ class StaffAccessTests(unittest.TestCase):
         self.assertNotIn(b'Pupil Campus B', report.data)
         self.assertIn(b'Total Fee Collected (Rs.)</span><b>100</b>', report.data)
 
+    def test_student_follow_up_respects_campus_and_update_grants(self):
+        from unittest.mock import patch
+
+        def seed():
+            staff=db.session.get(self.Staff,self.sid)
+            staff.data={**staff.data,'role':'Staff','permissions':{'attendance.view':['Campus A']}}
+            for student in Student.query.all():
+                for day in (21,23,24):
+                    db.session.add(self.ops['daily'](kind='student',person_id=student.id,
+                                                    day=date(2026,11,day),status='Absent'))
+            db.session.commit()
+        self.tenant(seed)
+        self.login()
+        path='/workspace/student-follow-up'
+        with patch('student_follow_up.school_today',return_value=date(2026,11,24)):
+            page=self.c.get(path)
+        self.assertEqual(page.status_code,200)
+        self.assertIn(b'Pupil Campus A',page.data)
+        self.assertNotIn(b'Pupil Campus B',page.data)
+        self.assertNotIn(b'Log parent call',page.data)
+        self.assertEqual(self.c.post(path+'/save',data={'_csrf':self.token()}).status_code,403)
+
     def test_one_click_reports_show_only_permitted_sections(self):
         def allow():
             row=db.session.get(self.Staff,self.sid)
