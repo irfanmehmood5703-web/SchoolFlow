@@ -9,7 +9,7 @@
 </div>
 <div data-award-preview hidden><h3>Automatically Loaded Papers</h3><p data-award-scope></p><div class="table"><table><thead><tr><th>Subject</th><th>Exam Date</th><th>Paper Type</th><th>Total Marks</th><th>Time</th></tr></thead><tbody data-award-papers></tbody></table></div></div>
 <p role="status" data-award-status>Choose a class and exam type to load papers.</p>
-<details><summary>Advanced student filtering</summary><label>Student Filtering<select name="student_filter"><option value="class">Class Wise — all students</option><option value="subject">Subject Wise — enrolled students only</option></select></label></details>
+<details class="more-disclosure"><summary>Advanced student filtering</summary><label>Student Filtering<select name="student_filter"><option value="class">Class Wise — all students</option><option value="subject">Subject Wise — enrolled students only</option></select></label></details>
 <div class="form-actions"><button type="submit" disabled data-award-submit>Generate Award List</button></div>
 </form>
 <script id="award-date-sources" type="application/json">{{award_date_sources|tojson}}</script><script src="{{asset_url('award_date_import.js')}}" defer></script>

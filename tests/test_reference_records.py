@@ -73,6 +73,8 @@ class ReferenceRecordTests(unittest.TestCase):
         page = self.client.get('/records/student/new').text
         form = page.split('class="record-form"',1)[1].split('</form>',1)[0]
         primary, optional = form.split('id="student-more-details">',1)
+        self.assertIn('class="more-disclosure form-card student-more-details"', primary)
+        self.assertIn('class="more-action button secondary" id="add-document">Add Document', optional)
         for field in ('name','gender','birth_date','admission_date','father','father_cnic','phone',
                       'campus','class_name','section','group_name','academic_session','fee_plan','status'):
             self.assertIn(f'data-field="{field}"',primary)

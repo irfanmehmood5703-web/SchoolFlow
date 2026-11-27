@@ -13,8 +13,8 @@
 <section class="form-card fee-head-picker" aria-label="Add optional fee heads">
  <h2>Fee heads</h2>
  <p class="muted">Registration Fee, Admission Fee and Tuition Fee always appear in every schedule. All other charges are optional and are added only when selected.</p>
- <details data-add-fee-head-panel>
-  <summary class="button secondary fee-add-head-summary">+ Add Fee Head</summary>
+ <details class="more-disclosure" data-add-fee-head-panel>
+  <summary class="button secondary fee-add-head-summary">Add Fee Head</summary>
   <div class="fee-head-picker-controls">
    <label for="optional-head-select">Select an existing optional fee head</label>
    <select id="optional-head-select" data-optional-head-select><option value="">Choose fee head</option>{% for h in editor if h.key not in required_heads %}<option value="{{h.key}}" {{'disabled' if h.selected else ''}}>{{h.label}}</option>{% endfor %}</select>
@@ -38,7 +38,7 @@
 <input type="hidden" name="head_version_{{i}}" value="{{h.version}}">
 <div class="fields-grid">{{m.input('amount_'+i|string,'Actual amount','number','%.2f'|format(line.amount/100),true)}}{{m.input('minimum_'+i|string,'Minimum actual amount','number','%.2f'|format(line.minimum/100) if line.minimum is not none else '')}}{{m.input('maximum_'+i|string,'Maximum actual amount','number','%.2f'|format(line.maximum/100) if line.maximum is not none else '')}}</div>
 <div class="check-grid"><label><input type="checkbox" name="include_first_{{i}}" value="1" {{'checked' if line.get('include_first') else ''}}>Also include on first challan, even outside selected months</label><label><input type="checkbox" name="first_{{i}}" value="1" {{'checked' if line.first_only else ''}}>First challan only</label><label><input type="checkbox" name="override_{{i}}" value="1" {{'checked' if line.month_override else ''}}>Override the head's month selection</label></div>
-<details><summary>Allowed months when override is ticked</summary><div class="check-grid">{% for n in range(1,13) %}<label><input type="checkbox" name="months_{{i}}" value="{{n}}" {{'checked' if n in line.months else ''}}>{{months[n]}}</label>{% endfor %}</div><p>An empty override means no recurring months. Also include on first challan adds the first bill independently of those months. Only first challan remains a separate restriction.</p></details>
+<details class="more-disclosure"><summary>Allowed months when override is ticked</summary><div class="check-grid">{% for n in range(1,13) %}<label><input type="checkbox" name="months_{{i}}" value="{{n}}" {{'checked' if n in line.months else ''}}>{{months[n]}}</label>{% endfor %}</div><p>An empty override means no recurring months. Also include on first challan adds the first bill independently of those months. Only first challan remains a separate restriction.</p></details>
 <p>Scheduled yearly gross: <output data-yearly-amount>On request / by policy</output></p>
 </fieldset></section>
 {% endfor %}

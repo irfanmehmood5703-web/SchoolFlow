@@ -530,3 +530,48 @@ body:has(.exam-result-page) .school-print-header,body:has(.exam-result-page) .ex
     font-size: 12px;
   }
 }
+
+/* Optional fields and repeatable form rows use the same visible add control. */
+details.more-disclosure > summary,
+button.more-action:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #89b59e;
+  border-radius: 8px;
+  background: #eaf6ee;
+  color: #194c36;
+  font-weight: 750;
+  line-height: 1.4;
+  cursor: pointer;
+}
+button.more-action:not([hidden]) { display: inline-flex; }
+details.more-disclosure > summary { list-style: none; }
+details.more-disclosure > summary::-webkit-details-marker { display: none; }
+details.more-disclosure > summary::before,
+button.more-action::before {
+  content: "+";
+  content: "+" / "";
+  display: grid;
+  place-items: center;
+  flex: 0 0 21px;
+  height: 21px;
+  border-radius: 5px;
+  background: #176b4a;
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+}
+details.more-disclosure[open] > summary::before {
+  content: "−";
+  content: "−" / "";
+}
+details.more-disclosure[open] > summary { margin-bottom: 10px; }
+details.more-disclosure > summary:hover,
+button.more-action:not([hidden]):hover { background: #d9efdf; }
+details.more-disclosure > summary:focus-visible,
+button.more-action:focus-visible {
+  outline: 2px solid #176b4a;
+  outline-offset: 2px;
+}
