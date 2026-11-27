@@ -16,10 +16,58 @@ class ReportTests(unittest.TestCase):
     def tearDown(self):db.session.remove();db.drop_all();self.ctx.pop()
     def get(self,path):return self.c.get('/workspace/reports/'+path)
     def test_day_wise_filters_receipt_date_not_bill_month(self):
-        sep=self.get('fees/daily-fees?from=2026-09&to=2026-09&export=csv').data.decode()
-        oct=self.get('fees/daily-fees?from=2026-10&to=2026-10&export=csv').data.decode()
-        self.assertNotIn('2026-10-02,Cash,1,250,50',sep);self.assertIn('2026-10-02,Cash,1,250,50',oct)
-        self.assertNotIn('2026-10-02,Cash,1,250,50',self.get('fees/daily-fees?from=2026-10&to=2026-10&account=Bank&export=csv').data.decode())
+        path='fees/daily-fees?group_by=account&export=csv'
+        sep=self.get(path+'&from=2026-09&to=2026-09').data.decode()
+        oct=self.get(path+'&from=2026-10&to=2026-10').data.decode()
+        self.assertNotIn('2026-10-02,Cash,1,250,50',sep)
+        self.assertIn('2026-10-02,Cash,1,250,50',oct)
+        self.assertNotIn('2026-10-02,Cash,1,250,50',self.get(path+'&from=2026-10&to=2026-10&account=Bank').data.decode())
+
+    def test_daily_collection_shows_student_totals_and_receiving_details(self):
+        import csv
+        from io import BytesIO, StringIO
+        from openpyxl import load_workbook
+
+        second = Student(admission_no='R3', name='Second Pupil', class_name='Class Two', status='Active')
+        db.session.add(second)
+        db.session.flush()
+        db.session.add(self.rm['student'](student_id=self.s.id, data={
+            'family_no':'F-42','campus':'Campus A','roll_no':'0007','section':'A'}))
+        second_bill = self.m['bill'](student_id=second.id,month='2026-10',due=date(2026,10,10),
+                                     lines=[dict(particular='Tuition',amount=100000)],paid=50000)
+        db.session.add(second_bill)
+        db.session.flush()
+        for bill, amount, day, account, token, voided in (
+            (self.bill, 15000, 2, 'Bank', 'second-installment', False),
+            (second_bill, 50000, 2, 'Cash', 'other-student', False),
+            (second_bill, 99000, 2, 'Cash', 'reversed-payment', True),
+            (self.bill, 10000, 3, 'Cash', 'next-day', False),
+        ):
+            db.session.add(self.m['receipt'](student_id=bill.student_id,bill_id=bill.id,amount=amount,
+                day=date(2026,10,day),account=account,token=token,voided=voided))
+        db.session.commit()
+
+        path = 'fees/daily-fees?from=2026-10-02&to=2026-10-02'
+        html = self.get(path).data
+        for value in (b'Fictional Pupil', b'Second Pupil', b'Fictional Father', b'F-42', b'Campus A', b'0007',
+                      b'Total Fee Collected (Rs.)</span><b>900</b>', b'<tfoot>'):
+            self.assertIn(value, html)
+        self.assertNotIn(b'No Challan Pupil', html)
+
+        def csv_rows(path):
+            return list(csv.reader(StringIO(self.get(path+'&export=csv').data.decode('utf-8-sig'))))
+        headings, first, second, total = csv_rows(path)
+        self.assertEqual(headings[-3:], ['Receipts','Collected','Discount'])
+        self.assertEqual(first[headings.index('Receiving Account')], 'Bank, Cash')
+        self.assertEqual(first[-3:], ['2','400','50'])
+        self.assertEqual(second[-3:], ['1','500','0'])
+        self.assertEqual(total[-3:], ['3','900','50'])
+        bank = csv_rows(path+'&account=Bank')
+        self.assertEqual(len(bank), 3)
+        self.assertEqual(bank[-1][-3:], ['1','150','0'])
+        workbook = load_workbook(BytesIO(self.get(path+'&export=xlsx').data), data_only=True)
+        self.assertEqual(list(workbook['Report'].values)[-1][-3:], (3,900,50))
+
     def test_bill_month_report_and_no_challan_strength(self):
         text=self.get('fees/student-fees?from=2026-09&to=2026-09&export=csv').data.decode()
         self.assertIn('Fictional Pupil',text);self.assertIn(',700,',text);self.assertIn('No Challan Pupil',text)

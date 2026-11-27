@@ -71,6 +71,22 @@ class StaffAccessTests(unittest.TestCase):
         self.assertNotIn(b'data-general-widget="active-students"',self.c.get('/workspace/general/widgets').data)
         self.assertNotIn(b'data-dashboard-widget="active"',self.c.get('/workspace/dashboard').data)
 
+    def test_daily_fee_collection_is_limited_to_granted_campuses(self):
+        def save_receipts():
+            for bill in self.ops['bill'].query.all():
+                db.session.add(self.ops['receipt'](student_id=bill.student_id, bill_id=bill.id,
+                    amount=10000 if bill.student_id == 1 else 20000, day=date(2026,11,10),
+                    account='Cash in Hand', token=f'scoped-collection-{bill.id}'))
+            db.session.commit()
+        self.tenant(save_receipts)
+        self.login()
+        path = '/workspace/reports/fees/daily-fees?from=2026-11-10&to=2026-11-10'
+        report = self.c.get(path)
+        self.assertEqual(report.status_code, 200)
+        self.assertIn(b'Pupil Campus A', report.data)
+        self.assertNotIn(b'Pupil Campus B', report.data)
+        self.assertIn(b'Total Fee Collected (Rs.)</span><b>100</b>', report.data)
+
     def test_one_click_reports_show_only_permitted_sections(self):
         def allow():
             row=db.session.get(self.Staff,self.sid)

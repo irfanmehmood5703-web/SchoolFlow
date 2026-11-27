@@ -33,8 +33,8 @@ def configure_reports(app,db,Student,Employee):
     def options(category):
         values=[r.value for r in rm['settings'].query.filter_by(category=category).order_by(rm['settings'].value).all()]
         return hrm_catalog_values(category,values) if category in HRM_CATALOG_CATEGORIES else values
-    def match(person,kind='student'):
-        d=details(person,kind)
+    def match(person,kind='student',data=None):
+        d=details(person,kind) if data is None else data
         filter_keys=('campus','department','designation','gender') if kind=='employee' else ('campus','class_name','section','academic_session','gender','group_name')
         for key in filter_keys:
             values=[v for v in request.args.getlist(key) if v]
@@ -49,17 +49,77 @@ def configure_reports(app,db,Student,Employee):
         for row in rows:writer.writerow(["'"+str(x) if str(x).lstrip().startswith(('=','+','-','@')) else str(x) for x in row])
         response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"';return response
     def response(view,headers,rows,totals=None,**kw):
-        if request.args.get('export')=='csv':return export(headers,rows,view)
-        if request.args.get('export')=='xlsx':
+        export_kind = request.args.get('export')
+        if export_kind in ('csv', 'xlsx') and kw.get('total_row'):
+            rows = [*rows, kw['total_row']]
+        if export_kind=='csv':return export(headers,rows,view)
+        if export_kind=='xlsx':
             try:return report_xlsx(headers,rows,view)
             except ValueError as error:fail(str(error))
         return render_template('reports.html',title='Staff Attendance Sheet' if view=='staff-attendance-sheet' else TITLES.get(view,view),view=view,headers=headers,rows=rows,totals=totals or {},report_branding=getattr(request,'report_branding_context',{}),options=options,today=school_today().isoformat(),period_type='month' if view in FEE_REPORTS and view!='daily-fees' else 'date',**kw)
     def cash(value):return f'{value/100:,.2f}'.rstrip('0').rstrip('.')
 
+    def daily_fee_collection(start,end):
+        grouping = request.args.get('group_by', 'student')
+        if grouping not in ('student', 'account'):
+            fail('Choose a valid collection report view.')
+
+        candidates = Student.query.all()
+        profiles = app.extensions['record_helpers']['raw_many']('student', candidates)
+        students = {student.id: student for student in candidates if match(student, data=profiles[student.id])}
+        receipts = db.session.query(Receipt, Bill.month).join(Bill, Bill.id == Receipt.bill_id).filter(
+            Receipt.student_id.in_(students), Receipt.voided.is_(False), Receipt.day.between(start, end))
+        account = request.args.get('account', '')
+        if account:
+            receipts = receipts.filter(Receipt.account == account)
+
+        amounts = defaultdict(Counter)
+        accounts = defaultdict(set)
+        months = defaultdict(set)
+        for receipt, month in receipts:
+            if grouping == 'account':
+                key = (receipt.day, receipt.account)
+            else:
+                key = (receipt.day, receipt.student_id)
+                accounts[key].add(receipt.account)
+                months[key].add(month)
+            amounts[key].update(receipts=1, collected=receipt.amount, discount=receipt.discount)
+
+        totals = Counter()
+        rows = []
+        headers = ['Payment Date', 'Receiving Account', 'Receipts', 'Collected', 'Discount']
+        if grouping == 'student':
+            headers = ['Payment Date', 'SID', 'Admission No.', 'Student', 'Father / Guardian', 'Family No.',
+                       'Campus', 'Class', 'Section', 'Roll No.', 'Challan Months', 'Receiving Account',
+                       'Receipts', 'Collected', 'Discount']
+        for key, amount in sorted(amounts.items()):
+            paid_on, identity = key
+            totals.update(amount)
+            if grouping == 'account':
+                row = [paid_on.isoformat(), identity]
+            else:
+                student = students[identity]
+                info = profiles[identity]
+                row = [paid_on.isoformat(), student.id, student.admission_no, student.name,
+                       info.get('father') or student.father or '', info.get('family_no', ''),
+                       info.get('campus', ''), student.class_name or '', info.get('section', ''),
+                       info.get('roll_no', ''), ', '.join(sorted(months[key])), ', '.join(sorted(accounts[key]))]
+            rows.append([*row, amount['receipts'], cash(amount['collected']), cash(amount['discount'])])
+
+        total_row = ['Total', *([''] * (len(headers)-4)), totals['receipts'],
+                     cash(totals['collected']), cash(totals['discount'])]
+        return response('daily-fees', headers, rows,
+                        {'Total Fee Collected (Rs.)': total_row[-2], 'Total Discount (Rs.)': total_row[-1]},
+                        total_row=total_row,
+                        note='Collection is based on payment date. Discounts are shown separately from money received.')
+
     @bp.route('/fees/<view>')
     def fees(view):
         if view not in FEE_REPORTS:abort(404)
-        start,end=bounds();students={s.id:s for s in Student.query.all() if match(s)};all_bills=Bill.query.filter(Bill.student_id.in_(students)).order_by(Bill.month,Bill.id).all()
+        start,end=bounds()
+        if view=='daily-fees':
+            return daily_fee_collection(start,end)
+        students={s.id:s for s in Student.query.all() if match(s)};all_bills=Bill.query.filter(Bill.student_id.in_(students)).order_by(Bill.month,Bill.id).all()
         billing=[b for b in all_bills if start.strftime('%Y-%m')<=b.month<=end.strftime('%Y-%m')]
         receipts=Receipt.query.filter(Receipt.student_id.in_(students),Receipt.voided==False).all()
         if view=='fee-sheet':
@@ -84,13 +144,6 @@ def configure_reports(app,db,Student,Employee):
             if request.args.get('defaulters')=='1':
                 included={r[0] for r in rows};totals={k:sum(c[k] for (sid,m),c in grid.items() if sid in included) for k in totals}
             return response(view,['SID','Roll No','Student','Campus','Class','Section',*[date.fromisoformat(m+'-01').strftime('%b %Y') for m in months],'Total '+metric.title()],rows,{k.title():cash(v) for k,v in totals.items()},note='One row per student, grouped by challan month. Choose Payable, Paid, Discount or Remaining. Payments are lifetime totals against those challans; a dash means no challan. Amounts include all fee heads without guessing line allocations.')
-        if view=='daily-fees':
-            rows=[];group=defaultdict(lambda:[0,0,0]);account=request.args.get('account','')
-            for r in receipts:
-                if start<=r.day<=end and (not account or r.account==account):
-                    group[(str(r.day),r.account)][0]+=r.amount;group[(str(r.day),r.account)][1]+=r.discount;group[(str(r.day),r.account)][2]+=1
-            for (day,account),values in sorted(group.items()):rows.append([day,account,values[2],cash(values[0]),cash(values[1])])
-            return response(view,['Payment Date','Receiving Account','Receipts','Collected','Discount'],rows,dict(Collected=cash(sum(v[0] for v in group.values())),Discount=cash(sum(v[1] for v in group.values()))))
         if view=='class-fees':
             helpers=app.extensions['fee_setup_helpers']
             requested=helpers['resolve'](request.args.get('particular',''))

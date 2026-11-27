@@ -322,7 +322,7 @@ GUIDES = {
 # Reports share the actual filter → submit → inspect → export workflow.
 for key, subject, note in [
     ('fee-report', 'saved challan amounts, payments, discounts and remaining balances', ''),
-    ('daily-fees', 'payments received on each selected date', 'Payment dates and challan months answer different questions.'),
+    ('daily-fees', 'student-wise payments and total collections for the selected dates', 'Choose Account-wise summary for totals by receiving account. Discounts appear separately from received fees.'),
     ('class-fees', 'class and fee-particular totals', 'Do not infer a per-head cash allocation from a mixed-head bill.'),
     ('student-fees', 'each student’s fee-payment status for the selected month', 'Student counts are different from currency totals; use the report explanation for the categories.'),
     ('defaulters', 'students with remaining fee amounts', ''),
