@@ -138,7 +138,7 @@ GUIDES = {
         note='An active Teacher account automatically receives assigned-class app access. Additional web permissions remain separate.'),
     'salary-plans': guide('Create a salary plan and send it for approval.',
         'Choose the employee and enter basic salary, security amounts and applicable pay heads.',
-        'Choose monthly or lecture-wise options and configure explicit attendance deduction rules.',
+        'Choose monthly or lecture-wise options and configure each attendance deduction separately. Allowed days are free of that status’s deduction each salary month; leave allowance never offsets Absent or Late.',
         'Use Preview rules without saving to check the interpretation.',
         'Save plan for approval, then approve the correct selected plan before generating salary.',
         note='Joining-month pay uses the saved working calendar. Approved manual increments are optional; automatic annual increments and Sandwich Leave remain off.'),
