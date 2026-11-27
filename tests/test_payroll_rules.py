@@ -118,6 +118,45 @@ class PayrollRuleWorkflowTests(unittest.TestCase):
         self.assertEqual(self.ops['workflow'].query.count(),1)
         self.assertEqual(plan.status,'Pending')
         self.assertEqual(plan.data['basic'],1200000)
+    def test_monthly_paid_leave_is_separate_from_absence_and_late_deductions(self):
+        # 20 working days, Rs 20,000 salary: absence costs Rs 1,000,
+        # late costs Rs 250, and the first two recorded leaves cost nothing.
+        data=dict(_csrf=self.csrf,employee_id=str(self.e.id),basic='20000',
+                  type_0='Percent',deduction_0='100',allowed_0='0',
+                  type_1='Percent',deduction_1='25',allowed_1='0',
+                  type_2='Percent',deduction_2='100',allowed_2='2',
+                  type_3='Percent',deduction_3='50',allowed_3='1',
+                  preview_working_days='20',preview_count_0='1',
+                  preview_count_1='2',preview_count_2='2',preview_count_3='1')
+        preview=self.c.post('/workspace/salary-plans',data={**data,'action':'preview'})
+        self.assertEqual(preview.status_code,200)
+        self.assertIn(b'No-deduction days used',preview.data)
+        self.assertIn(b'Leave allowed days without deduction',preview.data)
+        self.assertEqual(self.ops['workflow'].query.count(),0)
+        self.assertEqual(self.c.post('/workspace/salary-plans',data={**data,'action':'save'}).status_code,302)
+        plan=self.ops['workflow'].query.one()
+        self.assertEqual(self.c.post('/workspace/salary-plans',data={'_csrf':self.csrf,'action':'approve','ids':str(plan.id)}).status_code,302)
+        cal=app.extensions['payroll_calendar_model']
+        for month_number,leave_count,expected in ((9,2,150000),(10,3,250000)):
+            month=f'2026-{month_number:02d}'
+            dates=[date(2026,month_number,day) for day in range(1,21)]
+            db.session.add(cal(month=month,working_dates=[d.isoformat() for d in dates]))
+            statuses=['Absent','Late','Late']+['Leave']*leave_count+['Short Leave']
+            for day,status in zip(dates,statuses):
+                db.session.add(self.ops['daily'](kind='staff',person_id=self.e.id,day=day,status=status))
+            db.session.commit()
+            response=self.c.post('/workspace/payroll',data=dict(_csrf=self.csrf,action='generate',month=month,employee_ids=str(self.e.id),attendance_based='on'))
+            self.assertEqual(response.status_code,302)
+            salary=self.ops['salary'].query.filter_by(month=month).one()
+            rules={r['status']:r for r in salary.detail['attendance']}
+            self.assertEqual((rules['Absent']['count'],rules['Absent']['amount']),(1,100000))
+            self.assertEqual((rules['Late']['count'],rules['Late']['amount']),(2,50000))
+            self.assertEqual((rules['Leave']['count'],rules['Leave']['allowed'],rules['Leave']['amount']),(leave_count,2,(leave_count-2)*100000))
+            self.assertEqual(rules['Short Leave']['amount'],0)
+            self.assertEqual((salary.deductions,salary.net),(expected,2000000-expected))
+            page=self.c.get(f'/workspace/payroll?month={month}').get_data(as_text=True)
+            self.assertIn('<th>Absent</th><th>Leave</th><th>Late</th>',page)
+            self.assertIn(f'data-attendance-status="Leave"><strong>{leave_count} days</strong><br><small>2 allowed free',page)
     def test_preview_saves_nothing_and_actual_approved_payroll_uses_the_rule(self):
         response=self.c.post('/workspace/salary-plans',data=self.form(action='preview'));self.assertEqual(response.status_code,200);self.assertRegex(response.data,rb'(?<![\d,.])150\.5(?![\d,.])');self.assertIn(b'Unsaved attendance deduction preview',response.data)
         self.assertEqual(self.ops['workflow'].query.count(),0);self.assertEqual(self.ops['salary'].query.count(),0);self.assertEqual(self.ops['audit'].query.count(),0)
