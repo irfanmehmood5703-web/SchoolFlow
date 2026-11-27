@@ -51,6 +51,22 @@ class HowToTests(unittest.TestCase):
         self.assertNotIn(b'<script>no-such-guide', page.data)
         self.assertEqual(self.client.get('/workspace/how-to?category=Front%20Desk').status_code, 404)
 
+    def test_sidebar_tool_guides_are_searchable_and_open_the_correct_screen(self):
+        for query, slug, endpoint, detail in (
+            ('Class Cover', 'class-cover', 'class_cover.index', b'Teacher App'),
+            ('Student Follow-up', 'student-follow-up', 'student_follow_up.index', b'Call again'),
+            ('One-Click Reports', 'one-click-reports', 'ops.dashboard', b'Total collected'.lower()),
+        ):
+            with self.subTest(guide=slug):
+                path = '/workspace/how-to/' + slug
+                results = self.client.get('/workspace/how-to', query_string={'q': query})
+                self.assertIn(f'href="{path}"'.encode(), results.data)
+                guide = self.client.get(path)
+                self.assertEqual(guide.status_code, 200)
+                self.assertIn(detail, guide.data)
+                destination = app.url_map.bind('localhost').build(endpoint)
+                self.assertIn(f'class="button" href="{destination}"'.encode(), guide.data)
+
     def test_all_visible_articles_open_and_excluded_features_stay_out(self):
         with app.test_request_context('/workspace/how-to'):
             articles = app.extensions['how_to_catalogue']()
