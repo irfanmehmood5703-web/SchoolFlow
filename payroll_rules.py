@@ -50,7 +50,7 @@ def deduction(rule,count,monthly_basic,working_days):
     if rule.get('frequency','Recursive')=='Once':events=min(events,1)
     if cap=='events':events=min(events,limit)
     if rule.get('type','Abs')=='Percent' and events:
-        if not working_days:raise ValueError('Choose the working-day count before previewing a percentage deduction.')
+        if not working_days:raise ValueError('Choose the salary-paid day count before previewing a percentage deduction.')
         amount=int((Decimal(monthly_basic)*rule['amount']*events/10000/working_days).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
     else:amount=rule.get('amount',0)*events
     before_cap=amount

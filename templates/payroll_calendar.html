@@ -1,1 +1,31 @@
-{% extends 'base.html' %}{% import 'ops_macros.html' as m with context %}{% block content %}{{m.heading(title,'Set the actual working dates for this school. Uncheck weekly days off and holidays.')}}<div class="heading-actions"><a class="button secondary" href="{{url_for('ops.payroll',month=month)}}">Salary workspace</a></div><form method="get" class="form-card">{{m.input('month','Calendar month','month',month,true)}}<button>Load month</button></form><form method="post" class="form-card">{{m.csrf()}}<input type="hidden" name="month" value="{{month}}"><input type="hidden" name="version" value="{{version}}"><h2>Working dates · {{month}}</h2><p>No weekly holidays are assumed. Select the weekdays below as a shortcut, then uncheck individual holidays before saving.</p><div class="check-grid">{% for name in weekdays %}<label class="check"><input type="checkbox" data-working-weekday value="{{loop.index0}}">{{name}}</label>{% endfor %}</div><button type="button" class="button secondary" id="apply-working-weekdays">Select dates for these weekdays</button><div class="working-calendar">{% for day in days %}<label class="check"><input type="checkbox" name="working_dates" value="{{day.isoformat()}}" data-weekday="{{day.weekday()}}" {{'checked' if day.isoformat() in selected else ''}}>{{day.strftime('%d %b · %a')}}</label>{% endfor %}</div><p><strong>{{selected|length}} saved working days.</strong> The calculation includes the joining date when it is a working day. Security returns/deductions and actual lecture pay are separate from basic-salary proration.</p><button>Save working calendar</button></form><script src="{{asset_url('payroll_calendar.js')}}" defer></script>{% endblock %}
+{% extends 'base.html' %}
+{% import 'ops_macros.html' as m with context %}
+{% block content %}
+{{m.heading(title,'Set salary-paid days separately from attendance working dates.')}}
+<div class="heading-actions"><a class="button secondary" href="{{url_for('ops.payroll',month=month)}}">Salary workspace</a></div>
+<form method="get" class="form-card">{{m.input('month','Calendar month','month',month,true)}}<button>Load month</button></form>
+<form method="post" class="form-card">
+  {{m.csrf()}}
+  <input type="hidden" name="month" value="{{month}}">
+  <input type="hidden" name="version" value="{{version}}">
+  <h2>Salary pay basis · {{month}}</h2>
+  <p>Choose which days are included in monthly basic salary and its daily rate.</p>
+  <div class="check-grid">
+    <label class="check"><input type="radio" name="pay_basis" value="calendar_days" {{'checked' if pay_basis=='calendar_days' else ''}}> <strong>All calendar days (paid Sundays &amp; holidays)</strong></label>
+    <label class="check"><input type="radio" name="pay_basis" value="working_days" {{'checked' if pay_basis=='working_days' else ''}}> Working dates only</label>
+  </div>
+  <p>With all calendar days selected, a school weekly holiday is paid even when it is not an attendance working day. An employee's own absence, late arrival or leave is handled separately by their approved salary plan: allowed days are paid and excess days follow the configured deduction.</p>
+  <div class="fields-grid">
+    <div class="form-card"><strong id="salary-paid-count">{{days|length if pay_basis=='calendar_days' else selected|length}}</strong><p>Salary-paid days / daily salary divisor</p></div>
+    <div class="form-card"><strong id="attendance-working-count">{{selected|length}}</strong><p>Attendance working days selected</p></div>
+  </div>
+  <h2>Working dates (attendance only)</h2>
+  <p>Select the actual school working dates. Uncheck Sundays or school holidays when attendance is not required. This does not remove their pay when all calendar days are selected.</p>
+  <div class="check-grid">{% for name in weekdays %}<label class="check"><input type="checkbox" data-working-weekday value="{{loop.index0}}">{{name}}</label>{% endfor %}</div>
+  <button type="button" class="button secondary" id="apply-working-weekdays">Select dates for these weekdays</button>
+  <div class="working-calendar">{% for day in days %}<label class="check"><input type="checkbox" name="working_dates" value="{{day.isoformat()}}" data-weekday="{{day.weekday()}}" {{'checked' if day.isoformat() in selected else ''}}>{{day.strftime('%d %b · %a')}}</label>{% endfor %}</div>
+  <p><strong>{{selected|length}} saved attendance working days.</strong> Joining-month pay includes salary-paid dates on or after the joining date. Saving does not change existing generated salaries.</p>
+  <button>Save working calendar</button>
+</form>
+<script src="{{asset_url('payroll_calendar.js')}}" defer></script>
+{% endblock %}
