@@ -184,3 +184,14 @@ STANDARD_CHOICES = {
     "employment_type": ["Full Time", "Part Time", "Contract", "Temporary", "Visiting"],
     "pay_mode": ["Cash", "Bank Transfer", "Cheque"],
 }
+
+
+# HRM consumers must read the same built-in choices as the employee form.
+# A school may also define its own options; no catalog rows are inserted on GET.
+HRM_CATALOG_CATEGORIES = frozenset(("department", "designation_group", "designation", "employment_type", "pay_mode"))
+
+
+def hrm_catalog_values(category, configured):
+    """Merge built-in HRM values with the current institute's saved catalog."""
+    defaults = STANDARD_CHOICES.get(category, ()) if category in HRM_CATALOG_CATEGORIES else ()
+    return sorted(set(configured).union(defaults), key=lambda value: (value.casefold(), value))

@@ -7,6 +7,7 @@ from decimal import Decimal,InvalidOperation
 from flask import Blueprint,abort,redirect,render_template,request,url_for
 from module_catalog import TITLES
 from report_exports import report_xlsx
+from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
 
 FEE_REPORTS={'fee-sheet','fee-report','daily-fees','class-fees','student-fees','defaulters','family-defaulters','monthly-defaulters','fee-reminder'}
 ATTENDANCE_REPORTS={'combined-attendance','daily-attendance','individual-attendance','attendance-summary','absentees','attendance-sheet','staff-attendance-report','staff-attendance-sheet'}
@@ -29,7 +30,9 @@ def configure_reports(app,db,Student,Employee):
         if a>b:fail('From must precede To.')
         if (b-a).days>3660:fail('Choose a range of at most ten years.')
         return a,b
-    def options(category):return [r.value for r in rm['settings'].query.filter_by(category=category).order_by(rm['settings'].value).all()]
+    def options(category):
+        values=[r.value for r in rm['settings'].query.filter_by(category=category).order_by(rm['settings'].value).all()]
+        return hrm_catalog_values(category,values) if category in HRM_CATALOG_CATEGORIES else values
     def match(person,kind='student'):
         d=details(person,kind)
         filter_keys=('campus','department','designation','gender') if kind=='employee' else ('campus','class_name','section','academic_session','gender','group_name')

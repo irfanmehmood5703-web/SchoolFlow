@@ -9,6 +9,7 @@ from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from student_performance_schema import PERFORMANCE_CATEGORIES
+from record_schema import HRM_CATALOG_CATEGORIES, hrm_catalog_values
 from payroll_calendar import joining_pay, all_present_bonus
 from module_catalog import MENUS, TITLES, SCHEMAS, STATUSES
 from itsdangerous import BadData,URLSafeTimedSerializer
@@ -172,6 +173,8 @@ def configure_operations(app, db, Student, Employee):
             values=[(str(x.id),x.name) for x in cls.query.order_by(cls.name).all() if kind!='teacher' or 'teacher' in (x.role or '').lower()]
         else:
             values=[(x.value,x.value) for x in rm['settings'].query.filter_by(category=kind).order_by(rm['settings'].value).all()]
+            if kind in HRM_CATALOG_CATEGORIES:
+                values=[(v,v) for v in hrm_catalog_values(kind,(v for v,_ in values))]
             if kind=='subject' and app.extensions.get('school_settings_helpers'):
                 order={r.name:i for i,r in enumerate(app.extensions['school_settings_helpers']['items']('subject'))}
                 values.sort(key=lambda item:(order.get(item[0],1000000),item[0]))
