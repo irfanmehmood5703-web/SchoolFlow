@@ -167,11 +167,12 @@ class ParentAppTests(unittest.TestCase):
         self.seed_app();p=self.parent();M=app.extensions['parent_study_models']
         self.assertEqual(self.action(p,'submission',dict(item=self.assignment,body='Existing answer')).status_code,302)
         engine=self.H['engine'](self.school)
+        schema=engine.get_execution_options().get('schema_translate_map',{}).get(None)
         # Simulate a fictional school upgrading from the old schema.
         with engine.begin() as conn:M['submission_file'].__table__.drop(conn)
-        self.assertFalse(inspect(engine).has_table(M['submission_file'].__tablename__))
+        self.assertFalse(inspect(engine).has_table(M['submission_file'].__tablename__,schema=schema))
         self.H['create_workspace'](engine)
-        self.assertTrue(inspect(engine).has_table(M['submission_file'].__tablename__))
+        self.assertTrue(inspect(engine).has_table(M['submission_file'].__tablename__,schema=schema))
         self.assertIn(b'Existing answer',self.page(p,'assignments').data)
         def new_assignment():
             item=M['item'](kind='assignments',title='Second assignment',campus='North',class_name='One',section='A',subject='Math',body='New work',starts=school_today(),ends=school_today()+timedelta(days=1),published=True,token=secrets.token_urlsafe(32))
