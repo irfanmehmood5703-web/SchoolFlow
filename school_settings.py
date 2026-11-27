@@ -14,7 +14,7 @@ from certificates import clean_html as clean_base_html
 from branding_values import make_branding_values, expand_tags, missing_tags
 from record_schema import EMPLOYEE_SECTIONS
 from exam_enrollment import included,recorded
-from school_clock import normalize_clock,attendance_clock
+from school_clock import normalize_clock,attendance_clock,school_today
 
 def clean_html(value):
     return clean_base_html(value,report_assets=True)
@@ -965,7 +965,7 @@ def configure_school_settings(app,db,Student,Employee):
 
     @bp.route('/hrm/monthly-attendance',methods=['GET','POST'])
     def monthly_attendance():
-        month=request.values.get('month',date.today().strftime('%Y-%m'))
+        month=request.values.get('month',school_today().strftime('%Y-%m'))
         if not re.fullmatch(r'\d{4}-\d{2}',month):raise ValueError('Choose a month.')
         first=date.fromisoformat(month+'-01');dates=[first+timedelta(days=i) for i in range(calendar.monthrange(first.year,first.month)[1])]
         employee_id=request.values.get('employee_id','');employees=Employee.query.order_by(Employee.name).all();person=next((e for e in employees if str(e.id)==employee_id),None)
@@ -975,21 +975,31 @@ def configure_school_settings(app,db,Student,Employee):
             if not person:raise ValueError('Choose an employee.')
             attendance_guard('staff',first,monthly=True)
             for d in dates:
-                status=value('status_'+d.isoformat())
+                field='status_'+d.isoformat()
+                if field not in request.form:continue
+                status=value(field)
                 old=ops['daily'].query.filter_by(kind='staff',person_id=person.id,day=d).first()
+                if request.form.get('monthly_grid')=='1':
+                    original=request.form.get('original_'+d.isoformat())
+                    if original!=(old.status if old else ''):raise ValueError('Attendance has changed. Reload the month before saving.')
                 if status==(old.status if old else ''):continue
                 attendance_guard('staff',d)
                 if status and not app.extensions['attendance_control_helpers']['allowed']('staff',status,old.status if old else None):raise ValueError('Choose an active attendance status.')
                 if not status:
-                    if old:db.session.delete(old)
-                elif old:old.status=status
+                    if old:
+                        mark=app.extensions['attendance_device_models']['mark'].query.filter_by(daily_id=old.id).first()
+                        if mark or old.time_in or old.time_out or old.lectures:raise ValueError('Timed, lecture-linked or scanned attendance cannot be cleared here. Correct its status instead.')
+                        db.session.delete(old)
+                elif old:
+                    old.status=status
+                    app.extensions['attendance_device_helpers']['manual_write'](old)
                 else:db.session.add(ops['daily'](kind='staff',person_id=person.id,day=d,status=status))
             audit('Save monthly staff attendance',employee=person.id,month=month);commit()
             return redirect(url_for('school_settings.monthly_attendance',month=month,employee_id=person.id))
         existing={r.day.isoformat():r for r in ops['daily'].query.filter_by(kind='staff',person_id=person.id).filter(ops['daily'].day>=dates[0],ops['daily'].day<=dates[-1]).all()} if person else {}
         details=app.extensions['record_helpers']['raw_many']('employee',[person]).get(person.id,{}) if person else {}
         values=tag_values['employee'](person,details) if person else {};values.update(salary_month=month,date=month)
-        return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',branding_values=values,details=details,employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses)
+        return render_template('monthly_staff_attendance.html',title='Monthly Staff Attendance',branding_values=values,details=details,employees=employees,person=person,month=month,dates=dates,existing=existing,statuses=statuses,today=school_today(),codes={'Present':'P','Absent':'A','Late':'L','Leave':'LV','Short Leave':'SL','Off Day':'OD','Death Leave':'DL','Paper Leave':'PL'})
 
     app.extensions['school_settings_helpers']=dict(result_rows=result_rows,config=config,items=items,employee_sections=employee_sections,employee_validate=employee_validate,attendance_guard=attendance_guard,shift=resolved_shift,subject_allowed=subject_allowed,subject_config=subject_config,register_catalog_subject=register_catalog_subject,default_exam_branding=default_exam_branding,direct_choices=direct_choices,exam_types=exam_types,grade=grade_for,branding=branding,expand=expand,tags=tags,campus_values=campus_values,message_snapshots=message_snapshots)
     app.register_blueprint(bp)
