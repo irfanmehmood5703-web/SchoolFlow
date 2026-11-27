@@ -1,8 +1,8 @@
 <div class="workspace-sidebar no-print" data-workspace-sidebar>
   <button class="workspace-nav-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="true">Management</button>
   <nav class="workspace-navigation" id="workspace-navigation" aria-label="Main navigation">
+    <a class="workspace-dashboard-link" href="/workspace/dashboard"{% if request.endpoint == 'ops.dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
     <p class="workspace-sidebar-heading">Management</p>
-    <a href="/workspace/dashboard"{% if request.endpoint == 'ops.dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
     {% for module, groups in module_menus.items() %}
     <details class="workspace-module">
       <summary>{{module}}</summary>

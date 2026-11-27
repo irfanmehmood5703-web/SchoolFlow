@@ -12,6 +12,16 @@
     overflow-wrap: anywhere;
   }
   .app-header .brand-account { flex-wrap: wrap; }
+  .workspace-account-menu > summary {
+    border: 1px solid #ffffff55;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+  .workspace-account-menu .menu-panel {
+    left: auto;
+    right: 0;
+    width: 160px;
+  }
   .workspace-shell {
     display: grid;
     grid-template-columns: 232px minmax(0, 1fr) 166px;
@@ -35,17 +45,48 @@
     display: grid;
     gap: 5px;
   }
-  .workspace-navigation > a,
   .workspace-module > summary {
-    display: block;
+    display: list-item;
     padding: 11px 12px;
+    border: 1px solid #d7e7dd;
+    background: #f3f8f5;
+    list-style-position: inside;
+    font-size: 14px;
     border-radius: 8px;
     color: #1c4435;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1.35;
   }
   .workspace-module > summary { cursor: pointer; }
-  .workspace-module[open] > summary { background: #f0f7f2; }
+  .workspace-module[open] > summary {
+    background: #e2f2e9;
+    border-color: #a9cfb9;
+  }
+  .workspace-navigation .workspace-dashboard-link {
+    display: block;
+    margin-bottom: 10px;
+    padding: 13px 14px;
+    border-radius: 8px;
+    background: #155a42;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .workspace-navigation .workspace-dashboard-link:hover {
+    background: #104834;
+    text-decoration: none;
+  }
+  .workspace-navigation .workspace-dashboard-link[aria-current="page"] {
+    background: #104834;
+    color: #fff;
+    box-shadow: inset 4px 0 #81dab1;
+  }
+  .workspace-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
   .workspace-module-links { padding: 3px 0 5px 12px; }
   .workspace-module-links p {
     margin: 10px 8px 3px;
@@ -94,7 +135,7 @@
 
 @media screen {
   .workspace-sidebar-heading {
-    margin: 0 12px 8px;
+    margin: 0 12px 4px;
     color: #48685a;
     font-size: 12px;
     font-weight: 750;
