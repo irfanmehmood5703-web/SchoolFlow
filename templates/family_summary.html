@@ -1,0 +1,16 @@
+<section class="form-card" aria-label="Family details">
+  <h2>Family {{family_summary.number}}{% if family_summary.guardian %} · {{family_summary.guardian}}{% endif %}</h2>
+  {% if family_summary.mobile %}<p>Guardian mobile {{family_summary.mobile}}</p>{% endif %}
+  <div class="table"><table>
+    <thead><tr><th>Student / SID</th><th>Class</th><th>Status</th>{% if family_summary.show_fees %}<th>Payable</th><th>Discount</th><th>Paid</th><th>Remaining</th>{% endif %}</tr></thead>
+    <tbody>
+      {% for pupil, fees in family_summary.members %}
+      <tr><td>{{pupil.name}} · {{pupil.id}}</td><td>{{pupil.class_name or '—'}}</td><td>{{pupil.status}}</td>
+      {% if family_summary.show_fees %}{% for amount in fees %}<td>{{amount|cash}}</td>{% endfor %}{% endif %}</tr>
+      {% else %}<tr><td colspan="{{7 if family_summary.show_fees else 3}}">No linked students.</td></tr>{% endfor %}
+    </tbody>
+    {% if family_summary.show_fees %}
+    <tfoot><tr><th scope="row" colspan="3">Family total · {{family_summary.period}}</th>{% for amount in family_summary.totals %}<td><strong>{{amount|cash}}</strong></td>{% endfor %}</tr></tfoot>
+    {% endif %}
+  </table></div>
+</section>

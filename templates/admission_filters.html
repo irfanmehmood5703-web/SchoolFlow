@@ -14,9 +14,9 @@
 </label>
 {% endmacro %}
 
-{% macro fee_students(choices, campus_values=none, class_values=none, student_status=false) %}
+{% macro fee_students(choices, campus_values=none, class_values=none, student_status=false, include_family=true) %}
   {% for key,label in [('sid','SID'),('admission_no','Admission No.'),('roll_no','Roll No.'),('student_name','Student Name'),('father','Father / Guardian'),('mobile','Mobile'),('family_no','Family No.')] %}
-    {{field(key,label)}}
+    {% if key != "family_no" or include_family %}{{field(key,label)}}{% endif %}
   {% endfor %}
   {% for key,label in [('campus','Campus'),('class_name','Class'),('section','Section'),('group_name','Group'),('academic_session','Session'),('gender','Gender')] %}
     {% set values = choices.get(key,[]) %}

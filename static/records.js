@@ -134,26 +134,43 @@ document.addEventListener('DOMContentLoaded', () => {
   const familySelect = document.getElementById('family_id');
   const familyMode = document.getElementById('family_mode');
   const feedback = document.getElementById('family-feedback');
+  const familySummary = document.getElementById('family-fee-summary');
   let familyRequest;
-  familySelect?.addEventListener('change', async () => {
-    if (!familySelect.value) return;
+  async function loadFamily(fillFields) {
     familyRequest?.abort();
+    familySummary?.replaceChildren();
+    if (!familySelect.value || (!fillFields && familyMode.value !== 'existing')) return;
     familyRequest = new AbortController();
-    familyMode.value = 'existing';
+    const signal = familyRequest.signal;
+    if (fillFields) familyMode.value = 'existing';
     feedback.textContent = 'Loading family details…';
     try {
-      const response = await fetch(`/records/families/${encodeURIComponent(familySelect.value)}`, {signal: familyRequest.signal});
+      const response = await fetch(`/records/families/${encodeURIComponent(familySelect.value)}`, {signal});
       if (!response.ok) throw new Error('Could not load family');
       const family = await response.json();
-      Object.entries(family).forEach(([key, value]) => {
+      if (fillFields) Object.entries(family).forEach(([key, value]) => {
         const field = document.getElementById(key);
         if (field) field.value = value || '';
       });
       feedback.textContent = 'Existing family linked. Its saved information will be used when saving this student.';
+      if (familySummary) {
+        const url = new URL(familySummary.dataset.url, window.location.origin);
+        url.searchParams.set('family_no', family.family_no);
+        const summary = await fetch(url, {signal});
+        if (summary.ok) {
+          const html = await summary.text();
+          if (!signal.aborted) familySummary.innerHTML = html;
+        } else if (summary.status !== 403) {
+          familySummary.textContent = 'Family fee details could not be loaded.';
+        }
+      }
     } catch (error) {
       if (error.name !== 'AbortError') feedback.textContent = 'Could not load the family. Select it again before saving.';
     }
-  });
+  }
+  familySelect?.addEventListener('change', () => loadFamily(true));
+  familyMode?.addEventListener('change', () => loadFamily(false));
+  if (familySelect?.value) loadFamily(false);
   const classSelect = document.getElementById('class_name');
   const subjects = document.getElementById('subjects');
   const subjectCheckboxes = document.getElementById('subject-checkboxes');

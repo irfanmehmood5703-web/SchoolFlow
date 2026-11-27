@@ -643,22 +643,76 @@ def configure_operations(app, db, Student, Employee):
     def approve_students():
         return app.extensions['admission_capacity']['review']()
 
+    def family_options():
+        choices = {family.number: family.data.get('father', '')
+                   for family in rm['family'].query.all()}
+        detail = rm['student']
+        number = detail.data['family_no'].as_string()
+        legacy_numbers = db.session.query(number).select_from(Student).join(detail, detail.student_id == Student.id).filter(
+            detail.family_id.is_(None), number.is_not(None), number != '').distinct()
+        for (value,) in legacy_numbers:
+            choices.setdefault(value, '')
+        return sorted(choices.items())
+
+    def family_summary(number, start='', end='', show_fees=True):
+        if not number:
+            return None
+        family = rm['family'].query.filter_by(number=number).first()
+        detail = rm['student']
+        members = Student.query.join(detail, detail.student_id == Student.id)
+        if family:
+            members = members.filter((detail.family_id == family.id) |
+                (detail.family_id.is_(None) & (detail.data['family_no'].as_string() == number)))
+        else:
+            members = members.filter(detail.family_id.is_(None), detail.data['family_no'].as_string() == number)
+        pupils = members.order_by(Student.name, Student.id).all()
+        if not family and not pupils:
+            return None
+        amounts = {pupil.id: [0, 0, 0, 0] for pupil in pupils}
+        bills = []
+        if show_fees and pupils:
+            query = Bill.query.filter(Bill.student_id.in_(amounts))
+            if start:
+                query = query.filter(Bill.month >= start)
+            if end:
+                query = query.filter(Bill.month <= end)
+            bills = query.order_by(Bill.month, Bill.id).all()
+            for bill in bills:
+                bucket = amounts[bill.student_id]
+                for index, amount in enumerate((bill.total, bill.discount, bill.paid, bill.remaining)):
+                    bucket[index] += amount
+        data = family.data if family else {}
+        period = (start if start == end else f'{start or "Earliest"} to {end or "Latest"}') if start or end else 'All months'
+        return dict(number=number, guardian=data.get('father'), mobile=data.get('phone'),
+                    members=[(pupil, amounts[pupil.id]) for pupil in pupils], bills=bills,
+                    totals=[sum(bucket[index] for bucket in amounts.values()) for index in range(4)],
+                    show_fees=show_fees, period=period)
+
+    def challan_period():
+        if single := request.args.get('bill_month'):
+            return month(single), month(single)
+        start = request.args.get('bill_month_from', '')
+        end = request.args.get('bill_month_to', '')
+        if start:
+            start = month(start)
+        if end:
+            end = month(end)
+        if start and end and start > end:
+            raise ValueError('The start month must be before or equal to the end month.')
+        return start, end
+
     def filtered_bills(mode='payments'):
         students=app.extensions['record_helpers']['filter_students'](include_search=False)
         if mode=='inactive-fees':students=students.filter(Student.status!='Active')
         elif mode in ('payments','challans'):students=students.filter(Student.status=='Active')
         query=Bill.query.filter(Bill.student_id.in_(students.with_entities(Student.id)))
-        if billing_month:=request.args.get('bill_month',''):
-            query=query.filter(Bill.month==month(billing_month))
-        elif mode=='payments':
-            start_month=request.args.get('bill_month_from','')
-            end_month=request.args.get('bill_month_to','')
-            if start_month:
-                query=query.filter(Bill.month>=month(start_month))
-            if end_month:
-                query=query.filter(Bill.month<=month(end_month))
-            if start_month and end_month and start_month>end_month:
-                raise ValueError('The start month must be before or equal to the end month.')
+        start, end = challan_period() if mode in ('payments','challans') else ('','')
+        if mode not in ('payments','challans') and request.args.get('bill_month'):
+            start = end = month(request.args['bill_month'])
+        if start:
+            query=query.filter(Bill.month>=start)
+        if end:
+            query=query.filter(Bill.month<=end)
         rows=query.order_by(Bill.id.desc()).all()
         if state:=request.args.get('bill_status',''):
             rows=[b for b in rows if b.state==state]
@@ -667,6 +721,15 @@ def configure_operations(app, db, Student, Employee):
             family_numbers=app.extensions['record_helpers']['family_numbers'](b.student_id for b in rows)
             rows=[b for b in rows if q in str(b.id) or q in db.session.get(Student,b.student_id).name.lower() or q in (family_numbers.get(b.student_id) or '').lower()]
         return rows
+
+    @bp.get('/family-fee-summary')
+    def family_fee_summary():
+        summary = family_summary(request.args.get('family_no', '').strip()[:160])
+        if summary is None:
+            abort(404)
+        response = make_response(render_template('family_summary.html', family_summary=summary))
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
 
     @bp.route('/fees/<mode>')
     def fees(mode):
@@ -686,7 +749,10 @@ def configure_operations(app, db, Student, Employee):
             status_students = query.order_by(Student.id.desc()).limit(100).all()
         family_groups=[]
         family_by_student={}
-        if mode=='payments':
+        selected_family=request.args.get('family_no','').strip()[:160]
+        family_context=mode in ('payments','challans')
+        summary=family_summary(selected_family,*challan_period()) if family_context and selected_family else None
+        if family_context:
             family_by_student=app.extensions['record_helpers']['family_numbers'](b.student_id for b in rows)
             groups={}
             for bill in rows:
@@ -695,7 +761,7 @@ def configure_operations(app, db, Student, Employee):
                 group=groups.setdefault(key,dict(family_no=family_no,bills=[]))
                 group['bills'].append(bill)
             family_groups=list(groups.values())
-        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,family_groups=family_groups,family_by_student=family_by_student,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students,filter_choices=app.extensions['record_helpers']['choices']())
+        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,family_groups=family_groups,family_by_student=family_by_student,family_context=family_context,family_summary=summary,family_options=family_options() if family_context else [],selected_family=selected_family,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students,filter_choices=app.extensions['record_helpers']['choices']())
 
     @bp.route('/generate-challans',methods=['GET','POST'])
     def generate_challans():
@@ -2003,10 +2069,10 @@ def configure_operations(app, db, Student, Employee):
     def batch_payment():
         family_mode=request.path.endswith('family-payment');rows=[]
         query=request.values.get('number','').strip();lookup=request.values.get('lookup','sid')
+        summary=family_summary(query) if family_mode and query else None
         if query:
             if family_mode:
-                ids=[p.id for p in Student.query.all() if str(details(p).get('family_no',''))==query]
-                rows=Bill.query.filter(Bill.student_id.in_(ids)).order_by(Bill.month,Bill.id).all()
+                rows=summary['bills'] if summary else []
             elif lookup=='challan':
                 if not query.isdigit(): raise ValueError('Enter a numeric challan number.')
                 b=db.session.get(Bill,int(query));rows=[b] if b else []
@@ -2031,7 +2097,7 @@ def configure_operations(app, db, Student, Employee):
             if not saved: raise ValueError('Enter at least one payment amount.')
             if request.form.get('action')=='send': queue('Fee receipt',list(set(saved)))
             audit('Family payment' if family_mode else 'Direct payment',students=saved,changes=changes);commit();flash('Payments saved.','success');return redirect(url_for('ops.history'))
-        return render('batch_payment.html',title='Family-wise Payment' if family_mode else 'Direct Payment',family_mode=family_mode,number=query,lookup=lookup,rows=rows,student=lambda id:db.session.get(Student,id),line_remaining={b.id:payment_particulars(b) for b in rows},token=secrets.token_urlsafe(24))
+        return render('batch_payment.html',title='Family-wise Payment' if family_mode else 'Direct Payment',family_mode=family_mode,number=query,lookup=lookup,rows=rows,family_summary=summary,family_options=family_options() if family_mode else [],student=lambda id:db.session.get(Student,id),line_remaining={b.id:payment_particulars(b) for b in rows},token=secrets.token_urlsafe(24))
 
     @bp.route('/setup-demo',methods=['POST'])
     def setup_demo():

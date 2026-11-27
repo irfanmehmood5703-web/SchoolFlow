@@ -15,7 +15,7 @@ from school_clock import school_today
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
-from sqlalchemy import or_, cast, Text, JSON
+from sqlalchemy import and_, or_, cast, Text, JSON
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -663,7 +663,8 @@ def configure_records(app, db, Student, Employee):
             family_no = request.args.get('family_no', '').strip()[:160]
             if family_no:
                 family_ids = db.session.query(RecordFamily.id).filter(RecordFamily.number == family_no)
-                query = query.filter(detail_model.family_id.in_(family_ids))
+                query = query.filter(or_(detail_model.family_id.in_(family_ids),
+                    and_(detail_model.family_id.is_(None), detail_model.data['family_no'].as_string() == family_no)))
             for key in ('academic_session', 'group_name'):
                 if value := request.args.get(key, '').strip()[:160]:
                     query = query.filter(detail_model.data[key].as_string()==value)

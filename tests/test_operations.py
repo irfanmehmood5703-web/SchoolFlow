@@ -84,6 +84,16 @@ class OperationTests(unittest.TestCase):
             for amount in expected:
                 self.assertIn(f'<td>{amount}</td>'.encode(),subtotal)
             self.assertNotIn(b'2027-01',response.data)
+        for path in ('/workspace/fees/payments?family_no=101',
+                     '/workspace/fees/challans?family_no=101',
+                     '/workspace/family-payment?number=101',
+                     '/workspace/family-fee-summary?family_no=101'):
+            response=self.client.get(path)
+            self.assertEqual(response.status_code,200,path)
+            self.assertIn(b'Family total',response.data,path)
+            self.assertIn(b'Sibling',response.data,path)
+            self.assertIn(b'2,100',response.data,path)
+        path='/workspace/fees/payments'
         self.assertEqual(self.client.get(path+'?bill_month_from=2026-12&bill_month_to=2026-01').status_code,422)
 
     def test_payment_discount_duplicate_guard_overpayment_and_reversal(self):

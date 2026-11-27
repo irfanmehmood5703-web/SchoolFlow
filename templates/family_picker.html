@@ -1,0 +1,9 @@
+<label class="admission-filter-field">
+  <span>Family</span>
+  <select name="{{family_field}}" onchange="this.form.requestSubmit()">
+    <option value="">Select family</option>
+    {% for number, guardian in family_options %}
+    <option value="{{number}}" {{'selected' if number == selected_family else ''}}>{{number}}{% if guardian %} · {{guardian}}{% endif %}</option>
+    {% endfor %}
+  </select>
+</label>
