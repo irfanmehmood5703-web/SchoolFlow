@@ -115,13 +115,19 @@ def configure_teacher_app(app,db,Student,Employee):
         return render('home',cards=details,assigned_class_count=len(assigned_sections),full_class_count=len(full_classes),subject_assignment_count=len(subject_assignments))
     def period_notice(row,day):
         return dict(key='period:'+row['campus']+':'+row['class_name']+':'+row['section']+':'+row['subject']+':'+row['time'],revision=str(day),title='Upcoming period',detail=row['subject']+' · '+row['class_name']+' / '+row['section']+' · '+row['time_label'])
-    def teacher_notification_events():
+    def teacher_notification_events(current_attendance_only=False):
         events=list(app.extensions['notice_events']())
         for row in app.extensions['automatic_report_helpers']['teacher_periods'](cohorts()):
             if row['due']:
                 events.append(period_notice(row,school_today()))
         if own_access('attendance.own','attendance.view','attendance.self'):
-            for row in Daily.query.filter_by(kind='staff',person_id=g.teacher_employee.id).order_by(Daily.day.desc()).limit(5):
+            today=school_today()
+            attendance=Daily.query.filter_by(kind='staff',person_id=g.teacher_employee.id)
+            # Background polling must not make an old attendance record appear
+            # to be a newly marked day after login, reconnect, or app update.
+            # Keep historical records available in the in-app notification list.
+            attendance=attendance.filter(Daily.day==today) if current_attendance_only else attendance.filter(Daily.day<=today)
+            for row in attendance.order_by(Daily.day.desc()).limit(5):
                 events.append(dict(key='attendance:'+str(row.id),revision=digest([row.status,row.time_in,row.time_out]),title='Your attendance',detail=str(row.day)+' · '+row.status))
         if own_access('payroll.self','payroll.view'):
             for row in ops['salary'].query.filter_by(employee_id=g.teacher_employee.id).order_by(ops['salary'].month.desc()).limit(3):
@@ -137,7 +143,7 @@ def configure_teacher_app(app,db,Student,Employee):
         from mobile_notices import feed
         alerts=app.extensions['automatic_report_helpers']['teacher_lecture_alerts'](cohorts())
         notices=[dict(period_notice(row,row['day']),due_at=row['due_at'],starts_at=row['starts_at']) for row in alerts]
-        return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events(),lecture_alerts=notices)
+        return feed('teacher',g.school_identity['scope'],g.staff_principal.id,teacher_notification_events(current_attendance_only=True),lecture_alerts=notices)
     @bp.get('/classes')
     def classes():
         if request.args.get('feature')=='fee_defaulters' and not cohorts('fees.view'):return render('fee_access_denied'),403
