@@ -622,11 +622,11 @@ def configure_records(app, db, Student, Employee):
             return render_form(kind, obj, data={**read_data(kind, obj), "status": "Active"})
         return render_form(kind, obj)
 
-    def filtered_query(kind):
+    def filtered_query(kind, *, status_default="Active", status_key="status", include_search=True):
         model = Student if kind == "student" else Employee
         detail_model = StudentDetails if kind=='student' else EmployeeDetails
         detail_key = detail_model.student_id if kind=='student' else detail_model.employee_id
-        q = request.args.get("q", "").strip()[:160]
+        q = request.args.get("q", "").strip()[:160] if include_search else ""
         query = model.query
         if q:
             pattern = "%"+q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")+"%"
@@ -639,7 +639,7 @@ def configure_records(app, db, Student, Employee):
                 ).filter(RecordFamily.number.ilike(pattern, escape="\\")).subquery()
                 search_fields.append(model.id.in_(matching_student_ids))
             query = query.filter(or_(*search_fields))
-        status = request.args.get("status", "Active")
+        status = request.args.get(status_key, status_default)
         if status == 'non-active':
             query = query.filter(or_(model.status != 'Active', model.status.is_(None)))
         elif status == 'left-students' and kind == 'student':
@@ -859,7 +859,8 @@ def configure_records(app, db, Student, Employee):
     def family_number_context():
         return dict(family_numbers=family_numbers)
 
-    app.extensions['record_helpers']=dict(family_numbers=family_numbers,raw_many=raw_many,read_many=read_many,validate=validate_form,choices=setup_choices)
+    app.extensions['record_helpers']=dict(family_numbers=family_numbers,raw_many=raw_many,read_many=read_many,validate=validate_form,choices=setup_choices,
+        filter_students=lambda **opts:filtered_query("student", status_default="", status_key="student_status", **opts))
     app.register_blueprint(bp)
 
     @app.cli.command("seed-record-demo-options")
