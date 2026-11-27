@@ -17,7 +17,7 @@
     min-width: 0;
     width: fit-content;
     box-sizing: border-box;
-    padding: 4px 12px;
+    padding: 7px 22px;
     border: 1px solid #a8ddbb38;
     border-radius: 9px;
     background: linear-gradient(100deg, #173d32, #235340, #173d32);
@@ -27,7 +27,8 @@
   .app-header .school-header-name {
     display: block;
     color: #f3fff7;
-    font-size: clamp(1.35rem, 2.2vw, 2rem);
+    font-size: clamp(1.7rem, 3vw, 2.65rem);
+    letter-spacing: 0.025em;
     font-weight: 800;
     line-height: 1.2;
     overflow-wrap: anywhere;
