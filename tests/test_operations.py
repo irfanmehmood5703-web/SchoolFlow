@@ -42,17 +42,17 @@ class OperationTests(unittest.TestCase):
         self.assertNotIn(b'<aside',nav)
         self.assertLess(nav.index(b'>Dashboard</a>'),nav.index(b'<summary>Admissions</summary>'))
         modules = re.findall(rb'<summary>([^<]+)</summary>(.*?)</details>',nav,re.S)
-        self.assertEqual([label for label,_ in modules][:4],[b'Admissions',b'Fees',b'Exam',b'Attendance'])
+        self.assertEqual([label for label,_ in modules][:4],[b'Admissions',b'Fees Section',b'Examination',b'Attendance'])
         sections = dict(modules)
         self.assertIn(b'>Manage Students</a>',sections[b'Admissions'])
         self.assertIn(b'>Admission Letter</a>',sections[b'Admissions'])
         for option in (b'Manage Fee Plans',b'Fee Challans',b'Fee Payments',b'Payment History',b'Detail Fee Report'):
             self.assertNotIn(b'>'+option+b'</a>',sections[b'Admissions'])
-            self.assertIn(b'>'+option+b'</a>',sections[b'Fees'])
+            self.assertIn(b'>'+option+b'</a>',sections[b'Fees Section'])
         self.assertIn(b'Student Attendance',nav)
         for label in (b'Combine Attendance Report',b'Combine Day Wise Attendance Report',b'Individual Attendance Report',b'Attendance Summary',b'Absentees',b'Attendance Sheet'):
             self.assertIn(label,nav)
-        self.assertIn(b'<summary>Exam</summary>',nav)
+        self.assertIn(b'<summary>Examination</summary>',nav)
         self.assertNotIn(b'School App Links',sections[b'General'])
         tools = nav.rsplit(b'</details>',1)[1]
         self.assertEqual(re.findall(rb'<strong>([^<]+)</strong>',tools),

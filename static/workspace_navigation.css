@@ -153,15 +153,16 @@
   .workspace-module-links { padding: 3px 0 5px 6px; }
   .workspace-module-links p {
     margin: 10px 8px 3px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 750;
-    color: #48685a;
+    color: #3d5d4e;
   }
   .workspace-module-links a {
     display: block;
     padding: 8px;
     border-radius: 6px;
-    color: #294b3d;
+    color: #203f33;
+    font-weight: 600;
     line-height: 1.4;
   }
   .workspace-navigation a:hover,
