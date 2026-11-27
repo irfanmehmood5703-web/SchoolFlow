@@ -125,16 +125,17 @@ class FeeIncrementTests(unittest.TestCase):
         self.assertNotIn(b'Management',utility)
         self.assertIn(b'Support Team',utility)
         self.assertIn(b'Notifications',utility)
-        self.assertNotIn(b'Configuration',utility)
+        self.assertNotIn(b'Admin Center',utility)
         settings=page.split(b'<nav class="workspace-settings no-print"',1)[1].split(b'</nav>',1)[0]
         self.assertIn(b'class="nav-menu configuration-menu"',settings)
+        self.assertIn(b'<summary>Admin Center</summary>',settings)
         self.assertIn(b'Help Center',settings)
         self.assertIn(b'Messages',settings)
-        for label in (b'Institute Setup',b'Exam Settings',b'HRM Settings'):
+        for label in (b'School &amp; Campuses Settings',b'Exam &amp; Grading',b'Attendance Settings',b'HRM Settings'):
             self.assertIn(label,settings)
         main=page.split(b'<nav class="workspace-navigation"',1)[1].split(b'</nav>',1)[0]
         self.assertIn(b'Management',main)
-        self.assertNotIn(b'Configuration',main);self.assertNotIn(b'Core Settings',main)
+        self.assertNotIn(b'Admin Center',main);self.assertNotIn(b'Core Settings',main)
         self.assertEqual(page.count(b'class="nav-menu configuration-menu"'),1)
         self.assertIn(b'class="workspace-sidebar no-print"',page)
 
