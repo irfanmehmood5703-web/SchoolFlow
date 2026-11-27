@@ -3,6 +3,7 @@
 {% block content %}
 {{m.heading(title,'Review saved salary plans and record an approval decision.' if plan_view=='approvals' else 'Select an existing salary plan to edit. Updates require a fresh approval.')}}
 <div class="heading-actions">
+<a class="button secondary" href="{{url_for('ops.payroll_policy')}}">Payroll Deduction Policy · All staff</a>
 <a class="button secondary" href="{{url_for('ops.plans')}}">Create Salary Plan</a>
 {% if plan_view=='approvals' %}<a class="button secondary" href="{{url_for('ops.plans',view='update')}}">Update Salary Plan</a>{% else %}<a class="button secondary" href="{{url_for('ops.plans',view='approvals')}}">Salary Plan Approvals</a>{% endif %}
 </div>

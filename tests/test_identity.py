@@ -73,6 +73,18 @@ class IdentityTests(unittest.TestCase):
             token = sess['record_csrf']
         return client.post('/auth/login', data={'_csrf':token, 'email':'OWNER@example.invalid', 'password':password})
 
+    def test_payroll_policy_is_private_to_each_school(self):
+        self.assertEqual(self.login().status_code,302)
+        token=self.csrf()
+        form=dict(_csrf=token,action='assign',version='0')
+        for i in range(6):form.update({f'allowed_{i}':'0',f'type_{i}':'Abs',f'deduction_{i}':'1234' if i==0 else '0'})
+        self.assertEqual(self.client.post('/workspace/payroll-policy',data=form).status_code,302)
+        self.assertIn(b'value="1234.0"',self.client.get('/workspace/payroll-policy').data)
+        self.assertEqual(self.login('TEST-B').status_code,302)
+        page=self.client.get('/workspace/payroll-policy').data
+        self.assertIn(b'Not assigned yet',page)
+        self.assertNotIn(b'value="1234.0"',page)
+
     def test_inline_admission_options_are_isolated_between_schools(self):
         self.assertEqual(self.login().status_code,302)
         token=self.csrf()

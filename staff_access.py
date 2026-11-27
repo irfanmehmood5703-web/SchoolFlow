@@ -428,7 +428,7 @@ def configure_staff_access(app,db,Student,Employee):
             if name=='entry':
                 key=args.get('key','');area='dashboard' if key=='dashboard' else 'admissions' if key in ('students','queries','approvals') else 'hrm' if key=='employees' else None
             else:
-                area={'dashboard':'dashboard','register':'hrm','approve_students':'admissions','fees':'fees','generate_challans':'fees','pay':'fees','fee_action':'fees','reverse_receipts':'fees','history':'fees','take_attendance':'attendance','attendance_report':'attendance','examination':'exam','date_sheet_edit':'exam','date_sheet_print':'exam','date_sheet_photo':'exam','assessment_category':'exam','marks':'exam','rolls':'exam','roll_slip_photo':'exam','plans':'payroll','payroll':'payroll','lecture_import':'payroll','messages':'communication','message_log':'communication','installment':'fees','batch_payment':'fees','family_fee_summary':'fees','readiness':'dashboard'}.get(name)
+                area={'dashboard':'dashboard','register':'hrm','approve_students':'admissions','fees':'fees','generate_challans':'fees','pay':'fees','fee_action':'fees','reverse_receipts':'fees','history':'fees','take_attendance':'attendance','attendance_report':'attendance','examination':'exam','date_sheet_edit':'exam','date_sheet_print':'exam','date_sheet_photo':'exam','assessment_category':'exam','marks':'exam','rolls':'exam','roll_slip_photo':'exam','plans':'payroll','payroll_policy':'payroll','payroll':'payroll','lecture_import':'payroll','messages':'communication','message_log':'communication','installment':'fees','batch_payment':'fees','family_fee_summary':'fees','readiness':'dashboard'}.get(name)
                 if name=='register' and args.get('kind') in ('increments','advances','loans','lecture-rates','lecture-register'):area='payroll'
         else:
             prefix=ep.split('.')[0]
@@ -471,7 +471,7 @@ def configure_staff_access(app,db,Student,Employee):
             db.session.refresh(p)
             if not resolve(p.id,session.get('staff_version')) or not request_grant(p,code):abort(403,'Your access changed. Sign in again.')
         allowed=request_grant(p,code);g.access_campuses=allowed
-        if (code.split('.')[0] in ('core','access','finance') or (request.blueprint=='certificate_manager' and request.method=='POST') or request.endpoint=='whatsapp_settings.command') and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
+        if (code.split('.')[0] in ('core','access','finance') or (request.blueprint=='certificate_manager' and request.method=='POST') or request.endpoint=='whatsapp_settings.command' or (request.endpoint=='ops.payroll_policy' and request.method=='POST')) and allowed!=set(campuses()):abort(403,'Institute-wide settings require this permission for every configured campus.')
         if request.values.get('campus') and request.values['campus'] not in allowed:abort(403,'This campus is not granted for this action.')
         if code.endswith(('.pay','.reverse')):
             for key in ('account','discount_account','credit','debit'):
