@@ -159,9 +159,8 @@ def configure_challan_amounts(app,db,Student):
         if distance<0 or distance>11:raise ValueError('Choose a range of up to 12 months, with To on or after From.')
         Family=R['family']
         q=Bill.query.join(Student,Student.id==Bill.student_id).outerjoin(Detail,Detail.student_id==Student.id).outerjoin(Family,Family.id==Detail.family_id).filter(Bill.month>=start,Bill.month<=end)
-        for key in ('campus','class_name','section'):
-            value=request.args.get(key,'').strip()
-            if value:q=q.filter((Student.class_name if key=='class_name' else Detail.data[key].as_string())==value)
+        students=app.extensions['record_helpers']['filter_students'](include_search=False).with_entities(Student.id)
+        q=q.filter(Bill.student_id.in_(students))
         search=request.args.get('q','').strip()[:160]
         if search:q=q.filter(db.or_(Student.name.contains(search,autoescape=True),Student.father.contains(search,autoescape=True),Student.admission_no.contains(search,autoescape=True),Family.number.contains(search,autoescape=True),Detail.data['roll_no'].as_string().contains(search,autoescape=True),db.or_(Bill.id==int(search),Student.id==int(search)) if search.isdigit() and len(search)<=12 else db.false()))
         order=request.args.get('sort','latest')
@@ -187,7 +186,7 @@ def configure_challan_amounts(app,db,Student):
         for bid,day in db.session.query(Receipt.bill_id,db.func.max(Receipt.day)).filter(Receipt.voided==False,Receipt.bill_id.in_([b.id for b in bills])).group_by(Receipt.bill_id).all():latest[bid]=day
         def link(**kw):
             args=request.args.to_dict();args.update(kw);return url_for('challan_amounts.index',**args)
-        return render_template('challan_amounts.html',title='Add Amount in Generated Challans',bills=bills,people=people,latest=latest,heads=list(heads().values()),start=start,end=end,total=total,page=page,pages=pages,size=size,options=options,link=link,adjust_scopes=scopes(app,'fees.adjust'),pending_key='sf-challan-adjust-'+hashlib.sha256(json.dumps(binding()).encode()).hexdigest()[:24])
+        return render_template('challan_amounts.html',title='Add Amount in Generated Challans',bills=bills,people=people,latest=latest,heads=list(heads().values()),start=start,end=end,total=total,page=page,pages=pages,size=size,options=options,filter_choices=app.extensions['record_helpers']['choices'](),link=link,adjust_scopes=scopes(app,'fees.adjust'),pending_key='sf-challan-adjust-'+hashlib.sha256(json.dumps(binding()).encode()).hexdigest()[:24])
     @bp.post('/preview')
     def preview():
         operation=parse();ids=selected();bills,people=load(ids);nonce=secrets.token_hex(16);who=actor(app)

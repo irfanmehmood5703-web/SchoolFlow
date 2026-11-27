@@ -41,3 +41,44 @@
 @media print {
   .admission-filter-bar, .student-record-views { display: none; }
 }
+
+.admission-results {
+  border: 1px solid #c8dbd0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.admission-results table {
+  width: 100%;
+}
+
+.admission-results table th {
+  background: #e2efe7;
+  color: #173d2c;
+  font-size: 12px;
+  font-weight: 750;
+  border-bottom: 1px solid #b9d3c4;
+}
+
+.admission-results table td {
+  color: #213b30;
+  border-bottom: 1px solid #dde9e1;
+  font-size: 13px;
+}
+
+.admission-results tbody tr:nth-child(even) {
+  background: #f2f8f5;
+}
+
+.admission-results tbody tr:hover {
+  background: #eaf5ee;
+}
+
+.admission-results td a,
+.admission-results .result-person {
+  font-weight: 700;
+}
+
+.admission-results td small {
+  color: #526b60;
+}

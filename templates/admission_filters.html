@@ -13,3 +13,22 @@
   {% endif %}
 </label>
 {% endmacro %}
+
+{% macro fee_students(choices, campus_values=none, class_values=none, student_status=false) %}
+  {% for key,label in [('sid','SID'),('admission_no','Admission No.'),('roll_no','Roll No.'),('student_name','Student Name'),('father','Father / Guardian'),('mobile','Mobile'),('family_no','Family No.')] %}
+    {{field(key,label)}}
+  {% endfor %}
+  {% for key,label in [('campus','Campus'),('class_name','Class'),('section','Section'),('group_name','Group'),('academic_session','Session'),('gender','Gender')] %}
+    {% set values = choices.get(key,[]) %}
+    {% set extra = campus_values if key=='campus' else class_values if key=='class_name' else none %}
+    {% if extra %}
+      {% set combined = namespace(values=values) %}
+      {% for option in extra %}{% set combined.values = combined.values+[(option,option)] %}{% endfor %}
+      {% set values = combined.values %}
+    {% endif %}
+    {{field(key,label,[('', 'Any '+label)]+values)}}
+  {% endfor %}
+  {% if student_status %}
+    {{field('student_status','Student Status',[('','All Students'),('Active','Enrolled'),('left-students','Left Students'),('non-active','Non-active')])}}
+  {% endif %}
+{% endmacro %}

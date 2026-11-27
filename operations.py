@@ -637,13 +637,16 @@ def configure_operations(app, db, Student, Employee):
         return app.extensions['admission_capacity']['review']()
 
     def filtered_bills(mode='payments'):
-        rows=Bill.query.order_by(Bill.id.desc()).all()
-        if mode=='inactive-fees': rows=[b for b in rows if db.session.get(Student,b.student_id).status!='Active']
-        elif mode in ('payments','challans'): rows=[b for b in rows if db.session.get(Student,b.student_id).status=='Active']
-        q=request.args.get('q','').lower()
-        for k in ('campus','class_name','section'):
-            v=request.args.get(k)
-            if v: rows=[b for b in rows if (db.session.get(Student,b.student_id).class_name if k=='class_name' else details(db.session.get(Student,b.student_id)).get(k))==v]
+        students=app.extensions['record_helpers']['filter_students'](include_search=False)
+        if mode=='inactive-fees':students=students.filter(Student.status!='Active')
+        elif mode in ('payments','challans'):students=students.filter(Student.status=='Active')
+        query=Bill.query.filter(Bill.student_id.in_(students.with_entities(Student.id)))
+        if billing_month:=request.args.get('bill_month',''):
+            query=query.filter(Bill.month==month(billing_month))
+        rows=query.order_by(Bill.id.desc()).all()
+        if state:=request.args.get('bill_status',''):
+            rows=[b for b in rows if b.state==state]
+        q=request.args.get('q','').strip()[:160].lower()
         if q:
             family_numbers=app.extensions['record_helpers']['family_numbers'](b.student_id for b in rows)
             rows=[b for b in rows if q in str(b.id) or q in db.session.get(Student,b.student_id).name.lower() or q in (family_numbers.get(b.student_id) or '').lower()]
@@ -653,7 +656,9 @@ def configure_operations(app, db, Student, Employee):
     def fees(mode):
         rows=filtered_bills(mode)
         receipts=Receipt.query.filter_by(voided=False).order_by(Receipt.id.desc()).all() if mode in ('paid-challans','discount-challans') else []
-        if mode=='discount-challans': receipts=[r for r in receipts if r.discount]
+        if receipts:
+            permitted_bills={b.id for b in rows}
+            receipts=[r for r in receipts if r.bill_id in permitted_bills and (mode!='discount-challans' or r.discount)]
         status_students = []
         if mode == 'inactive-fees':
             student_q = request.args.get('student_q', '').strip()[:120]
@@ -663,7 +668,7 @@ def configure_operations(app, db, Student, Employee):
                 from sqlalchemy import or_
                 query = query.filter(or_(Student.name.ilike(pattern, escape='\\'), Student.admission_no.ilike(pattern, escape='\\'), Student.phone.ilike(pattern, escape='\\')))
             status_students = query.order_by(Student.id.desc()).limit(100).all()
-        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students)
+        return render('fees.html',title={'inactive-fees':'Inactive Student Fee & Status Management','paid-challans':'Paid Challans','discount-challans':'Challan Discounts'}.get(mode,'Pay or Print Fee Challans'),rows=rows,mode=mode,receipts=receipts,student=lambda id:db.session.get(Student,id),details=details,status_students=status_students,filter_choices=app.extensions['record_helpers']['choices']())
 
     @bp.route('/generate-challans',methods=['GET','POST'])
     def generate_challans():
@@ -819,7 +824,8 @@ def configure_operations(app, db, Student, Employee):
         if start: month(start)
         if end: month(end)
         if start and end and start>end: raise ValueError('From month must precede To month.')
-        rows=Bill.query.order_by(Bill.month,Bill.id).all()
+        students=app.extensions['record_helpers']['filter_students'](include_search=False).with_entities(Student.id)
+        rows=Bill.query.filter(Bill.student_id.in_(students)).order_by(Bill.month,Bill.id).all()
         if start: rows=[b for b in rows if b.month>=start]
         if end: rows=[b for b in rows if b.month<=end]
         sid=request.args.get('student_id','');family=request.args.get('family','')
@@ -844,7 +850,7 @@ def configure_operations(app, db, Student, Employee):
             for k in ('payable','paid','discount','remaining'): group[k]+=item[k]
         if request.args.get('export')=='csv':
             return csv_response(['SID','Student','Payable','Discount','Paid','Remaining'],[[id,v['student'].name,*[f'{v[k]/100:.2f}' for k in ('payable','discount','paid','remaining')]] for id,v in summaries.items()],'payment-history')
-        return render('history.html',title='Family Payment Statement' if family else TITLES.get(view,'Payment History'),view=view,rows=rows,summaries=summaries,families=families,detail=bool(request.args.get('detail') or family),student=lambda id:db.session.get(Student,id),details=details,receipts=lambda id:Receipt.query.filter_by(bill_id=id,voided=False).order_by(Receipt.day).all())
+        return render('history.html',title='Family Payment Statement' if family else TITLES.get(view,'Payment History'),view=view,filter_choices=app.extensions['record_helpers']['choices'](),rows=rows,summaries=summaries,families=families,detail=bool(request.args.get('detail') or family),student=lambda id:db.session.get(Student,id),details=details,receipts=lambda id:Receipt.query.filter_by(bill_id=id,voided=False).order_by(Receipt.day).all())
 
     def student_attendance_grid():
         mode=request.values.get('mode','take')

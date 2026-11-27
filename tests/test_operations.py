@@ -43,6 +43,20 @@ class OperationTests(unittest.TestCase):
         self.assertIn(b'Student Attendance',nav)
         for label in (b'Combine Attendance Report',b'Combine Day Wise Attendance Report',b'Individual Attendance Report',b'Attendance Summary',b'Absentees',b'Attendance Sheet'):
             self.assertNotIn(label,nav)
+    def test_student_filters_apply_to_fee_lists_and_history(self):
+        self.bill()
+        other=Student(admission_no='SECOND-FEE',name='Another Pupil',class_name='Other Class',status='Active')
+        db.session.add(other);db.session.flush()
+        db.session.add(self.m['bill'](student_id=other.id,month='2026-09',due=date(2026,9,10),lines=[dict(particular='Tuition',amount=1000)]))
+        db.session.add(self.rm['student'](student_id=self.s.id,data={'section':'Alpha','academic_session':'2026-27'}))
+        db.session.add(self.rm['student'](student_id=other.id,data={'section':'Beta','academic_session':'2026-27'}))
+        db.session.commit()
+        for path in ('/workspace/fees/payments','/workspace/history','/workspace/student-fee-plans'):
+            response=self.client.get(path+'?section=Alpha&academic_session=2026-27')
+            self.assertEqual(response.status_code,200,path)
+            self.assertIn(b'Test Pupil',response.data,path)
+            self.assertNotIn(b'Another Pupil',response.data,path)
+
     def test_payment_discount_duplicate_guard_overpayment_and_reversal(self):
         b=self.bill();token='testtoken_abcdefghijklmnop'
         args=dict(student_id=self.s.id,bill_id=b.id,token=token,paid_date='2026-10-01',account='Cash',action='save',**{f'amount_{b.id}':'400',f'discount_{b.id}':'100'})

@@ -110,12 +110,11 @@ def configure_student_fee_plans(app, db, Student):
         try:page=max(1,int(request.args.get('page','1')));size=int(request.args.get('size','25'))
         except ValueError:raise ValueError('Choose valid fee-plan pagination.')
         if size not in (25,50,100):raise ValueError('Choose 25, 50 or 100 rows.')
-        campus=request.args.get('campus','');class_name=request.args.get('class_name','');q=request.args.get('q','').strip().lower()
+        q=request.args.get('q','').strip()[:160].lower()
         Details=rm['student']
+        filters=app.extensions['record_helpers']['filter_students'](include_search=False).with_entities(Student.id)
         latest=db.session.query(StudentFeePlan.student_id,db.func.max(StudentFeePlan.effective).label('effective')).group_by(StudentFeePlan.student_id).subquery()
-        scoped=Student.query.outerjoin(Details,Details.student_id==Student.id).outerjoin(latest,latest.c.student_id==Student.id).filter(Student.status=='Active')
-        if campus:scoped=scoped.filter(Details.data['campus'].as_string()==campus)
-        if class_name:scoped=scoped.filter(Student.class_name==class_name)
+        scoped=Student.query.outerjoin(latest,latest.c.student_id==Student.id).filter(Student.status=='Active', Student.id.in_(filters))
         count=scoped.count();with_plan=scoped.filter(latest.c.student_id!=None).count()
         matching=scoped.filter(latest.c.student_id!=None if mode=='update' else latest.c.student_id==None)
         if q:
@@ -128,7 +127,7 @@ def configure_student_fee_plans(app, db, Student):
         rows=[(s,raw[s.id],plans.get(s.id)) for s in students]
         campuses=[row[0] for row in db.session.query(Details.data['campus'].as_string()).join(Student,Student.id==Details.student_id).filter(Student.status=='Active').distinct().order_by(Details.data['campus'].as_string()).all() if row[0]]
         classes=[row[0] for row in db.session.query(Student.class_name).filter(Student.status=='Active').distinct().order_by(Student.class_name).all() if row[0]]
-        return render('student_fee_plan_list.html',title='Manage Fee Plans',rows=rows,mode=mode,with_plan=with_plan,without_plan=count-with_plan,campuses=campuses,classes=classes,page=page,pages=pages,total=total,size=size)
+        return render('student_fee_plan_list.html',title='Manage Fee Plans',rows=rows,mode=mode,with_plan=with_plan,without_plan=count-with_plan,campuses=campuses,classes=classes,filter_choices=app.extensions['record_helpers']['choices'](),page=page,pages=pages,total=total,size=size)
 
     @bp.route('/<int:sid>/edit',methods=['GET','POST'])
     def edit(sid):
@@ -228,9 +227,9 @@ def configure_student_fee_plans(app, db, Student):
 
     @bp.route('/generate',methods=['GET','POST'])
     def generate():
-        students=Student.query.filter_by(status='Active').order_by(Student.name).all()
         all_heads=sorted({x['particular'] for p in StudentFeePlan.query.all() for x in p.data['lines'] if x['net'] or x['arrears']})
         if request.method=='POST':
+            students=Student.query.filter_by(status='Active').order_by(Student.name).all()
             at=month(request.form.get('month'))
             override=request.form.get('due','');due=None
             if override:
@@ -279,7 +278,8 @@ def configure_student_fee_plans(app, db, Student):
         # Show only students who still need a challan for the selected month.
         selected_month=month(request.args.get('month') or date.today().strftime('%Y-%m'))
         already_billed={sid for (sid,) in db.session.query(Bill.student_id).filter(Bill.month==selected_month).distinct().all()}
-        eligible_students=[s for s in students if s.id not in already_billed and current(s.id,selected_month)]
+        filtered=app.extensions['record_helpers']['filter_students']().filter(Student.status=='Active').order_by(Student.name).all()
+        eligible_students=[s for s in filtered if s.id not in already_billed and current(s.id,selected_month)]
         fine_helper=app.extensions.get('fine_queue_helpers');pending_fines=fine_helper['rows']() if fine_helper else []
-        return render('student_fee_plan_generate.html',pending_fines=pending_fines,fine_review_token=fine_helper['token'](pending_fines) if fine_helper else '',title='Generate from Student Fee Plans',students=eligible_students,heads=all_heads,today=date.today().isoformat(),selected_month=selected_month)
+        return render('student_fee_plan_generate.html',pending_fines=pending_fines,fine_review_token=fine_helper['token'](pending_fines) if fine_helper else '',title='Generate from Student Fee Plans',students=eligible_students,filter_choices=app.extensions['record_helpers']['choices'](),heads=all_heads,today=date.today().isoformat(),selected_month=selected_month)
     app.register_blueprint(bp)
