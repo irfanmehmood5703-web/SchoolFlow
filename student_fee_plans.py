@@ -125,8 +125,11 @@ def configure_student_fee_plans(app, db, Student):
         raw=app.extensions['record_helpers']['raw_many']('student',students)
         plans={plan.student_id:plan for plan in StudentFeePlan.query.join(latest,and_(StudentFeePlan.student_id==latest.c.student_id,StudentFeePlan.effective==latest.c.effective)).filter(StudentFeePlan.student_id.in_([s.id for s in students])).all()} if students else {}
         rows=[(s,raw[s.id],plans.get(s.id)) for s in students]
-        campuses=[row[0] for row in db.session.query(Details.data['campus'].as_string()).join(Student,Student.id==Details.student_id).filter(Student.status=='Active').distinct().order_by(Details.data['campus'].as_string()).all() if row[0]]
-        classes=[row[0] for row in db.session.query(Student.class_name).filter(Student.status=='Active').distinct().order_by(Student.class_name).all() if row[0]]
+        cohort_options=db.session.query(
+            Details.data['campus'].as_string(), Student.class_name
+        ).select_from(Student).outerjoin(Details, Student.id==Details.student_id).filter(Student.status=='Active').distinct().all()
+        campuses=sorted({campus for campus, _ in cohort_options if campus},key=str.casefold)
+        classes=sorted({class_name for _, class_name in cohort_options if class_name},key=str.casefold)
         return render('student_fee_plan_list.html',title='Manage Fee Plans',rows=rows,mode=mode,with_plan=with_plan,without_plan=count-with_plan,campuses=campuses,classes=classes,filter_choices=app.extensions['record_helpers']['choices'](),page=page,pages=pages,total=total,size=size)
 
     @bp.route('/<int:sid>/edit',methods=['GET','POST'])
