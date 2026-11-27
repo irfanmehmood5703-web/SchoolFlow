@@ -12,25 +12,20 @@
           {% for label, key in items %}
               {% if not key.startswith('general-') or (school_identity and not school_identity.demo and session.get('owner_id') and not session.get('staff_id')) %}
                 {% set target = menu_url(key) %}
-                <a href="{{target}}"{% if request.path == target %} aria-current="page"{% endif %}>{{label}}</a>
+                <a href="{{target}}"{% if request.path == target and key != 'shifts' %} aria-current="page"{% endif %}>{{label}}</a>
               {% endif %}
           {% endfor %}
         {% endfor %}
         {% if module == 'Exam' %}
           <p>Settings</p>
-          <a href="{{url_for('school_settings.index',module='exam')}}">Exam Settings</a>
-          <a href="{{url_for('roll_numbers.index')}}">Roll Number Series</a>
+          <a href="{{url_for('school_settings.index', module='exam')}}"{% if request.endpoint == 'school_settings.index' and request.view_args.module == 'exam' and request.view_args.page not in ['student-shifts', 'sms'] %} aria-current="page"{% endif %}>Exam Settings</a>
+          {% set roll_series = url_for('roll_numbers.index') %}
+          <a href="{{roll_series}}"{% if request.path == roll_series %} aria-current="page"{% endif %}>Roll Number Series</a>
         {% elif module == 'Attendance' %}
-          <a href="{{url_for('school_settings.monthly_attendance')}}">Monthly Staff Attendance</a>
+          {% set monthly_attendance = url_for('school_settings.monthly_attendance') %}
+          <a href="{{monthly_attendance}}"{% if request.path == monthly_attendance %} aria-current="page"{% endif %}>Monthly Staff Attendance</a>
           <p>Settings</p>
-          <a href="{{url_for('school_settings.index', module='exam', page='student-shifts')}}">Student Shifts</a>
-          <a href="{{url_for('school_settings.assign_shifts')}}">Staff Shifts</a>
-          <a href="{{url_for('school_settings.index', module='hrm', page='attendance-lock')}}">Lock Attendance</a>
-          <a href="{{url_for('attendance_controls.alerts')}}">Attendance Alerts</a>
-          <a href="{{url_for('attendance_controls.acronyms')}}">Attendance Statuses</a>
-          <a href="{{url_for('attendance_controls.geofences')}}">Geo Location Attendance</a>
-          <a href="{{url_for('attendance_devices.settings')}}">QR Biometric Attendance</a>
-          <a href="{{url_for('attendance_devices.gates')}}">Face Attendance Gates</a>
+          {% include 'attendance_settings_links.html' %}
         {% elif module == 'General' %}
           <a href="{{url_for('school_settings.index', module='exam', page='sms')}}">Student SMS Templates</a>
         {% endif %}

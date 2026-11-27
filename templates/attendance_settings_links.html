@@ -1,0 +1,14 @@
+{% set attendance_settings_links = [
+  ('Student Shifts', url_for('school_settings.index', module='exam', page='student-shifts')),
+  ('Staff Shift Templates', url_for('school_settings.index', module='hrm', page='shift-templates')),
+  ('Assign Staff Shifts', url_for('school_settings.assign_shifts')),
+  ('Lock Attendance', url_for('school_settings.index', module='hrm', page='attendance-lock')),
+  ('Attendance Alerts', url_for('attendance_controls.alerts')),
+  ('Attendance Statuses', url_for('attendance_controls.acronyms')),
+  ('Geo Location Attendance', url_for('attendance_controls.geofences')),
+  ('QR Biometric Attendance', url_for('attendance_devices.settings')),
+  ('Face Attendance Gates', url_for('attendance_devices.gates')),
+] %}
+{% for label, target in attendance_settings_links %}
+  <a href="{{target}}"{% if request.path == target %} aria-current="page"{% endif %}>{{label}}</a>
+{% endfor %}

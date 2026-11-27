@@ -36,6 +36,31 @@ class SchoolSettingsTests(unittest.TestCase):
                 page=self.c.get(f'/workspace/core/{module}/{key}');self.assertEqual(page.status_code,200,key)
                 ids=re.findall(rb'\bid="([^"]+)"',page.data);self.assertEqual(len(ids),len(set(ids)),key)
         self.assertEqual(self.m['item'].query.count(),0);self.assertEqual(self.m['setting'].query.count(),0)
+    def test_exam_and_attendance_settings_have_separate_navigation(self):
+        exam = self.c.get('/workspace/core/exam/subjects').data
+        exam_settings = exam.split(b'aria-label="Exam settings">', 1)[1].split(b'</nav>', 1)[0]
+        self.assertIn(b'>Subjects</a>', exam_settings)
+        self.assertIn(b'>Test Types</a>', exam_settings)
+        self.assertNotIn(b'>Student Shifts</a>', exam_settings)
+        self.assertNotIn(b'>Student SMS Templates</a>', exam_settings)
+
+        for url, label in (
+            ('/workspace/core/exam/student-shifts', b'Student Shifts'),
+            ('/workspace/core/hrm/shift-templates', b'Staff Shift Templates'),
+            ('/workspace/core/hrm/attendance-lock', b'Lock Attendance'),
+        ):
+            with self.subTest(url=url):
+                page = self.c.get(url).data
+                self.assertIn(b'Core Settings / Attendance', page)
+                settings = page.split(b'aria-label="Attendance settings">', 1)[1].split(b'</nav>', 1)[0]
+                self.assertIn(b'aria-current="page">' + label + b'</a>', settings)
+                for option in (b'Assign Staff Shifts', b'Attendance Alerts', b'Attendance Statuses',
+                               b'Geo Location Attendance', b'QR Biometric Attendance',
+                               b'Face Attendance Gates'):
+                    self.assertIn(b'>' + option + b'</a>', settings)
+                self.assertNotIn(b'>Test Types</a>', settings)
+                self.assertNotIn(b'>Employee Form Settings</a>', settings)
+
     def test_existing_school_catalog_subjects_work_without_get_writes(self):
         # Older schools already have class/catalog subjects but no exam overrides.
         db.session.add_all([
