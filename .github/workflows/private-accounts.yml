@@ -64,6 +64,10 @@ jobs:
         run: python -W ignore -m unittest discover -s tests -p test_shareholder_posting.py -q
       - name: School-SIM queue authentication, finite batches and paced dispatch
         run: python -W ignore -m unittest tests.test_sms_gateway tests.test_sms_batches -q
+      - name: QR attendance IN and OUT on PostgreSQL with school timezone
+        env:
+          PGTZ: Asia/Karachi
+        run: python -W ignore -m unittest discover -s tests -p test_attendance_devices.py -q
       - name: Family summaries, requests and study publication on PostgreSQL
         run: python -W ignore -m unittest discover -s tests -p test_parent_app.py -q
       - name: Published family-scoped parent exam results

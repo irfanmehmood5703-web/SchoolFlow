@@ -12,6 +12,7 @@ import click
 from flask import Blueprint,abort,flash,g,jsonify,redirect,render_template,request,session,url_for
 from sqlalchemy.exc import IntegrityError,OperationalError
 from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy.types import DateTime, TypeDecorator
 
 TZ=ZoneInfo('Asia/Karachi')
 CHANNELS=('android','branded','whatsapp','none')
@@ -23,6 +24,18 @@ QR_COOKIE_PATH='/workspace/core/qr-attendance/scanner'
 QR_PAIR_SECONDS=30*24*60*60
 
 def utc_now():return datetime.now(timezone.utc)
+
+
+class DeviceTimestamp(TypeDecorator):
+    """Store UTC in existing timezone-free columns regardless of the database session timezone."""
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
 
 def configure_attendance_devices(app,db,Student,Employee):
     bp=Blueprint('attendance_devices',__name__)
@@ -39,10 +52,10 @@ def configure_attendance_devices(app,db,Student,Employee):
         token_digest=db.Column(db.String(64),nullable=False,default='')
         model=db.Column(db.String(80),nullable=False,default='')
         client_version=db.Column(db.String(40),nullable=False,default='')
-        first_seen=db.Column(db.DateTime)
-        last_seen=db.Column(db.DateTime)
-        last_marked=db.Column(db.DateTime)
-        created=db.Column(db.DateTime,nullable=False,default=lambda:datetime.now(timezone.utc))
+        first_seen=db.Column(DeviceTimestamp)
+        last_seen=db.Column(DeviceTimestamp)
+        last_marked=db.Column(DeviceTimestamp)
+        created=db.Column(DeviceTimestamp,nullable=False,default=utc_now)
         revision=db.Column(db.Integer,nullable=False,default=1)
         __table_args__=(db.UniqueConstraint('kind','serial'),)
     class BrowserPairing(db.Model):
@@ -51,7 +64,7 @@ def configure_attendance_devices(app,db,Student,Employee):
         device_id=db.Column(db.Integer,db.ForeignKey('attendance_device.id'),nullable=False,index=True)
         device_revision=db.Column(db.Integer,nullable=False)
         principal=db.Column(db.String(100),nullable=False)
-        expires=db.Column(db.DateTime,nullable=False,index=True)
+        expires=db.Column(DeviceTimestamp,nullable=False,index=True)
     class Scan(db.Model):
         __tablename__='attendance_device_scan'
         id=db.Column(db.Integer,primary_key=True)
@@ -63,8 +76,8 @@ def configure_attendance_devices(app,db,Student,Employee):
         person_id=db.Column(db.Integer)
         person_name=db.Column(db.String(120),nullable=False,default='')
         direction=db.Column(db.String(3),nullable=False)
-        occurred=db.Column(db.DateTime,nullable=False,index=True)
-        received=db.Column(db.DateTime,nullable=False)
+        occurred=db.Column(DeviceTimestamp,nullable=False,index=True)
+        received=db.Column(DeviceTimestamp,nullable=False)
         outcome=db.Column(db.String(20),nullable=False)
         reason=db.Column(db.String(200),nullable=False)
         __table_args__=(db.UniqueConstraint('device_id','event_id'),)
@@ -75,8 +88,8 @@ def configure_attendance_devices(app,db,Student,Employee):
         campus=db.Column(db.String(160),nullable=False)
         origin=db.Column(db.String(20),nullable=False)
         base_status=db.Column(db.String(30),nullable=False,default='')
-        first_in=db.Column(db.DateTime)
-        first_out=db.Column(db.DateTime)
+        first_in=db.Column(DeviceTimestamp)
+        first_out=db.Column(DeviceTimestamp)
     class IdentityBinding(db.Model):
         __tablename__='attendance_identity_binding'
         id=db.Column(db.Integer,primary_key=True)
