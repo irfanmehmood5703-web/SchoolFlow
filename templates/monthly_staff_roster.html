@@ -3,7 +3,7 @@
 {{m.heading(title,'Enter monthly totals for multiple employees in one grid. Day-wise records remain available separately.')}}
 {% set attendance_tab='monthly' %}{% set nav_month=month %}{% set nav_day=month+'-01' %}{% include 'staff_attendance_nav.html' %}
 <form method="get" class="form-card no-print monthly-roster-filters">
-  <input type="hidden" name="view" value="summary">
+  <input type="hidden" name="view" value="summary">{% if return_to_payroll %}<input type="hidden" name="return_to" value="payroll">{% endif %}
   <h2>Monthly attendance filters</h2>
   <div class="fields-grid">
     {{m.input('month','Month','month',month,true)}}
@@ -13,12 +13,12 @@
     <div class="field"><label for="employee_id">Employee</label><select id="employee_id" name="employee_id"><option value="">All employees</option>{% for e in employees %}<option value="{{e.id}}" {{'selected' if filters.employee_id==e.id|string else ''}}>{{e.name}} · {{e.employee_no}}</option>{% endfor %}</select></div>
     {{m.input('search','Search name / code','text',filters.search)}}
   </div>
-  <div class="heading-actions"><button>Load month</button><a class="button secondary" href="{{url_for('school_settings.monthly_attendance',month=month)}}">Clear filters</a><a class="button secondary" href="{{url_for('payroll_calendar.edit',month=month)}}">Working calendar</a></div>
+  <div class="heading-actions"><button>Load month</button>{% if return_to_payroll %}<a class="button secondary" href="{{url_for('ops.payroll',month=month,view='generate-salary',**filters)}}">Back to Generate Salary</a>{% endif %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',month=month,return_to='payroll' if return_to_payroll else '')}}">Clear filters</a><a class="button secondary" href="{{url_for('payroll_calendar.edit',month=month)}}">Working calendar</a></div>
 </form>
 <form method="post" class="form-card monthly-roster" data-monthly-roster novalidate>
-  {{m.csrf()}}<input type="hidden" name="view" value="summary"><input type="hidden" name="month" value="{{month}}"><input type="hidden" name="page" value="{{page}}">
+  {{m.csrf()}}<input type="hidden" name="view" value="summary">{% if return_to_payroll %}<input type="hidden" name="return_to" value="payroll">{% endif %}<input type="hidden" name="month" value="{{month}}"><input type="hidden" name="page" value="{{page}}">
   {% for key,value in filters.items() %}<input type="hidden" name="{{key}}" value="{{value}}">{% endfor %}
-  <div class="monthly-roster-heading"><div><h2>{{month}} · Monthly attendance</h2><span>{{total}} matching employees · Page {{page}} of {{pages}}</span></div><button data-monthly-save type="submit" {{'disabled' if not rows else ''}}>Save Attendance</button></div>
+  <div class="monthly-roster-heading"><div><h2>{{month}} · Monthly attendance</h2><span>{{total}} matching employees · Page {{page}} of {{pages}}</span></div><button data-monthly-save type="submit" {{'disabled' if not rows else ''}}>{{'Save & return to salary' if return_to_payroll else 'Save Attendance'}}</button></div>
   <div class="monthly-roster-info">
     <strong>{{'Saved working calendar' if calendar_saved else 'Calendar days (working calendar not set)'}}</strong>
     Enter total counts, including saved day-wise marks. The numbers are used for salary deductions; they do not create or overwrite dated records. Only elapsed, eligible days count. Use Day-wise to correct individual dates. Existing generated salaries remain unchanged. All-present bonuses still require complete dated attendance.
@@ -34,7 +34,7 @@
       <td><input type="text" name="notes_{{e.id}}" value="{{r.notes}}" maxlength="500" aria-label="{{e.name}} internal notes" {{'disabled' if not r.editable}}><span class="monthly-print-value">{{r.notes}}</span></td>
     </tr>{% else %}<tr><td colspan="14" class="empty-state">No employees match these filters.</td></tr>{% endfor %}</tbody></table>
   </div>
-  <div class="monthly-roster-footer no-print"><div class="heading-actions">{% if page>1 %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,page=page-1,**filters)}}">Previous</a>{% endif %}{% if page<pages %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,page=page+1,**filters)}}">Next</a>{% endif %}</div><button data-monthly-save type="submit" {{'disabled' if not rows else ''}}>Save Attendance</button></div>
+  <div class="monthly-roster-footer no-print"><div class="heading-actions">{% if page>1 %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,page=page-1,return_to='payroll' if return_to_payroll else '',**filters)}}">Previous</a>{% endif %}{% if page<pages %}<a class="button secondary" href="{{url_for('school_settings.monthly_attendance',view='summary',month=month,page=page+1,return_to='payroll' if return_to_payroll else '',**filters)}}">Next</a>{% endif %}</div><button data-monthly-save type="submit" {{'disabled' if not rows else ''}}>{{'Save & return to salary' if return_to_payroll else 'Save Attendance'}}</button></div>
 </form>
 <script src="{{asset_url('monthly_staff_roster.js')}}" defer></script>
 {% endblock %}

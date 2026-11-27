@@ -110,9 +110,11 @@ def configure_payroll_calendar(app,db):
             return render_template('operation_error.html',title='Check working calendar',error=str(exc) if isinstance(exc,ValueError) else 'Calendar changed. Reload and try again.'),422
         saved=db.session.get(PayrollCalendar,month)
         return render_template('payroll_calendar.html',title='Payroll Working Calendar',month=month,days=days,
-                               selected=saved.working_dates if saved else [],version=saved.version if saved else 0,
+                               selected=saved.working_dates if saved else [d.isoformat() for d in days if d.weekday()!=6],
+                               saved_count=len(saved.working_dates) if saved else 0,version=saved.version if saved else 0,
                                weekdays=list(calendar.day_name),pay_basis=pay_basis(month) if saved else 'calendar_days',
-                               fixed_salary_days=FIXED_SALARY_DAYS)
+                               fixed_salary_days=FIXED_SALARY_DAYS,
+                               selected_weekdays=[n for n in range(7) if all(d.isoformat() in saved.working_dates for d in days if d.weekday()==n)] if saved else range(6))
 
     app.register_blueprint(bp)
 

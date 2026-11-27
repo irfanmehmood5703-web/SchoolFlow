@@ -42,6 +42,18 @@ class WorkingPayrollTests(unittest.TestCase):
         self.assertEqual(self.c.post('/workspace/payroll-calendar',data=data).status_code,422)
         self.assertEqual(self.c.get('/workspace/payroll-calendar?month=bad').status_code,422)
 
+    def test_new_month_defaults_to_all_monday_through_saturday_dates_and_paid_sundays(self):
+        import re
+        page=self.c.get('/workspace/payroll-calendar?month=2026-09').data.decode()
+        selected=re.findall(r'name="working_dates" value="([^"]+)" data-weekday="\d" checked',page)
+        expected=[d.isoformat() for d in month_dates('2026-09') if d.weekday()!=6]
+        self.assertEqual(selected,expected)
+        self.assertEqual(self.cal.query.count(),0)
+        self.calendar(self.dates)
+        page=self.c.get('/workspace/payroll-calendar?month=2026-09').data.decode()
+        selected=re.findall(r'name="working_dates" value="([^"]+)" data-weekday="\d" checked',page)
+        self.assertEqual(selected,self.dates)
+
     def test_working_day_formula_weekend_holiday_zero_days_and_rounding(self):
         result=joining_pay('2026-09',date(2026,9,15),2200000,self.dates)
         self.assertEqual((result['total_working_days'],result['eligible_working_days'],result['payable_basic']),(22,12,1200000))

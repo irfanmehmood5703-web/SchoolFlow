@@ -967,6 +967,7 @@ def configure_school_settings(app,db,Student,Employee):
 
     def monthly_roster(month, dates):
         today=school_today()
+        return_to_payroll=request.values.get('return_to')=='payroll'
         if dates[0]>today:raise ValueError('Choose the current month or an earlier month.')
         employees=Employee.query.order_by(Employee.name,Employee.id).all()
         raw=app.extensions['record_helpers']['raw_many']('employee',employees)
@@ -1028,9 +1029,10 @@ def configure_school_settings(app,db,Student,Employee):
                 else:db.session.add(W(kind=monthly_totals.KIND,status='Active',data=payload))
                 audit('Save monthly staff totals',employee=int(eid),campus=row['detail'].get('campus',''),month=month,previous=previous,counts=counts,lectures=lectures)
             commit();flash(f'{len(picked)} employee monthly totals saved. Day-wise records have not changed.','success')
+            if return_to_payroll:return redirect(url_for('ops.payroll',view='generate-salary',month=month,**{k:v for k,v in filters.items() if v}))
             return redirect(url_for('school_settings.monthly_attendance',month=month,view='summary',page=page,**{k:v for k,v in filters.items() if v}))
         return render_template('monthly_staff_roster.html',title='Monthly Staff Attendance',month=month,rows=rows,employees=employees,filters=filters,
-            options=options,statuses=monthly_totals.STATUSES,active_statuses=active_statuses,page=page,pages=pages,total=len(roster),calendar_saved=bool(calendar_row),today=today)
+            options=options,statuses=monthly_totals.STATUSES,active_statuses=active_statuses,page=page,pages=pages,total=len(roster),calendar_saved=bool(calendar_row),today=today,return_to_payroll=return_to_payroll)
 
     @bp.route('/hrm/monthly-attendance',methods=['GET','POST'])
     def monthly_attendance():

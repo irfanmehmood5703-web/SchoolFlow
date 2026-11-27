@@ -1680,6 +1680,141 @@ def configure_operations(app, db, Student, Employee):
         if not rates: raise ValueError('No matching lecture rate for a selected approved lecture.')
         return money(rates[0].data['amount'])*int(entry.data['lectures'])
 
+    def payroll_inputs(m,staff):
+        ids=[e.id for e in staff]
+        start=day(m+'-01');end=day(m+'-'+str(calendar.monthrange(start.year,start.month)[1]))
+        calendar_row=db.session.get(app.extensions['payroll_calendar_model'],m)
+        source=dict(calendar=calendar_row,pay_basis=app.extensions['payroll_calendar_helpers']['pay_basis'](m) if calendar_row else 'calendar_days',
+                    staff={e.id:e for e in staff},details=app.extensions['record_helpers']['raw_many']('employee',staff),
+                    monthly=monthly_totals.summaries(Workflow,m,ids),daily=defaultdict(list),history=defaultdict(list),
+                    increments=defaultdict(list),advances=defaultdict(list),lectures=defaultdict(list))
+        if ids:
+            for r in Daily.query.filter(Daily.kind=='staff',Daily.person_id.in_(ids),Daily.day>=start,Daily.day<=end).all():
+                source['daily'][r.person_id].append(r)
+            for r in Salary.query.filter(Salary.employee_id.in_(ids)).all():source['history'][r.employee_id].append(r)
+            for r in Workflow.query.filter(Workflow.status=='Approved',Workflow.kind.in_(('increments','advances','lecture-register'))).order_by(Workflow.id).all():
+                eid=int(r.data['employee_id'])
+                if eid in source['staff']:source[{'increments':'increments','advances':'advances','lecture-register':'lectures'}[r.kind]][eid].append(r)
+        return source
+
+    def calculate_salary(p,m,today,attendance_based=True,source=None):
+        eid=int(p.data['employee_id'])
+        data=p.data
+        staff=source['staff'].get(eid) if source else db.session.get(Employee,eid)
+        if not staff:raise ValueError('Employee is unavailable.')
+        joining=(source['details'].get(eid,{}) if source else details(staff,'employee')).get('joining_date')
+        if not joining: raise ValueError('Complete the employee joining date before generating salary: '+staff.name)
+        joined=day(joining);month_start=day(m+'-01');month_end=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))
+        if joined>month_end: raise ValueError('Salary month is before the employee joining date: '+staff.name)
+        pays_basic=not data.get('lecture_wise') or data.get('include_plan_earnings')
+        working_calendar=source['calendar'] if source else db.session.get(app.extensions['payroll_calendar_model'],m)
+        if working_calendar and not working_calendar.working_dates:raise ValueError('The saved working calendar has no working dates. Review it first.')
+        if joined>month_start and pays_basic and not working_calendar:
+            raise ValueError('Set this salary month\'s working calendar before calculating joining-month pay: '+staff.name)
+        if attendance_based and not working_calendar and any(r.get('type')=='Percent' and r.get('amount') for r in data['rules']):
+            raise ValueError('Set the working calendar before calculating percentage-of-daily-basic deductions.')
+        data={**data,'sandwich_leave':False}  # Never apply legacy sandwich flags.
+        for rule in data['rules']:deduction(rule,0,data['basic'],1)  # Validate any legacy rule interpretation before payroll.
+        if data.get('annual_increment'): raise ValueError('Annual increment posting needs a verified reference rule. No payroll was saved.')
+        increment_rows=[row for row in (source['increments'][eid] if source else Workflow.query.filter_by(kind='increments',status='Approved').order_by(Workflow.id).all())
+                        if int(row.data['employee_id'])==eid and row.data['effective']<=m] if pays_basic and data.get('apply_manual_increments') else []
+        increment_details=[dict(id=row.id,amount=money(row.data['amount']),effective=row.data['effective'],reason=row.data.get('reason','')) for row in increment_rows]
+        monthly_basic=data['basic']+sum(row['amount'] for row in increment_details)
+        pay_basis=source['pay_basis'] if source else app.extensions['payroll_calendar_helpers']['pay_basis'](m) if working_calendar else 'calendar_days'
+        paid_dates=salary_paid_dates(m,working_calendar.working_dates,pay_basis) if working_calendar else None
+        proration=joining_pay(m,joined,monthly_basic,working_calendar.working_dates,pay_basis) if pays_basic and joined>month_start else None
+        base=proration['payable_basic'] if proration else monthly_basic
+        attendance=[r for r in source['daily'][eid] if max(joined,month_start)<=r.day<=min(month_end,today)] if source else Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=max(joined,month_start),Daily.day<=min(month_end,today)).all()
+        attendance.sort(key=lambda r:(r.day,r.id))
+        deduction_attendance=[row for row in attendance if not working_calendar or row.day.isoformat() in working_calendar.working_dates]
+        counts=Counter(r.status for r in deduction_attendance);deductions=0;breakdown=[]
+        lecture_total=sum(r.lectures or 0 for r in attendance)
+        monthly_snapshot=None
+        attendance_source='Day-wise attendance' if deduction_attendance else 'No attendance recorded'
+        if attendance_based or data.get('lecture_incentive') or data.get('all_present_bonus'):
+            saved_month=(source['monthly'] if source else monthly_totals.summaries(Workflow,m,[eid])).get(eid)
+            if saved_month:
+                base_counts=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
+                counts,lecture_total=monthly_totals.payroll_totals(saved_month,base_counts)
+                attendance_source='Saved monthly attendance'
+                monthly_snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lecture_total,revision=saved_month.data['revision'])
+        days=salary_rate_days(pay_basis,working_calendar.working_dates if working_calendar else None)
+        if attendance_based:
+            for rule in data['rules']:
+                calculated=deduction(rule,counts[rule['status']],monthly_basic,days)
+                deductions+=calculated['amount'];breakdown.append(calculated)
+        lecture_rows=[r for r in (source['lectures'][eid] if source else Workflow.query.filter_by(kind='lecture-register',status='Approved').order_by(Workflow.id).all()) if int(r.data['employee_id'])==eid and r.data['date'][:7]==m]
+        if data.get('lecture_wise') and any(day(r.data['date'])<joined for r in lecture_rows): raise ValueError('Approved lectures precede the employee joining date. Correct the lecture register before generating salary.')
+        lecture_details=[dict(id=r.id,date=r.data['date'],class_name=r.data.get('class_name',''),section=r.data.get('section',''),subject=r.data.get('subject',''),lectures=int(r.data['lectures']),amount=lecture_amount(r,m)) for r in lecture_rows] if data.get('lecture_wise') else []
+        lecture_pay=sum(row['amount'] for row in lecture_details)
+        earnings=(base+data['security_return'] if pays_basic else 0)+lecture_pay
+        if pays_basic:
+            earnings+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Earning')
+            deductions+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Deduction')
+        if data.get('lecture_incentive') and not data.get('lecture_wise'): earnings+=data['incentive_per_lecture']*lecture_total
+        bonus=None
+        if data.get('all_present_bonus') and pays_basic:
+            if data.get('bonus_amount'):raise ValueError('This legacy plan has a fixed all-present amount. Update it to the one-working-day bonus before generating salary.')
+            if not working_calendar:raise ValueError('Set the working calendar before calculating the all-present bonus.')
+            bonus=all_present_bonus(m,joined,monthly_basic,data.get('allowances',[]),working_calendar.working_dates,attendance,pay_basis)
+            earnings+=bonus['amount']
+        advance_map={}
+        advance_rows=source['advances'][eid] if source else Workflow.query.filter_by(kind='advances',status='Approved').order_by(Workflow.id).all()
+        history=source['history'][eid] if source else Salary.query.filter_by(employee_id=eid).all()
+        for a in advance_rows:
+            if int(a.data['employee_id'])!=eid or a.data['date'][:7]>m:continue
+            reserved=sum(s.detail.get('advances',{}).get(str(a.id),0) for s in history)
+            advance_map[str(a.id)]=min(money(a.data['return_amount']),max(0,money(a.data['amount'])-reserved))
+        advance_deduction=sum(advance_map.values())
+        deductions+=data['security_payment']+advance_deduction
+        if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
+        snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
+                      base_plan_basic=data['basic'],monthly_basic=monthly_basic,pay_basis=pay_basis,salary_divisor_days=days,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
+                      working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates),pay_basis=pay_basis,paid_dates=paid_dates,salary_divisor_days=days) if working_calendar else None)
+        return dict(earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot,counts=dict(counts),source=attendance_source,attendance_deduction=sum(r['amount'] for r in breakdown))
+
+    def salary_preview_token(result):
+        return hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+
+    def payroll_page(m,view,today):
+        rows=Salary.query.filter_by(month=m).order_by(Salary.id.desc()).all()
+        active=Employee.query.filter_by(status='Active').order_by(Employee.name,Employee.id).all()
+        raw=app.extensions['record_helpers']['raw_many']('employee',active)
+        filters={k:request.args.get(k,'').strip() for k in ('campus','department','designation_group','employee_id','search')}
+        if len(filters['search'])>160:raise ValueError('Search must be 160 characters or fewer.')
+        staff=[e for e in active if (not filters['employee_id'] or filters['employee_id']==str(e.id))
+               and all(not filters[k] or filters[k]==raw.get(e.id,{}).get(k) for k in ('campus','department','designation_group'))
+               and (not filters['search'] or filters['search'].casefold() in ' '.join((e.name,e.employee_no or '',e.role or '')).casefold())]
+        options={k:sorted({raw.get(e.id,{}).get(k) for e in active if raw.get(e.id,{}).get(k)}) for k in ('campus','department','designation_group')}
+        generated={r.employee_id:r for r in rows}
+        filtered_ids={e.id for e in staff}
+        if any(filters.values()):rows=[r for r in rows if r.employee_id in filtered_ids]
+        plans={}
+        for p in Workflow.query.filter_by(kind='salary-plans',status='Approved').order_by(Workflow.id.desc()).all():
+            plans.setdefault(int(p.data['employee_id']),p)
+        preview=[]
+        complete=m<today.strftime('%Y-%m')
+        # Limit expensive calculations to the visible page; other employees are not selected implicitly.
+        try:page=max(1,int(request.args.get('page','1')))
+        except ValueError:raise ValueError('Choose a valid page.')
+        pages=max(1,(len(staff)+49)//50);page=min(pages,page)
+        visible=staff[(page-1)*50:page*50]
+        source=payroll_inputs(m,[e for e in visible if e.id not in generated and e.id in plans])
+        for e in visible:
+            row=dict(employee=e,detail=raw.get(e.id,{}),generated=generated.get(e.id),result=None,error=None,token=None)
+            if not row['generated']:
+                if m>today.strftime('%Y-%m'):row['error']='Choose the current month or an earlier month.'
+                elif e.id not in plans:row['error']='No approved salary plan.'
+                else:
+                    try:
+                        row['result']=calculate_salary(plans[e.id],m,today,True,source)
+                        row['token']=salary_preview_token(row['result'])
+                    except ValueError as exc:row['error']=str(exc)
+            preview.append(row)
+        return render('payroll.html',title=TITLES.get(view,'Pay / Print Salary'),view=view,month=m,rows=rows,employees=active,
+                      employee=lambda id:db.session.get(Employee,id),preview=preview,filters=filters,filter_options=options,
+                      complete=complete,page=page,pages=pages,total=len(staff))
+
     @bp.route('/payroll',methods=['GET','POST'])
     def payroll():
         if request.method=='POST':app.extensions['admission_capacity']['lock']()
@@ -1699,77 +1834,14 @@ def configure_operations(app, db, Student, Employee):
                     if eid in seen or eid not in chosen: continue
                     seen.add(eid)
                     if Salary.query.filter_by(employee_id=eid,month=m).first(): continue
-                    data=p.data
-                    staff=db.get_or_404(Employee,eid)
-                    joining=details(staff,'employee').get('joining_date')
-                    if not joining: raise ValueError('Complete the employee joining date before generating salary: '+staff.name)
-                    joined=day(joining);month_start=day(m+'-01');month_end=day(m+'-'+str(calendar.monthrange(int(m[:4]),int(m[5:]))[1]))
-                    if joined>month_end: raise ValueError('Salary month is before the employee joining date: '+staff.name)
-                    pays_basic=not data.get('lecture_wise') or data.get('include_plan_earnings')
-                    working_calendar=db.session.get(app.extensions['payroll_calendar_model'],m)
-                    if working_calendar and not working_calendar.working_dates:raise ValueError('The saved working calendar has no working dates. Review it first.')
-                    if joined>month_start and pays_basic and not working_calendar:
-                        raise ValueError('Set this salary month\'s working calendar before calculating joining-month pay: '+staff.name)
-                    if request.form.get('attendance_based') and not working_calendar and any(r.get('type')=='Percent' and r.get('amount') for r in data['rules']):
-                        raise ValueError('Set the working calendar before calculating percentage-of-daily-basic deductions.')
-                    data={**data,'sandwich_leave':False}  # Never apply legacy sandwich flags.
-                    for rule in data['rules']:deduction(rule,0,data['basic'],1)  # Validate any legacy rule interpretation before payroll.
-                    if data.get('annual_increment'): raise ValueError('Annual increment posting needs a verified reference rule. No payroll was saved.')
-                    increment_rows=[row for row in Workflow.query.filter_by(kind='increments',status='Approved').order_by(Workflow.id).all()
-                                    if int(row.data['employee_id'])==eid and row.data['effective']<=m] if pays_basic and data.get('apply_manual_increments') else []
-                    increment_details=[dict(id=row.id,amount=money(row.data['amount']),effective=row.data['effective'],reason=row.data.get('reason','')) for row in increment_rows]
-                    monthly_basic=data['basic']+sum(row['amount'] for row in increment_details)
-                    pay_basis=app.extensions['payroll_calendar_helpers']['pay_basis'](m) if working_calendar else 'calendar_days'
-                    paid_dates=salary_paid_dates(m,working_calendar.working_dates,pay_basis) if working_calendar else None
-                    proration=joining_pay(m,joined,monthly_basic,working_calendar.working_dates,pay_basis) if pays_basic and joined>month_start else None
-                    base=proration['payable_basic'] if proration else monthly_basic
-                    attendance=Daily.query.filter(Daily.kind=='staff',Daily.person_id==eid,Daily.day>=max(joined,month_start),Daily.day<=month_end).all()
-                    deduction_attendance=[row for row in attendance if not working_calendar or row.day.isoformat() in working_calendar.working_dates]
-                    counts=Counter(r.status for r in deduction_attendance);deductions=0;breakdown=[]
-                    lecture_total=sum(r.lectures or 0 for r in attendance)
-                    monthly_snapshot=None
-                    if request.form.get('attendance_based') or data.get('lecture_incentive') or data.get('all_present_bonus'):
-                        saved_month=monthly_totals.summaries(Workflow,m,[eid]).get(eid)
-                        if saved_month:
-                            base_counts=monthly_totals.basis(m,joining,today,working_calendar.working_dates if working_calendar else None,attendance)
-                            counts,lecture_total=monthly_totals.payroll_totals(saved_month,base_counts)
-                            monthly_snapshot=dict(id=saved_month.id,counts=dict(counts),lectures=lecture_total,revision=saved_month.data['revision'])
-                    days=salary_rate_days(pay_basis,working_calendar.working_dates if working_calendar else None)
-                    if request.form.get('attendance_based'):
-                        for rule in data['rules']:
-                            calculated=deduction(rule,counts[rule['status']],monthly_basic,days)
-                            deductions+=calculated['amount'];breakdown.append(calculated)
-                    lecture_rows=[r for r in Workflow.query.filter_by(kind='lecture-register',status='Approved').all() if int(r.data['employee_id'])==eid and r.data['date'][:7]==m]
-                    if data.get('lecture_wise') and any(day(r.data['date'])<joined for r in lecture_rows): raise ValueError('Approved lectures precede the employee joining date. Correct the lecture register before generating salary.')
-                    lecture_details=[dict(id=r.id,date=r.data['date'],class_name=r.data.get('class_name',''),section=r.data.get('section',''),subject=r.data.get('subject',''),lectures=int(r.data['lectures']),amount=lecture_amount(r,m)) for r in lecture_rows] if data.get('lecture_wise') else []
-                    lecture_pay=sum(row['amount'] for row in lecture_details)
-                    earnings=(base+data['security_return'] if pays_basic else 0)+lecture_pay
-                    if pays_basic:
-                        earnings+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Earning')
-                        deductions+=sum(a['amount'] for a in data.get('allowances',[]) if a['type']=='Deduction')
-                    if data.get('lecture_incentive') and not data.get('lecture_wise'): earnings+=data['incentive_per_lecture']*lecture_total
-                    bonus=None
-                    if data.get('all_present_bonus') and pays_basic:
-                        if data.get('bonus_amount'):raise ValueError('This legacy plan has a fixed all-present amount. Update it to the one-working-day bonus before generating salary.')
-                        if not working_calendar:raise ValueError('Set the working calendar before calculating the all-present bonus.')
-                        bonus=all_present_bonus(m,joined,monthly_basic,data.get('allowances',[]),working_calendar.working_dates,attendance,pay_basis)
-                        earnings+=bonus['amount']
-                    advance_deduction=0
-                    for a in Workflow.query.filter_by(kind='advances',status='Approved').all():
-                        if int(a.data['employee_id'])!=eid or a.data['date'][:7]>m: continue
-                        reserved=sum(s.detail.get('advances',{}).get(str(a.id),0) for s in Salary.query.filter_by(employee_id=eid).all())
-                        value=min(money(a.data['return_amount']),max(0,money(a.data['amount'])-reserved))
-                        advance_deduction+=value
-                    advance_map={}
-                    for a in Workflow.query.filter_by(kind='advances',status='Approved').all():
-                        if int(a.data['employee_id'])==eid and a.data['date'][:7]<=m:
-                            reserved=sum(s.detail.get('advances',{}).get(str(a.id),0) for s in Salary.query.filter_by(employee_id=eid).all())
-                            advance_map[str(a.id)]=min(money(a.data['return_amount']),max(0,money(a.data['amount'])-reserved))
-                    deductions+=data['security_payment']+advance_deduction
-                    if deductions>earnings: raise ValueError('Deductions exceed earnings; review the salary plan.')
-                    snapshot=dict(all_present_bonus=bonus,joining_date=joining,lecture_details=lecture_details,plan=data,attendance=breakdown,lectures=[r.id for r in lecture_rows] if data.get('lecture_wise') else [],lecture_pay=lecture_pay,advances=advance_map,basic=base,
-                                  base_plan_basic=data['basic'],monthly_basic=monthly_basic,pay_basis=pay_basis,salary_divisor_days=days,manual_increments=increment_details,proration=proration,monthly_attendance=monthly_snapshot,
-                                  working_calendar=dict(month=m,version=working_calendar.version,working_dates=list(working_calendar.working_dates),pay_basis=pay_basis,paid_dates=paid_dates,salary_divisor_days=days) if working_calendar else None)
+                    result=calculate_salary(p,m,today,bool(request.form.get('attendance_based')))
+                    if request.form.get('reviewed_preview')=='1':
+                        expected=request.form.get('preview_'+str(eid),'')
+                        # The review table always uses attendance deductions; ensure its data has not changed.
+                        reviewed=result if request.form.get('attendance_based') else calculate_salary(p,m,today,True)
+                        if not expected or not hmac.compare_digest(expected,salary_preview_token(reviewed)):
+                            raise ValueError('Salary preview changed. Reload payroll and review the latest attendance and deductions.')
+                    earnings,deductions,snapshot=result['earnings'],result['deductions'],result['detail']
                     db.session.add(Salary(employee_id=eid,month=m,earnings=earnings,deductions=deductions,net=earnings-deductions,detail=snapshot));count+=1;generated.append(eid)
                 if not seen: raise ValueError('Selected employees have no approved salary plans.')
                 if request.form.get('generate_sms') and generated:queue('Salary generated',generated,audience='teacher',event='salary-generated',context={'month':m})
@@ -1809,8 +1881,7 @@ def configure_operations(app, db, Student, Employee):
                 return render('salary_print.html',group_values=group_values,print_groups=print_groups,details=lambda p,kind='employee':staff_details.get(p.id,{}),title={'slip':'Salary Slip','signature':'Salary Signature','report':'Salary Report','bank':'Bank Salary Sheet'}[action],rows=rows,employee=lambda id:db.session.get(Employee,id),layout=action)
             else: raise ValueError('Invalid salary action.')
             return redirect(url_for('ops.payroll',view=view,month=m))
-        rows=Salary.query.filter_by(month=m).order_by(Salary.id.desc()).all()
-        return render('payroll.html',title=TITLES.get(view,'Pay / Print Salary'),view=view,month=m,rows=rows,employees=Employee.query.filter_by(status='Active').all(),employee=lambda id:db.session.get(Employee,id))
+        return payroll_page(m,view,today)
 
     @bp.route('/lecture-import',methods=['POST'])
     def lecture_import():
