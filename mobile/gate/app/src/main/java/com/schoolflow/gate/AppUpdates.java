@@ -24,9 +24,11 @@ final class AppUpdates {
             try {
                 JSONObject info = readManifest();
                 int version = info.optInt("version_code");
-                String link = info.optString("url");
                 String label = info.optString("version_name");
                 boolean branded = !BuildConfig.GATE_SCHOOL_SCOPE.isEmpty();
+                String renamedLink = info.optString("download_url");
+                String link = !branded && validLink(renamedLink, version)
+                        ? renamedLink : info.optString("url");
                 String labelPattern = branded ? "0\\.3-school-test\\.[0-9]+" : "[0-9]+(?:\\.[0-9]+){1,3}";
                 String schoolPrefix = EndpointPolicy.BASE + "/apps/school/update/";
                 boolean trusted = branded
