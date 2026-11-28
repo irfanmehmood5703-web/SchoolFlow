@@ -63,6 +63,10 @@ jobs:
           path: apk
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
         with: {distribution: temurin, java-version: '17'}
+      - name: Verify the InstituteAxis server is ready to record the release
+        run: |
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 15 \
+            https://schoolflow-phase1.onrender.com/healthz | jq -e '.status == "ok" and .brand == "InstituteAxis"'
       - name: Sign, verify and publish
         env:
           GH_TOKEN: ${{ github.token }}

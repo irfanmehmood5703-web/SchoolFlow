@@ -5,6 +5,7 @@ on:
     paths: ['mobile/gate/**', 'mobile/android-common/**', '.github/workflows/gate-android.yml']
   pull_request:
     paths: ['mobile/gate/**', 'mobile/android-common/**', '.github/workflows/gate-android.yml']
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -69,7 +70,7 @@ jobs:
           printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
           cp app/src/main/assets/models.json dist/MODELS.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           name: InstituteAxis-Gate-test
           path: mobile/gate/dist/
@@ -83,7 +84,7 @@ jobs:
             mobile/gate/app/build/outputs/androidTest-results/
           retention-days: 14
   publish-test-apk:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [android, backend]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -106,7 +107,7 @@ jobs:
           test "$gate_expected_sha" = "$GITHUB_SHA"
           (cd gate-apk && sed 's@dist/@@' SHA256SUMS.txt | sha256sum -c -)
           gate_tag="gate-test-${{ github.run_number }}"
-          gh release create "$gate_tag" gate-apk/InstituteAxis-Gate-Trial.apk gate-apk/InstituteAxis-Gate-School-Test.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "InstituteAxis QR Attendance 0.6 — school and trial APKs" --notes "Two separate attended ARM64 Android 8+ test apps: InstituteAxis-Gate-School-Test.apk targets the original InstituteAxis host; InstituteAxis-Gate-Trial.apk stays on the separate fictional trial host. Distinct package IDs keep their enrollments and credentials separate. Scan existing student or employee identity cards in QR Attendance mode after selecting IN or OUT. Face Attendance mode uses local YuNet/SFace enrollment and operator confirmation. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
+          gh release create "$gate_tag" gate-apk/InstituteAxis-Gate-Trial.apk gate-apk/InstituteAxis-Gate-School-Test.apk gate-apk/SHA256SUMS.txt gate-apk/SOURCE-COMMIT.txt gate-apk/MODELS.json --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "InstituteAxis Gate — school and trial APKs" --notes "Two separate attended ARM64 Android 8+ test apps: InstituteAxis-Gate-School-Test.apk targets the original InstituteAxis host; InstituteAxis-Gate-Trial.apk stays on the separate fictional trial host. Distinct package IDs keep their enrollments and credentials separate. Scan existing student or employee identity cards in QR Attendance mode after selecting IN or OUT. Face Attendance mode uses local YuNet/SFace enrollment and operator confirmation. No school keys or face enrollments are bundled. Automated checks do not replace real-device camera/accuracy/liveness testing. This is debug-signed for fictional trials; production signing and physical verification remain outstanding."
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
