@@ -43,7 +43,7 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':30},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':31},headers=headers or self.headers)
     def key(self,job,other=False):
         if job['signing'].get('keystore') and not other:return self.worker.put('/api/app-builder/'+job['id']+'/signing',json={'keystore':job['signing']['keystore']},headers=self.headers)
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
@@ -222,17 +222,20 @@ class SchoolAppTests(unittest.TestCase):
 
     def test_central_update_queues_existing_school_once_and_refuses_old_worker(self):
         self.prepare();job=self.claim().json['job'];self.complete(job)
-        old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
+        old=self.M['build'].query.one();old.spec={**old.spec,'source_version':30};db.session.commit()
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
         update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
-        self.assertEqual(update['branding']['source_version'],30)
+        self.assertEqual(update['branding']['source_version'],31)
         self.assertEqual(update['branding']['launcher_labels'],{
-            'parents':'InstituteAxis Parent','teacher':'InstituteAxis Teacher','owner':'InstituteAxis Owner','sms':'InstituteAxis SMS','qr':'InstituteAxis QR Attendance','face':'InstituteAxis Gate'})
+            'parents':'Parent App','teacher':'Teacher App','owner':'Owner App','sms':'SMS App','qr':'QR Attendance','face':'Gate App'})
         self.assertEqual(self.claim().json['job']['id'],update['id'])
         scope=job['branding']['school_key']
-        self.assertEqual(self.worker.get('/api/mobile-app/update/'+scope+'/parents').json['version_code'],1)
+        update_url='/api/mobile-app/update/'+scope+'/parents'
+        self.assertEqual(self.worker.get(update_url).json['version_code'],1)
         completed=self.complete(update)
-        self.assertEqual(self.worker.get('/api/mobile-app/update/'+scope+'/parents').json['version_code'],2)
+        published=self.worker.get(update_url).json
+        self.assertEqual(published['version_code'],2)
+        self.assertEqual(published['whats_new'],'Shorter app names on your home screen.')
         self.assertEqual({app['role']:app['label'] for app in completed['artifacts']},{role:label for role,label in update['branding']['launcher_labels'].items() if role!='face'})
         self.assertIsNone(self.claim().json['job'])
         self.assertEqual(self.M['build'].query.count(),2)
@@ -247,7 +250,7 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(self.complete(job)['artifacts'][0]['label'],'ISF School System Parents')
         upgrade=self.claim().json['job']
         self.assertEqual(upgrade['sequence'],job['sequence']+1)
-        self.assertEqual(self.complete(upgrade)['artifacts'][0]['label'],'InstituteAxis Parent')
+        self.assertEqual(self.complete(upgrade)['artifacts'][0]['label'],'Parent App')
 
     def test_client_upgrade_reloads_each_tenants_saved_logo_after_old_bytes_are_discarded(self):
         from PIL import Image

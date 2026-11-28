@@ -13,8 +13,15 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder,QR_WORKFLOW,REPOSITORY
 from itsdangerous import BadData, URLSafeTimedSerializer
 
-SOURCE_VERSION=30
-LAUNCHER_LABELS={'parents':'InstituteAxis Parent','teacher':'InstituteAxis Teacher','owner':'InstituteAxis Owner','sms':'InstituteAxis SMS','qr':'InstituteAxis QR Attendance','face':'InstituteAxis Gate'}
+SOURCE_VERSION=31
+LAUNCHER_LABELS={
+    'parents': 'Parent App',
+    'teacher': 'Teacher App',
+    'owner': 'Owner App',
+    'sms': 'SMS App',
+    'qr': 'QR Attendance',
+    'face': 'Gate App',
+}
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance','face':'Face Attendance'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -84,7 +91,8 @@ def configure_school_apps(app,db):
     def required_roles(spec):
         return set(ROLES) if spec.get('face_storage') else set(ROLES)-{'face'}
     def artifact_response(school, file):
-        filename=LAUNCHER_LABELS[file.role].replace(' ','-')+'-'+school.code+'.apk'
+        app_name=LAUNCHER_LABELS[file.role].removesuffix(' App').replace(' ','-')
+        filename=f'InstituteAxis-{app_name}-{school.code}.apk'
         if file.role=='face':
             storage=face_storage()
             if not storage:abort(503,'Face Attendance download storage is unavailable.')
@@ -200,7 +208,10 @@ def configure_school_apps(app,db):
             if row['key'] not in required_roles(spec):continue
             role=row['key'];file=files.get(role)
             row.pop('official_qr',None)
-            row.update(label=spec['name']+' '+ROLES[role],launcher_label=LAUNCHER_LABELS[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school’s icon.' if file else 'Prepare this school’s apps below. No generic InstituteAxis APK is substituted.'))
+            launcher_label=LAUNCHER_LABELS[role]
+            if file:
+                launcher_label=build.spec.get('launcher_labels',{}).get(role) or build.spec['name']+' '+ROLES[role]
+            row.update(label=spec['name']+' '+ROLES[role],launcher_label=launcher_label,school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school’s icon.' if file else 'Prepare this school’s apps below. No generic InstituteAxis APK is substituted.'))
         return rows
     def owner():
         school=private_school()
@@ -305,8 +316,9 @@ def configure_school_apps(app,db):
             return jsonify(available=False),200,{'Cache-Control':'private, no-store'}
         ticket=update_ticket().dumps([scope,role,build.sequence])
         link='https://schoolflow-phase1.onrender.com'+url_for('school_apps.mobile_update_download',ticket=ticket,role=role)
+        whats_new='Shorter app names on your home screen.' if build.spec.get('source_version',1)>=31 else 'InstituteAxis app improvements.'
         response=jsonify(available=True,version_code=build.sequence,version_name="0.3-school-test."+str(build.sequence),
-                         whats_new="Updated InstituteAxis name, logo and app experience.",minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),
+                         whats_new=whats_new,minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),
                          sha256=file.sha256,url=link)
         response.headers['Cache-Control']='private, no-store'
         return response
