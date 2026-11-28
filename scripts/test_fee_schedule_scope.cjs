@@ -11,7 +11,10 @@ const base='http://127.0.0.1:5056',url=base+'/workspace/core/fees/schedules';
    if(await form.locator('select[multiple][name=campuses],select[multiple][name=classes]').count())throw Error('Ambiguous listbox remains');
    for(const group of [campus,classes]){if(await group.locator('input:checked').count())throw Error('New schedule scope was preselected');if(!(await group.locator('[data-scope-count]').textContent()).includes('0 selected'))throw Error('Missing explicit zero-selection state');}
    await page.fill('#name','Fictional scope '+width);await page.fill('#due_day','10');
-   const amount=(head)=>page.locator('[data-fee-schedule-line]').filter({has:page.getByRole('heading',{name:head,exact:true})}).locator('input[name^=amount_]');
+   const amount=(head)=>page.locator(`[data-fee-schedule-line][data-head-key="${head}"]`).locator('input[name^=amount_]');
+   await page.getByText('Add Fee Head',{exact:true}).click();
+   await page.locator('#optional-head-select').selectOption({label:'Annual Charges'});
+   await page.getByRole('button',{name:'Add selected head',exact:true}).click();
    await amount('Tuition Fee').fill('3500');await amount('Annual Charges').fill('3000');
    await page.getByRole('button',{name:'Create schedules',exact:true}).click();
    if(!(await campus.locator('[data-scope-error]').isVisible()))throw Error('Missing inline campus instruction');

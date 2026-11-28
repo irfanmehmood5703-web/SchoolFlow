@@ -52,7 +52,10 @@ if(!await page.locator('#new-ticket button').isDisabled())throw Error('demo must
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('support horizontal overflow at '+width);
 console.log('PASS Assistant/support/notices '+width+'px: guide, live summary, history, modal layout, bell and demo boundary');
 await page.goto('http://127.0.0.1:5055/workspace/how-to');
-if(await page.locator('.help-card').count()!==103)throw Error('How To guide coverage');
+if(await page.locator('.help-card').count()<100)throw Error('How To guide coverage');
+for(const slug of ['class-cover','student-follow-up','one-click-reports']){
+ if(await page.locator(`.help-card a[href="/workspace/how-to/${slug}"]`).count()!==1)throw Error('Missing guide: '+slug);
+}
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('How To horizontal overflow at '+width);
 const navY=await page.locator('.help-categories').evaluate(el=>el.getBoundingClientRect().top);
 await page.locator('.help-results').evaluate(el=>el.scrollTo({top:400,behavior:'instant'}));

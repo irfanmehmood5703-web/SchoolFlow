@@ -320,6 +320,10 @@ def configure_certificates(app,db,Student):
             previous_default = '9da93f77169098dac3ae421e1d1dfa38d704d86e0fcc9670b9670b0a0f97a994'
             if hashlib.sha256(content.get('body', '').encode()).hexdigest() == previous_default:
                 content = dict(content, body=default_content(t.key)['body'])
+        if t.key in ('migration', 'rustication'):
+            branded_body = default_content(t.key)['body']
+            if content.get('body') == branded_body.replace('InstituteAxis', 'SchoolFlow'):
+                content = dict(content, body=branded_body)
         sections={key:clean_html(re.sub(r'\[([A-Za-z_][A-Za-z0-9_]*)\]',replace,value)) for key,value in content.items()}
         html=render_template('certificate_document.html',sections=sections,layout=CATALOG.get(t.key,{'layout':'certificate'})['layout'])
         return html,amounts,data
