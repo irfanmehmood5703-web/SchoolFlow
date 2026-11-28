@@ -1,4 +1,4 @@
-# SchoolFlow acceptance audit — 14 November 2026
+# InstituteAxis acceptance audit — 14 November 2026
 
 ## Scope and findings
 

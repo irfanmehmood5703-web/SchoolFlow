@@ -9,7 +9,7 @@ public final class RecognitionPolicy {
   public Identity(String kind,int id,String label,String qrToken,String binding,List<float[]> samples) {
    if(!("student".equals(kind)||"staff".equals(kind)) || id<=0 || label==null || label.trim().isEmpty() || label.length()>120 || samples==null || samples.size()<1 || samples.size()>3) throw new IllegalArgumentException("Invalid enrollment");
    String type=kind.equals("student")?"student":"employee";
-   if(qrToken==null||!qrToken.matches("schoolflow:"+type+":[a-f0-9]{64}")||binding==null||!binding.matches("[A-Za-z0-9_-]{43}"))throw new IllegalArgumentException("Verify the SchoolFlow identity QR first.");
+   if(qrToken==null||!qrToken.matches("schoolflow:"+type+":[a-f0-9]{64}")||binding==null||!binding.matches("[A-Za-z0-9_-]{43}"))throw new IllegalArgumentException("Verify the InstituteAxis identity QR first.");
    ArrayList<float[]> copy=new ArrayList<>();
    for(float[] v:samples) { validate(v); copy.add(v.clone()); }
    this.kind=kind;this.id=id;this.label=label;this.qrToken=qrToken;this.binding=binding;this.samples=Collections.unmodifiableList(copy);

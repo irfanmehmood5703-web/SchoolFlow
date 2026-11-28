@@ -5,7 +5,7 @@ Screenshot_20261107_124131_com.android.chrome.jpg and
 Screenshot_20261107_124134_com.android.chrome.jpg.
 
 This is a functional reference inventory, not an implementation claim. Use
-SchoolFlow branding and an original interface. Blue/grey below describe the
+InstituteAxis branding and an original interface. Blue/grey below describe the
 appearance in the reference screenshots only. The cause of a disabled item
 cannot be established from these images; permissions, module/plan activation
 or unavailable functionality are possible explanations, not verified diagnoses.
@@ -33,4 +33,4 @@ as a section heading. See STUDENT_EXTRAS_STATUS.md for actual implementation
 and remaining work.
 Do not treat the reference's grey appearance as a request to build permanent
 inactive placeholders, nor claim that listing an item makes it functional.
-Implementation and permissions must be verified separately for SchoolFlow.
+Implementation and permissions must be verified separately for InstituteAxis.

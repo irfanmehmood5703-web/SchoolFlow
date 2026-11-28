@@ -59,7 +59,7 @@ class MessagingTests(unittest.TestCase):
         self.assertIn(b'Family reply',self.c.get('/workspace/conversations/'+cid).data)
         mid=self.tenant(lambda:self.M['message'].query.order_by(self.M['message'].id).first().id)
         self.assertEqual(self.post(path+'/read',{'last':str(mid)},p).status_code,204)
-        self.assertIn(b'Read in SchoolFlow',self.c.get('/workspace/conversations/'+cid).data)
+        self.assertIn(b'Read in InstituteAxis',self.c.get('/workspace/conversations/'+cid).data)
         self.c=self.login();self.assertIn(b'Family reply',self.c.get('/workspace/conversations/'+cid).data)
     def test_foreign_family_school_anonymous_and_private_file_boundaries(self):
         cid=self.create(attachments=(io.BytesIO(b'%PDF-1.4\nfictional'),'school.pdf'));p=self.parent(2)

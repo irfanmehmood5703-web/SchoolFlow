@@ -1,4 +1,4 @@
-"""Built-in SchoolFlow guides and permission-scoped read-only actions."""
+"""Built-in InstituteAxis guides and permission-scoped read-only actions."""
 import hashlib,json,re,secrets,time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -111,7 +111,7 @@ def configure_assistant(app,db,Student,Employee):
         c=own_chat(cid);turns=list(reversed(Turn.query.filter_by(chat_id=c.id).order_by(Turn.id.desc()).limit(60).all()))
         return jsonify(chat_id=c.id,turns=[turn_data(t) for t in turns])
     def guide_answer(guides):
-        if not guides:return 'Is maslay ka module ya option ka naam likhein. Main SchoolFlow ki mojooda guides mein madad kar sakta hoon. / Please name the SchoolFlow option you need help with, or open Support.'
+        if not guides:return 'Is maslay ka module ya option ka naam likhein. Main InstituteAxis ki mojooda guides mein madad kar sakta hoon. / Please name the InstituteAxis option you need help with, or open Support.'
         a=guides[0]
         return a['title']+'\n\n'+'\n'.join(str(i+1)+'. '+step for i,step in enumerate(a['steps']))+ ('\n\n'+a['note'] if a['note'] else '')
     def live(action):
@@ -163,7 +163,7 @@ def configure_assistant(app,db,Student,Employee):
         return jsonify(chat_id=c.id,answer=turn_data(reply))
     @vendor.route('',methods=['GET','POST'])
     def settings():
-        if request.method=='POST':abort(403,'SchoolFlow uses built-in Guide mode only. External model activation is disabled.')
+        if request.method=='POST':abort(403,'InstituteAxis uses built-in Guide mode only. External model activation is disabled.')
         return render_template('assistant_settings.html',title='AI Assistant')
     app.register_blueprint(bp);app.register_blueprint(vendor)
     app.extensions['assistant_helpers']=dict(guides=allowed_guides,retrieve=retrieve,live=live)

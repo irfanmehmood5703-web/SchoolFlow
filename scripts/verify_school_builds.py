@@ -83,10 +83,9 @@ def verify():
                 try:
                     build(sample,b'',path,key_password)
                     results=inspect_apks(sample,sha)
-                    assert {item['role']:item['label'] for item in results['artifacts'] if item['role']!='face'}=={
-                        'parents':'Parent App','teacher':'Teacher App','owner':'Owner App','sms':'SMS App','qr':'QR Attendance'}
+                    assert {item['role']:item['label'] for item in results['artifacts']} == LAUNCHER_LABELS
                     face=next(item for item in results['artifacts'] if item['role']=='face')
-                    assert face['label']=='Fictional Academy Face Attendance' and 100<face['size']<170*1024*1024
+                    assert 100<face['size']<170*1024*1024
                 finally:
                     shutil.rmtree(CLIENTS/'generated-school-res',ignore_errors=True)
             print('Verified 20 compiled school APKs: two schools, real logo restoration after a central upgrade, labels, packages, private signing, APK-only sharing and stable-key updates.')

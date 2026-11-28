@@ -115,7 +115,7 @@ def configure_certificates(app,db,Student):
             from openpyxl import Workbook
             from openpyxl.styles import Font,PatternFill
             from openpyxl.utils import get_column_letter
-            workbook=Workbook();sheet=workbook.active;sheet.title='SchoolFlow';sheet.append(headers)
+            workbook=Workbook();sheet=workbook.active;sheet.title='InstituteAxis';sheet.append(headers)
             for cell in sheet[1]:cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='176B4A')
             for row in rows:
                 safe=[re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]','',x) if isinstance(x,str) else x for x in row]
@@ -125,10 +125,10 @@ def configure_certificates(app,db,Student):
             sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
             for i in range(1,len(headers)+1):sheet.column_dimensions[get_column_letter(i)].width=25
             output=io.BytesIO();workbook.save(output)
-            return app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="schoolflow-{name}.xlsx"'})
+            return app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="instituteaxis-{name}.xlsx"'})
         stream=io.StringIO();writer=csv.writer(stream);writer.writerow(headers)
         for row in rows:writer.writerow(["'"+str(x) if str(x).lstrip().startswith(('=','+','-','@')) else str(x) for x in row])
-        response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"';return response
+        response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="instituteaxis-{name}.csv"';return response
     def qr_payload(s):
         namespace=(getattr(g,'school_identity',None) or {}).get('scope','DEMO')
         token=hmac.new(str(app.config['SECRET_KEY']).encode(),f'schoolflow:student-qr:{namespace}:{s.id}:{s.admission_no}'.encode(),hashlib.sha256).hexdigest()
@@ -159,7 +159,7 @@ def configure_certificates(app,db,Student):
         if not hmac.compare_digest(signature,guardian_signature(iid)):abort(404)
         issue=db.get_or_404(CertificateIssue,iid)
         status=guardian_status(issue)
-        response=app.response_class('<!doctype html><meta name="schoolflow-document" content="1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guardian card verification</title><main style="font:18px Arial;max-width:480px;margin:12vh auto;padding:25px;border:2px solid #176b4a;border-radius:12px"><h2>SchoolFlow Guardian Card</h2><h1>'+str(escape(status))+'</h1><p>Reference: '+str(escape(issue.reference))+'</p><p>Verify the guardian photo in person before releasing a student.</p></main>',mimetype='text/html')
+        response=app.response_class('<!doctype html><meta name="schoolflow-document" content="1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guardian card verification</title><main style="font:18px Arial;max-width:480px;margin:12vh auto;padding:25px;border:2px solid #176b4a;border-radius:12px"><h2>InstituteAxis Guardian Card</h2><h1>'+str(escape(status))+'</h1><p>Reference: '+str(escape(issue.reference))+'</p><p>Verify the guardian photo in person before releasing a student.</p></main>',mimetype='text/html')
         response.headers['Cache-Control']='no-store';return response
     @bp.post('/guardian-revoke/<int:iid>')
     def guardian_revoke(iid):
@@ -262,7 +262,7 @@ def configure_certificates(app,db,Student):
                 content=dict(content,body=content['body'].replace(
                     old_approval,
                     'Transfer is effective only after school approval and receiving-campus acknowledgement. Until then, the student remains enrolled at the current campus.'
-                ).replace(old_note,"Note: Update the student's campus in SchoolFlow only after approval."))
+                ).replace(old_note,"Note: Update the student's campus in InstituteAxis only after approval."))
         # Existing campus databases retain the original rustication starter.
         # Upgrade only its distinctive unedited text for new previews/issues;
         # issued document snapshots and customised templates are not changed.
@@ -300,7 +300,7 @@ def configure_certificates(app,db,Student):
             legacy_start='<p><b>[studentName]</b>, son / daughter of <b>[fatherName]</b>, Class <b>[className]</b>, Section <b>[sectionName]</b>.</p><p>Was admitted on'
             if legacy_start in content.get('body',''):
                 content=dict(content,body=default_content('school-leaving')['body'])
-        # Refresh only identifiable SchoolFlow starter templates stored before the
+        # Refresh only identifiable InstituteAxis starter templates stored before the
         # redesigned defaults shipped. Never rewrite custom school templates or
         # historical issued HTML snapshots.
         starter_markers = {

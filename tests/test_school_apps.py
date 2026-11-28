@@ -43,7 +43,7 @@ class SchoolAppTests(unittest.TestCase):
         c=self.clients[index];c.get('/workspace/general/app-links')
         with c.session_transaction() as s:csrf=s['record_csrf']
         return c.post('/workspace/general/school-apps/prepare',data={'_csrf':csrf,'display_name':name or self.schools[index][3],'version':version})
-    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':29},headers=headers or self.headers)
+    def claim(self,headers=None):return self.worker.post('/api/app-builder/claim',json={'source_version':30},headers=headers or self.headers)
     def key(self,job,other=False):
         if job['signing'].get('keystore') and not other:return self.worker.put('/api/app-builder/'+job['id']+'/signing',json={'keystore':job['signing']['keystore']},headers=self.headers)
         password=job['signing']['password'];key=rsa.generate_private_key(public_exponent=65537,key_size=2048) if other else self.rsa
@@ -57,7 +57,7 @@ class SchoolAppTests(unittest.TestCase):
         with zipfile.ZipFile(blob,'w') as archive:archive.writestr('AndroidManifest.xml','Synthetic unit-test fixture, not an installable Android build');archive.writestr('classes.dex','fictional-dex')
         content=blob.getvalue();files=[]
         for role,title in {'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance'}.items():files.append(dict(role=role,label=job['branding'].get('launcher_labels',{}).get(role) or job['branding']['name']+' '+title,package='com.schoolflow.schools.s'+job['branding']['school_key']+'.'+role+'.test',version_code=job['sequence'],signing_sha256=fingerprint,sha256=hashlib.sha256(content).hexdigest(),content=base64.b64encode(content).decode()))
-        if face:files.append({**files[0],**face,'role':'face','label':job['branding']['name']+' Face Attendance','package':files[0]['package'].replace('.parents.','.face.'),'content':None})
+        if face:files.append({**files[0],**face,'role':'face','label':job['branding'].get('launcher_labels',{}).get('face') or job['branding']['name']+' Face Attendance','package':files[0]['package'].replace('.parents.','.face.'),'content':None})
         body=dict(source_sha='a'*40,artifacts=files)
         self.assertEqual(self.worker.post('/api/app-builder/'+job['id']+'/complete',json=body,headers=self.headers).status_code,200)
         return body
@@ -106,6 +106,11 @@ class SchoolAppTests(unittest.TestCase):
         self.assertIn(b'Face Attendance (shared)',page)
         self.assertIn(public.json['url'].encode(),page)
         self.assertNotIn(b'signing',self.clients[0].get('/workspace/general/school-apps/status').data)
+        self.assertEqual(self.worker.post(publish,json={**release,'version_code':8,'version_name':'0.8','branded_asset':True},headers=qr).status_code,200)
+        branded=self.worker.get(manifest).json
+        self.assertTrue(branded['url'].endswith('/SchoolFlow-QR-Attendance.apk'))
+        self.assertTrue(branded['download_url'].endswith('/InstituteAxis-QR-Attendance.apk'))
+        self.assertIn(branded['download_url'].encode(),self.clients[0].get('/workspace/general/app-links').data)
     def test_face_apk_stays_bound_to_the_current_school(self):
         storage=Mock()
         face=dict(sha256='d'*64,size=120000000)
@@ -131,7 +136,7 @@ class SchoolAppTests(unittest.TestCase):
 
     def test_oidc_rejects_foreign_repo_branch_workflow_expiry_and_missing_auth(self):
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={}).status_code,401)
-        for changes in [dict(repository_id='wrong'),dict(repository='someone/SchoolFlow'),dict(ref='refs/heads/feature'),dict(workflow_ref='different'),dict(event_name='pull_request')]:self.assertEqual(self.claim(self.token(**changes)).status_code,403)
+        for changes in [dict(repository_id='wrong'),dict(repository='someone/InstituteAxis'),dict(ref='refs/heads/feature'),dict(workflow_ref='different'),dict(event_name='pull_request')]:self.assertEqual(self.claim(self.token(**changes)).status_code,403)
         self.assertEqual(self.claim(self.token(exp=int(time.time())-100)).status_code,401)
         self.assertEqual(self.claim(self.token(aud='different')).status_code,401)
         self.assertIsNone(self.claim().json['job'])
@@ -220,12 +225,15 @@ class SchoolAppTests(unittest.TestCase):
         old=self.M['build'].query.one();old.spec={**old.spec,'source_version':1};db.session.commit()
         self.assertEqual(self.worker.post('/api/app-builder/claim',json={},headers=self.headers).status_code,409)
         update=self.claim().json['job'];self.assertEqual(update['sequence'],2)
-        self.assertEqual(update['branding']['source_version'],29)
+        self.assertEqual(update['branding']['source_version'],30)
         self.assertEqual(update['branding']['launcher_labels'],{
-            'parents':'Parent App','teacher':'Teacher App','owner':'Owner App','sms':'SMS App','qr':'QR Attendance'})
+            'parents':'InstituteAxis Parent','teacher':'InstituteAxis Teacher','owner':'InstituteAxis Owner','sms':'InstituteAxis SMS','qr':'InstituteAxis QR Attendance','face':'InstituteAxis Gate'})
         self.assertEqual(self.claim().json['job']['id'],update['id'])
+        scope=job['branding']['school_key']
+        self.assertEqual(self.worker.get('/api/mobile-app/update/'+scope+'/parents').json['version_code'],1)
         completed=self.complete(update)
-        self.assertEqual({app['role']:app['label'] for app in completed['artifacts']},update['branding']['launcher_labels'])
+        self.assertEqual(self.worker.get('/api/mobile-app/update/'+scope+'/parents').json['version_code'],2)
+        self.assertEqual({app['role']:app['label'] for app in completed['artifacts']},{role:label for role,label in update['branding']['launcher_labels'].items() if role!='face'})
         self.assertIsNone(self.claim().json['job'])
         self.assertEqual(self.M['build'].query.count(),2)
 
@@ -239,7 +247,7 @@ class SchoolAppTests(unittest.TestCase):
         self.assertEqual(self.complete(job)['artifacts'][0]['label'],'ISF School System Parents')
         upgrade=self.claim().json['job']
         self.assertEqual(upgrade['sequence'],job['sequence']+1)
-        self.assertEqual(self.complete(upgrade)['artifacts'][0]['label'],'Parent App')
+        self.assertEqual(self.complete(upgrade)['artifacts'][0]['label'],'InstituteAxis Parent')
 
     def test_client_upgrade_reloads_each_tenants_saved_logo_after_old_bytes_are_discarded(self):
         from PIL import Image
@@ -284,7 +292,7 @@ class SchoolAppTests(unittest.TestCase):
             page=c.get('/auth/login');self.assertEqual(page.status_code,200);self.assertIn(name.encode(),page.data);self.assertIn(('/mobile/school-logo/'+scope).encode(),page.data);self.assertNotIn(b'Software owner',page.data)
             logo=c.get('/mobile/school-logo/'+scope);self.assertEqual(logo.data,logos[index]);self.assertEqual(logo.headers['Cache-Control'],'private, no-store');self.assertEqual(c.get('/mobile/school-logo/'+self.schools[1-index][1]).status_code,404)
             with c.session_transaction() as session:self.assertNotIn('owner_id',session)
-        self.assertIn(b'SchoolFlow',app.test_client().get('/auth/institute').data)
+        self.assertIn(b'InstituteAxis',app.test_client().get('/auth/institute').data)
 
     def test_branded_portal_pins_school_preserves_home_session_and_role(self):
         c=app.test_client();school_id,scope,code,_=self.schools[0]

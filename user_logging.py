@@ -147,7 +147,7 @@ def configure_user_logging(app,db,Student,Employee):
             if export=='xlsx':return report_xlsx(headers,values,'user-logging')
             output=io.StringIO();writer=csv.writer(output);writer.writerow(headers)
             writer.writerows([[("'"+str(v)) if str(v).lstrip().startswith(('=','+','-','@')) else v for v in r] for r in values])
-            return app.response_class('\ufeff'+output.getvalue(),mimetype='text/csv',headers={'Content-Disposition':'attachment; filename="schoolflow-user-logging.csv"'})
+            return app.response_class('\ufeff'+output.getvalue(),mimetype='text/csv',headers={'Content-Disposition':'attachment; filename="instituteaxis-user-logging.csv"'})
         shown=entries(q.offset((page-1)*size).limit(size).all())
         return render_template('user_logging.html',title='User Logging',rows=shown,total=total,page=page,pages=pages,size=size,columns=COLUMNS,selected_columns=cols)
     @bp.get('/<int:rid>')

@@ -49,7 +49,7 @@ HRM_LAYOUTS=['Individual Attendance Report','Combine Attendance Report','Salary 
 EXAM_LAYOUTS=['Attendance Sheet','Roll No. Slip','Result Card','Award List','Individual Attendance Report','Combine Attendance Report','Class/section attendance','Combined Subject Result Card','Combined Subject Report','Term Wise Report','Subject Group Wise Report','Combined And Subject Wise Report','Month Wise Report','Absentees Print Report','Date Sheet','Attendance Summary','Department Wise Report','Admission Query','Admission Form','Admission Query Blank','Admission Form Blank','Print Fee Reminder','General Branding']
 
 # Built-in Exam/Admission report designs for every new school. These templates
-# belong to SchoolFlow source code, not any one tenant's database. Explicit
+# belong to InstituteAxis source code, not any one tenant's database. Explicit
 # school/campus edits continue to override them via the normal saved settings.
 _EXAM_BRANDING_COPY = {
     'Attendance Sheet': ('Student Attendance Sheet', '<p>Daily attendance register</p>'),
@@ -683,7 +683,7 @@ def configure_school_settings(app,db,Student,Employee):
             filters=book.create_sheet('Filters');filters.append(['Filter','Value'])
             for label,v in [('Settings',dict(pages)[page]),('Search',search),('Campus',campus_filter or 'All campuses')]:filters.append([label,cell(v)])
             output=io.BytesIO();book.save(output)
-            response=app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response.headers['Content-Disposition']='attachment; filename="schoolflow-'+module+'-'+page+'.xlsx"'
+            response=app.response_class(output.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response.headers['Content-Disposition']='attachment; filename="instituteaxis-'+module+'-'+page+'.xlsx"'
             response.headers['Cache-Control']='private, no-store';return response
         # Preview built-in and school-customised branding directly from the catalog.
         # It is a read-only sample: no workflow records or saved settings are changed.

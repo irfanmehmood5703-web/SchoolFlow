@@ -111,7 +111,7 @@ def configure_fee_ledger(app,db,Student):
         from sqlalchemy import select
         from sqlalchemy.sql import func
         now=datetime.now(timezone.utc).replace(tzinfo=None)
-        actor_name='SchoolFlow provisioning'
+        actor_name='InstituteAxis provisioning'
         group_table=Group.__table__;account_table=Account.__table__
         period_table=Period.__table__;config_table=Config.__table__
         group_ids={}

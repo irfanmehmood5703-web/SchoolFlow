@@ -1,4 +1,4 @@
-# SchoolFlow How To
+# InstituteAxis How To
 
 The shared header now links to **How To**, immediately beside Configuration.
 The authenticated route is `/workspace/how-to`.
@@ -18,12 +18,12 @@ Shop, Transport and other absent modules are not invented as help categories.
 The existing top navigation remains intact; the help category column is inside
 the documentation page only.
 
-The content describes SchoolFlow's actual workflows rather than copying vendor
+The content describes InstituteAxis's actual workflows rather than copying vendor
 articles. It preserves net-fee increments, working-calendar payroll, disabled
 Sandwich Leave, immutable parent result publication and the limits of queued
 communications, bank integrations, physical devices and asynchronous APK builds.
 Reference-only layout switchers, vendor staff and unavailable delivery/read
-receipts are not presented as working SchoolFlow features.
+receipts are not presented as working InstituteAxis features.
 
 Help is read-only and uses no student, employee, fee or accounting queries.
 Institute authentication still applies. Authenticated staff may read static

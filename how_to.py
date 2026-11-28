@@ -1,4 +1,4 @@
-"""Read-only help for the actual SchoolFlow menu; no school records are loaded."""
+"""Read-only help for the actual InstituteAxis menu; no school records are loaded."""
 from flask import Blueprint, abort, g, render_template, request, session, url_for
 from module_catalog import MENUS, SIDEBAR_TOOLS, SCHEMAS
 from how_to_content import GUIDES, SETTINGS, UTILITY_GUIDES, TOOLS_GUIDES

@@ -1,6 +1,6 @@
 """Explicit fictional-only bootstrap for the isolated Gate trial service.
 
-Not imported or invoked by the normal SchoolFlow server startup.
+Not imported or invoked by the normal InstituteAxis server startup.
 Credentials are supplied privately through the service environment.
 """
 import hashlib
@@ -10,7 +10,7 @@ from attendance_devices import DEFAULTS
 
 CODE = 'GATE-TRIAL'
 EMAIL = 'owner@gate-trial.invalid'
-NAME = 'SchoolFlow Gate — Fictional Trial Only'
+NAME = 'InstituteAxis Gate — Fictional Trial Only'
 CAMPUS = 'Fictional Gate Campus'
 
 

@@ -1,5 +1,5 @@
 {% extends 'public_base.html' %}{% block content %}
-<div class="auth-layout"><section class="auth-intro"><p class="eyebrow">SchoolFlow · Software owner</p><h1>Your schools.<br>Your control.</h1><p>Create private school accounts and manage their owner access from one place.</p><a href="{{url_for('identity.institute')}}">School sign in →</a></section>
+<div class="auth-layout"><section class="auth-intro"><p class="eyebrow">InstituteAxis · Software owner</p><h1>Your schools.<br>Your control.</h1><p>Create private school accounts and manage their owner access from one place.</p><a href="{{url_for('identity.institute')}}">School sign in →</a></section>
 <section class="auth-card"><h2>{{title}}</h2>{% if error %}<div class="flash error" role="alert">{{error}}</div>{% endif %}
 {% if mode=='setup' and not enabled %}<p>Private setup has not been enabled by the server operator.</p>
 {% else %}<form method="post"{% if start_url and mode == "login" %} data-check-signin{% endif %}><input type="hidden" name="_csrf" value="{{record_csrf}}">

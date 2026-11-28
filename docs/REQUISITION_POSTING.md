@@ -1,8 +1,8 @@
 # Requisition issue and settlement
 
 The user confirmed no populated reference forms exist and authorized completion
-using original SchoolFlow forms. These forms are implementation choices, not
-claims about unseen EDUBase fields. They use the one existing SchoolFlow ledger.
+using original InstituteAxis forms. These forms are implementation choices, not
+claims about unseen EDUBase fields. They use the one existing InstituteAxis ledger.
 
 ## Recorded accounting
 

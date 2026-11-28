@@ -198,7 +198,7 @@ class LateFeeTests(unittest.TestCase):
         keys=re.findall(rb'data-core-key="([^"]+)"',menu)
         self.assertEqual(keys,[x.encode() for x in ['institute','exam','attendance','hrm','roll-series','late-automation','yearly-increment','users','certificates','user-logging','qr-attendance','face-gates','attendance-alerts','geo-attendance','attendance-acronyms','whatsapp-service','manage-whatsapp','subscription']])
         self.assertNotIn(b'>Fee Settings</a>',menu);self.assertNotIn(b'>Challan Branding</a>',menu)
-        self.assertNotIn(b'aria-disabled="true"',menu);self.assertIn(b'Late Fee Automation',menu);self.assertIn(b'SchoolFlow Subscription',menu)
+        self.assertNotIn(b'aria-disabled="true"',menu);self.assertIn(b'Late Fee Automation',menu);self.assertIn(b'InstituteAxis Subscription',menu)
         setup=self.c.get('/workspace/core/institute').data
         for path in (b'/workspace/core/fees/heads',b'/workspace/core/fees/schedules',b'/workspace/core/fees/challan-branding'):self.assertIn(path,setup)
 

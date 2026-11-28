@@ -13,7 +13,7 @@ for folder,name,digest,size in MODELS:
  if path.exists() and len(path.read_bytes())==size and hashlib.sha256(path.read_bytes()).hexdigest()==digest:
   continue
  url=f"https://media.githubusercontent.com/media/opencv/opencv_zoo/{COMMIT}/models/{folder}/{name}"
- request=urllib.request.Request(url,headers={"User-Agent":"SchoolFlow-Gate-build"})
+ request=urllib.request.Request(url,headers={"User-Agent":"InstituteAxis-Gate-build"})
  with urllib.request.urlopen(request,timeout=120) as response:
   data=response.read(size+1)
  if len(data)!=size or hashlib.sha256(data).hexdigest()!=digest:

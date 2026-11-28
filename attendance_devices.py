@@ -192,7 +192,7 @@ def configure_attendance_devices(app,db,Student,Employee):
             else:raise ValueError('Choose a supported attendance action.')
             return redirect(url_for('attendance_devices.settings'))
         devices=Device.query.filter_by(kind='biometric').order_by(Device.id).all();stamp=now()
-        return render_template('qr_attendance.html',title='QR Biometric Attendance',row=row,config=data,campuses=campuses(),classes=class_options(),devices=devices,live_count=sum(bool(d.last_seen and stamp-aware(d.last_seen)<timedelta(minutes=2) and d.status!='Removed') for d in devices),live=lambda d:bool(d.status!='Removed' and d.last_seen and stamp-aware(d.last_seen)<timedelta(minutes=2)),channels=[('android','SchoolFlow Android SMS App'),('branded','Branded SMS'),('whatsapp','WhatsApp SMS'),('none','Do not request SMS')])
+        return render_template('qr_attendance.html',title='QR Biometric Attendance',row=row,config=data,campuses=campuses(),classes=class_options(),devices=devices,live_count=sum(bool(d.last_seen and stamp-aware(d.last_seen)<timedelta(minutes=2) and d.status!='Removed') for d in devices),live=lambda d:bool(d.status!='Removed' and d.last_seen and stamp-aware(d.last_seen)<timedelta(minutes=2)),channels=[('android','InstituteAxis Android SMS App'),('branded','Branded SMS'),('whatsapp','WhatsApp SMS'),('none','Do not request SMS')])
     @bp.route('/workspace/core/face-gates',methods=['GET','POST'])
     def gates():
         if request.method=='POST':
@@ -293,7 +293,7 @@ def configure_attendance_devices(app,db,Student,Employee):
             if len(raw)>8192:abort(413)
             try:data=json.loads(raw)
             except (ValueError,TypeError):raise ValueError('Invalid scan data.')
-            if not isinstance(data,dict) or set(data)!= {'event_id','qr_token','direction','occurred_at'}:raise ValueError('Use a SchoolFlow QR token.')
+            if not isinstance(data,dict) or set(data)!= {'event_id','qr_token','direction','occurred_at'}:raise ValueError('Use a InstituteAxis QR token.')
             if getattr(g,'staff_principal',None) is not None and (not isinstance(data['qr_token'],str) or not data['qr_token'].startswith('schoolflow:student:')):return jsonify(error='Employee QR scanning requires an institute owner.'),403
             return ingest_data(device,data)
         raise ValueError('Choose a valid scanner action.')
@@ -424,7 +424,7 @@ def configure_attendance_devices(app,db,Student,Employee):
         data=payload(('qr_token',));device=authenticate_device(did)
         if device.status not in ('Pending','Approved'):abort(403)
         token=data.get('qr_token')
-        if not isinstance(token,str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',token):raise ValueError('Present a SchoolFlow identity QR.')
+        if not isinstance(token,str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',token):raise ValueError('Present a InstituteAxis identity QR.')
         kind,pid=resolve_qr(token,device)
         if not pid:abort(404,'Identity is unavailable for this gate.')
         person=db.session.get(Student if kind=='student' else Employee,pid)
@@ -443,9 +443,9 @@ def configure_attendance_devices(app,db,Student,Employee):
     def ingest_data(device,data):
         if not isinstance(data.get('event_id'),str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,100}',data['event_id']) or data.get('direction') not in ('in','out'):raise ValueError('Check event ID and IN/OUT direction.')
         if 'qr_token' in data:
-            if 'person_kind' in data or 'person_id' in data or not isinstance(data['qr_token'],str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',data['qr_token']):raise ValueError('Use a SchoolFlow QR token, or an identified student/staff ID, not both.')
+            if 'person_kind' in data or 'person_id' in data or not isinstance(data['qr_token'],str) or not re.fullmatch(r'schoolflow:(student|employee):[a-f0-9]{64}',data['qr_token']):raise ValueError('Use a InstituteAxis QR token, or an identified student/staff ID, not both.')
         elif data.get('person_kind') not in ('student','staff') or type(data.get('person_id')) is not int or not 0<data['person_id']<2147483648:raise ValueError('Check student/staff ID.')
-        if 'identity_binding' in data and ('qr_token' not in data or not isinstance(data['identity_binding'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',data['identity_binding'])):raise ValueError('Use a verified identity binding with its SchoolFlow QR.')
+        if 'identity_binding' in data and ('qr_token' not in data or not isinstance(data['identity_binding'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{43}',data['identity_binding'])):raise ValueError('Use a verified identity binding with its InstituteAxis QR.')
         try:
             stamp=datetime.fromisoformat(data.get('occurred_at','').replace('Z','+00:00'))
             if stamp.tzinfo is None:raise ValueError()

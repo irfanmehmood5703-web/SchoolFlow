@@ -41,7 +41,7 @@ def make_branding_values(app,db,Student,Employee):
         cache=getattr(request,'branding_school_values',{}) if has_request_context() else {}
         if campus in cache:return dict(cache[campus])
         p=profile();data=p.data if p else {};c=db.session.get(app.extensions['institute_setup_models']['campus'],campus) if campus else None
-        values=dict(institute_name=data.get('name') or 'SchoolFlow',campus_name=campus,campus_address=data.get('address',''),campus_contact=data.get('contact',''),campus_email=data.get('email',''),campus_city=c.city if c else '',campus_open_date=data.get('open_date',''),slogan=data.get('slogan',''),todayDate=today().isoformat(),currentMonth=today().strftime('%Y-%m'),color_primary='#176b4a',color_secondary='#e7f3ec',color_3='#ffffff',color_4='#454b48')
+        values=dict(institute_name=data.get('name') or 'InstituteAxis',campus_name=campus,campus_address=data.get('address',''),campus_contact=data.get('contact',''),campus_email=data.get('email',''),campus_city=c.city if c else '',campus_open_date=data.get('open_date',''),slogan=data.get('slogan',''),todayDate=today().isoformat(),currentMonth=today().strftime('%Y-%m'),color_primary='#176b4a',color_secondary='#e7f3ec',color_3='#ffffff',color_4='#454b48')
         if has_request_context():cache[campus]=dict(values);request.branding_school_values=cache
         return values
     def details(kind,person):return app.extensions['record_helpers']['raw_many'](kind,[person]).get(person.id,{})

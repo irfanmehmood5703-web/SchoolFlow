@@ -19,7 +19,7 @@ def provider_request(endpoint,key,action,fields=None):
     if endpoint!=ENDPOINT:raise ValueError('This provider URL has no verified adapter. Use the documented WA Link API endpoint.')
     fields=fields or {};params=urllib.parse.urlencode(dict(do=action,key=key,**({} if action=='send' else fields)))
     data=json.dumps(fields).encode() if action=='send' else None
-    req=urllib.request.Request(endpoint+'?'+params,data=data,headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'SchoolFlow-WhatsApp/1.0'})
+    req=urllib.request.Request(endpoint+'?'+params,data=data,headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'InstituteAxis-WhatsApp/1.0'})
     try:
         with urllib.request.build_opener(NoRedirect()).open(req,timeout=10) as response:
             raw=response.read(262145)

@@ -14,7 +14,7 @@ def main():
         from playwright.sync_api import sync_playwright
         from reportlab.pdfgen import canvas
         with app.app_context():
-            H=app.extensions['identity_helpers'];school=H['provision']('QA-CHECK','SchoolFlow Visual QA','owner@qa.invalid','Fictional-QA-Password-2026');sid=school.id;owner=app.extensions['identity_models']['owner'].query.filter_by(institute_id=sid).one().id
+            H=app.extensions['identity_helpers'];school=H['provision']('QA-CHECK','InstituteAxis Visual QA','owner@qa.invalid','Fictional-QA-Password-2026');sid=school.id;owner=app.extensions['identity_models']['owner'].query.filter_by(institute_id=sid).one().id
             engine=H['engine'](sid);db.session.remove()
             with app.test_request_context('/'):
                 g.institute_engine=engine;rm=app.extensions['record_models'];fm=app.extensions['finance_models'];lm=app.extensions['ledger_models'];ops=app.extensions['ops_models'];R=app.extensions['requisition_models'];today=app.extensions['ledger_helpers']['today']();year=today.year

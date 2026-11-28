@@ -11,6 +11,6 @@ def configure_general_portal(app):
             abort(403)
         if not session.get("record_csrf"):
             session["record_csrf"] = secrets.token_urlsafe(32)
-        return render_template("general_portal.html", school=identity.get("name", "SchoolFlow"),
+        return render_template("general_portal.html", school=identity.get("name", "InstituteAxis"),
                                csrf=session["record_csrf"])
     app.register_blueprint(bp)

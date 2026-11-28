@@ -63,11 +63,11 @@ def configure_client_subscription(app,db):
     def index():
         owner_school=school();start,end=bounds();rows=Invoice.query.filter_by(institute_id=owner_school.id).filter(Invoice.due>=start,Invoice.due<=end).order_by(Invoice.month,Invoice.id).all();ids=[r.id for r in rows]
         payments=Receipt.query.filter(Receipt.invoice_id.in_(ids)).order_by(Receipt.created).all() if ids else [];last={p.invoice_id:p.created.replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Asia/Karachi')) for p in payments};bank=db.session.get(Bank,1)
-        return render_template('client_subscription.html',title='SchoolFlow Subscription',school=owner_school,services=Service.query.filter_by(institute_id=owner_school.id).all(),rows=rows,last=last,bank=bank.data if bank else {},start=start,end=end,total={k:sum(getattr(r,k) for r in rows) for k in ('amount','paid','discount','remaining')})
+        return render_template('client_subscription.html',title='InstituteAxis Subscription',school=owner_school,services=Service.query.filter_by(institute_id=owner_school.id).all(),rows=rows,last=last,bank=bank.data if bank else {},start=start,end=end,total={k:sum(getattr(r,k) for r in rows) for k in ('amount','paid','discount','remaining')})
     @bp.get('/receipts/<int:invoice_id>')
     def receipt(invoice_id):
         owner_school=school();row=Invoice.query.filter_by(id=invoice_id,institute_id=owner_school.id).first_or_404()
-        return render_template('client_receipt.html',title='SchoolFlow Subscription Statement',school=owner_school,row=row,receipts=Receipt.query.filter_by(invoice_id=row.id).order_by(Receipt.created).all(),stamp=lambda value:value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Asia/Karachi')).strftime('%Y-%m-%d %H:%M'))
+        return render_template('client_receipt.html',title='InstituteAxis Subscription Statement',school=owner_school,row=row,receipts=Receipt.query.filter_by(invoice_id=row.id).order_by(Receipt.created).all(),stamp=lambda value:value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo('Asia/Karachi')).strftime('%Y-%m-%d %H:%M'))
     def operator_school(code):
         school=School.query.filter_by(code=code.strip().upper()).first()
         if not school:raise click.ClickException('Institute not found.')
@@ -92,7 +92,7 @@ def configure_client_subscription(app,db):
         if any(len(x)>180 for x in (bank,title,iban,account,contact)):raise click.ClickException('Billing detail is too long.')
         row=db.session.get(Bank,1)
         if not row:row=Bank(id=1);db.session.add(row)
-        row.data=dict(bank=bank,title=title,iban=iban,account=account,contact=contact);db.session.commit();click.echo('SchoolFlow vendor billing details recorded.')
+        row.data=dict(bank=bank,title=title,iban=iban,account=account,contact=contact);db.session.commit();click.echo('InstituteAxis vendor billing details recorded.')
     @app.cli.command('subscription-invoice')
     @click.option('--code',required=True)
     @click.option('--month',required=True)

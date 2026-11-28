@@ -1,4 +1,4 @@
-"""Explicit SchoolFlow attendance-deduction policies, in integer paisa.
+"""Explicit InstituteAxis attendance-deduction policies, in integer paisa.
 
 Grouping and caps are chosen on the salary plan; no unknown vendor convention
 is inferred from an old nonzero Jump/Max field.

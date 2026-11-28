@@ -1,4 +1,4 @@
-# SchoolFlow owner handover and security status — 14 November 2026
+# InstituteAxis owner handover and security status — 14 November 2026
 
 ## Open and control the system
 

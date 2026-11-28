@@ -221,7 +221,7 @@ def configure_identity(app, db):
         if session.get('demo') and app.config.get('PUBLIC_DEMO_ENABLED', True):
             # Demo always uses the original fictional-data database, never a
             # real institute ID supplied by a visitor.
-            g.school_identity = dict(name='SchoolFlow Demo', code='DEMO', demo=True)
+            g.school_identity = dict(name='InstituteAxis Demo', code='DEMO', demo=True)
             return
         if session.get('staff_id'):
             school=db.session.get(Institute,session.get('institute_id'))
@@ -348,7 +348,7 @@ def configure_identity(app, db):
 
     @app.cli.command('institute-create-generated')
     @click.option('--code',required=True,help='Client institute code, e.g. CLIENT-001.')
-    @click.option('--name',required=True,help='The client school name, not the SchoolFlow product name.')
+    @click.option('--name',required=True,help='The client school name, not the InstituteAxis product name.')
     @click.option('--login',default=None,help='Optional owner login email. This does not create a mailbox.')
     @click.option('--credentials-file',required=True,type=click.Path(dir_okay=False,path_type=Path),help='New private file for one-time handover. Never commit this file.')
     def institute_create_generated(code,name,login,credentials_file):
@@ -367,7 +367,7 @@ def configure_identity(app, db):
             raise click.ClickException('Choose a new writable private credentials file.')
         try:
             with os.fdopen(descriptor,'w',encoding='utf-8') as output:
-                json.dump(dict(product='SchoolFlow',school_name=name.strip(),institute_code=code,
+                json.dump(dict(product='InstituteAxis',school_name=name.strip(),institute_code=code,
                                login=email,password=password,mailbox_created=False),output,indent=2)
                 output.flush();os.fsync(output.fileno())
             school=provision(code,name,email,password)

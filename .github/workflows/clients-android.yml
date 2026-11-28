@@ -1,4 +1,4 @@
-name: SchoolFlow Android Clients
+name: InstituteAxis Android Clients
 on:
   push:
     branches: [main, feature/connected-android-clients]
@@ -31,15 +31,15 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for role in parents teacher owner sms; do
-            cp "app/build/outputs/apk/$role/acceptance/app-$role-acceptance.apk" "dist/SchoolFlow-$role-test.apk"
+            cp "app/build/outputs/apk/$role/acceptance/app-$role-acceptance.apk" "dist/InstituteAxis-$role-test.apk"
           done
           (cd dist && sha256sum *.apk >SHA256SUMS.txt)
           printf '%s\n' "${{ github.event.pull_request.head.sha || github.sha }}" >dist/SOURCE-COMMIT.txt
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with: {name: SchoolFlow-Android-clients-test, path: 'mobile/clients/dist/', retention-days: 14}
+        with: {name: InstituteAxis-Android-clients-test, path: 'mobile/clients/dist/', retention-days: 14}
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
-        with: {name: SchoolFlow-Android-clients-reports, path: 'mobile/clients/app/build/reports/', retention-days: 14}
+        with: {name: InstituteAxis-Android-clients-reports, path: 'mobile/clients/app/build/reports/', retention-days: 14}
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -76,10 +76,10 @@ jobs:
           node scripts/test_owner_app.cjs
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
-        with: {name: SchoolFlow-Owner-App-UI, path: '/tmp/owner-app-ui/', retention-days: 14}
+        with: {name: InstituteAxis-Owner-App-UI, path: '/tmp/owner-app-ui/', retention-days: 14}
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: failure()
-        with: {name: SchoolFlow-Owner-App-UI-log, path: '/tmp/owner-ui-server.log', retention-days: 7}
+        with: {name: InstituteAxis-Owner-App-UI-log, path: '/tmp/owner-ui-server.log', retention-days: 7}
   parent-ui:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -106,10 +106,10 @@ jobs:
           node scripts/test_parent_app.cjs
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
-        with: {name: SchoolFlow-Parent-App-UI, path: '/tmp/parent-app-ui/', retention-days: 14}
+        with: {name: InstituteAxis-Parent-App-UI, path: '/tmp/parent-app-ui/', retention-days: 14}
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: failure()
-        with: {name: SchoolFlow-Parent-App-UI-log, path: '/tmp/parent-ui-server.log', retention-days: 7}
+        with: {name: InstituteAxis-Parent-App-UI-log, path: '/tmp/parent-ui-server.log', retention-days: 7}
   teacher-ui:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -136,10 +136,10 @@ jobs:
           node scripts/test_teacher_app.cjs
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: always()
-        with: {name: SchoolFlow-Teacher-App-UI, path: '/tmp/teacher-app-ui/', retention-days: 14}
+        with: {name: InstituteAxis-Teacher-App-UI, path: '/tmp/teacher-app-ui/', retention-days: 14}
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         if: failure()
-        with: {name: SchoolFlow-Teacher-App-UI-log, path: '/tmp/teacher-ui-server.log', retention-days: 7}
+        with: {name: InstituteAxis-Teacher-App-UI-log, path: '/tmp/teacher-ui-server.log', retention-days: 7}
   publish-test-apks:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [android, backend, owner-ui, parent-ui, teacher-ui]
@@ -148,7 +148,7 @@ jobs:
     permissions: {contents: write, actions: read}
     steps:
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with: {name: SchoolFlow-Android-clients-test, path: clients/}
+        with: {name: InstituteAxis-Android-clients-test, path: clients/}
       - name: Publish verified test build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,4 +157,4 @@ jobs:
           set -euo pipefail
           test "$(cat clients/SOURCE-COMMIT.txt)" = "$GITHUB_SHA"
           (cd clients && sha256sum -c SHA256SUMS.txt)
-          gh release create "clients-test-${{ github.run_number }}" clients/*.apk clients/SHA256SUMS.txt clients/SOURCE-COMMIT.txt --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "SchoolFlow Android clients — test build" --notes "Parents, Teacher and Owner are native Android portal clients using existing live web workflows and permissions. SMS is an attended native school-SIM client with an explicitly started foreground queue with configurable 15/20/25-second spacing and a durable no-automatic-resend outbox. Debug-signed test APKs, not Play Store or production releases. No credentials or school records bundled. Physical Android/SIM testing and production owner-controlled signing remain required. SMS consumes the phone's SIM package; no paid service provisioned."
+          gh release create "clients-test-${{ github.run_number }}" clients/*.apk clients/SHA256SUMS.txt clients/SOURCE-COMMIT.txt --repo "$GH_REPO" --target "$GITHUB_SHA" --prerelease --title "InstituteAxis Android clients — test build" --notes "Parents, Teacher and Owner are native Android portal clients using existing live web workflows and permissions. SMS is an attended native school-SIM client with an explicitly started foreground queue with configurable 15/20/25-second spacing and a durable no-automatic-resend outbox. Debug-signed test APKs, not Play Store or production releases. No credentials or school records bundled. Physical Android/SIM testing and production owner-controlled signing remain required. SMS consumes the phone's SIM package; no paid service provisioned."

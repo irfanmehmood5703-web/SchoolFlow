@@ -137,7 +137,7 @@ public class GateDeviceTest {
    scenario.onActivity(activity->{
     View root=activity.findViewById(android.R.id.content);
     String appName=activity.getString(R.string.app_name);
-    assertEquals("SchoolFlow QR Attendance (Trial)",appName);
+    assertEquals("InstituteAxis Gate (Trial)",appName);
     assertEquals(appName,activity.getApplicationInfo().loadLabel(activity.getPackageManager()).toString());
     assertNotNull(textView(root,appName));
     assertEquals(0,activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE);
@@ -151,7 +151,7 @@ public class GateDeviceTest {
   Vault a=new Vault(context);a.configure("FICTIONAL-TEST",1,token);a.bindScope("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");a.enroll(person());a.queue(event());
   assertTrue(a.bindScope("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));assertTrue(a.people().isEmpty());assertNull(a.pending());
  }
- @Test public void localQrReaderDecodesSyntheticSchoolFlowIdentity()throws Exception {
+ @Test public void localQrReaderDecodesSyntheticInstituteAxisIdentity()throws Exception {
   assertTrue(OpenCVLoader.initLocal());FaceEngine engine=new FaceEngine(context);
   org.opencv.objdetect.QRCodeEncoder encoder=org.opencv.objdetect.QRCodeEncoder.create();
   Mat code=new Mat(),border=new Mat(),large=new Mat(),rgba=new Mat();String token="schoolflow:student:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

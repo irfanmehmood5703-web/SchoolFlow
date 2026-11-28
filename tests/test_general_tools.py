@@ -44,7 +44,7 @@ class GeneralToolsTests(unittest.TestCase):
         published=json.loads(Path('native_releases.json').read_text())
         self.assertIn(published['parents']['url'].encode(),page.data)
         self.assertIn(published['face']['url'].encode(),page.data)
-        self.assertNotIn(b'SchoolFlow-Gate-Trial.apk',page.data)
+        self.assertNotIn(b'InstituteAxis-Gate-Trial.apk',page.data)
         payload=dict(app='teacher',version_token='0',url='https://example.invalid/schoolflow.apk',version='1.0',size='10 MB',notes='Fictional test release')
         self.assertEqual(self.post('/workspace/general/app-links',payload).status_code,302)
         page=self.c.get('/workspace/general/app-links');self.assertIn(b'data-copy-release="https://example.invalid/schoolflow.apk"',page.data)

@@ -13,8 +13,8 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from app_builder_auth import authenticate_builder,QR_WORKFLOW,REPOSITORY
 from itsdangerous import BadData, URLSafeTimedSerializer
 
-SOURCE_VERSION=29
-LAUNCHER_LABELS={'parents':'Parent App','teacher':'Teacher App','owner':'Owner App','sms':'SMS App','qr':'QR Attendance'}
+SOURCE_VERSION=30
+LAUNCHER_LABELS={'parents':'InstituteAxis Parent','teacher':'InstituteAxis Teacher','owner':'InstituteAxis Owner','sms':'InstituteAxis SMS','qr':'InstituteAxis QR Attendance','face':'InstituteAxis Gate'}
 ROLES={'parents':'Parents','teacher':'Teacher','owner':'Owner','sms':'SMS','qr':'QR Attendance','face':'Face Attendance'}
 API_ENDPOINTS={'school_apps.claim','school_apps.signing','school_apps.complete','school_apps.fail'}
 MAX_APK=2*1024*1024
@@ -84,7 +84,7 @@ def configure_school_apps(app,db):
     def required_roles(spec):
         return set(ROLES) if spec.get('face_storage') else set(ROLES)-{'face'}
     def artifact_response(school, file):
-        filename='School-'+school.code+'-'+file.role+'.apk'
+        filename=LAUNCHER_LABELS[file.role].replace(' ','-')+'-'+school.code+'.apk'
         if file.role=='face':
             storage=face_storage()
             if not storage:abort(503,'Face Attendance download storage is unavailable.')
@@ -113,7 +113,7 @@ def configure_school_apps(app,db):
         if not row:
             password=secrets.token_urlsafe(32)
             key=generate_private_key(public_exponent=65537,key_size=3072)
-            name=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'SchoolFlow QR Attendance')])
+            name=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'InstituteAxis QR Attendance')])
             now=datetime.now(timezone.utc)
             certificate=(x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
                          .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(days=1))
@@ -139,6 +139,8 @@ def configure_school_apps(app,db):
         tag='qr-attendance-'+str(version)+'-'+str(claims['run_id'])+'-'+str(claims['run_attempt'])
         url='https://github.com/'+REPOSITORY+'/releases/download/'+tag+'/SchoolFlow-QR-Attendance.apk'
         release=dict(version_code=version,version_name=label,url=url,sha256=digest,size=size,source_commit=claims['sha'])
+        if data.get('branded_asset') is True:
+            release['download_url']=url.rsplit('/',1)[0]+'/InstituteAxis-QR-Attendance.apk'
         if row.published==release:return jsonify(published=True)
         if version<=row.published.get('version_code',0):abort(409,'QR Attendance release versions must increase.')
         row.published=release
@@ -165,29 +167,40 @@ def configure_school_apps(app,db):
         spec,logo,fingerprint,row=snapshot(school)
         build=Build.query.filter_by(school_key=school.storage_key).order_by(Build.sequence.desc()).first()
         return spec,build if build and build.fingerprint==fingerprint else None,row
+    def ready_build(school, spec, build):
+        if build and build.state == 'ready':
+            return build
+        # Keep an installed school's existing build available during a platform update.
+        # A school name/logo edit must never expose an APK with stale tenant branding.
+        previous = Build.query.filter_by(school_key=school.storage_key, state='ready').order_by(Build.sequence.desc()).first()
+        if previous and all(previous.spec.get(key) == spec[key] for key in ('name', 'code', 'school_key', 'logo_sha256')):
+            return previous
+        return None
+
     def view_model():
         school=private_school()
         if not school:return None
         spec,build,row=current(school)
-        return dict(name=spec['name'],has_logo=bool(spec['logo_sha256']!=hashlib.sha256(b'').hexdigest()),state=build.state if build else 'not-requested',error=build.error if build else '',version=row.version if row else 0,can_prepare=bool(session.get('owner_id')) and not session.get('staff_id'),ready=bool(build and build.state=='ready'),sequence=build.sequence if build else 0)
+        return dict(name=spec['name'],has_logo=bool(spec['logo_sha256']!=hashlib.sha256(b'').hexdigest()),state=build.state if build else 'not-requested',error=build.error if build else '',version=row.version if row else 0,can_prepare=bool(session.get('owner_id')) and not session.get('staff_id'),ready=bool(ready_build(school,spec,build)),sequence=build.sequence if build else 0)
     def releases(rows):
         qr=qr_release()
         for row in rows:
             if row['key'] in ('qr','face') and qr:
-                row.update(official_qr=True,platform='apk',url=qr['url'],version=qr['version_name'],size=str(qr['size'])+' bytes',
+                row.update(official_qr=True,platform='apk',url=qr.get('download_url', qr['url']),version=qr['version_name'],size=str(qr['size'])+' bytes',
                            sha256=qr['sha256'],source_commit=qr['source_commit'],
                            notes=('Shared app for Face Attendance gates. For a school-branded QR scanner, use the QR Attendance card above.' if row['key']=='face'
-                                  else 'Official SchoolFlow QR Attendance APK. Register this installation using your school’s attendance device settings.'))
+                                  else 'Official InstituteAxis QR Attendance APK. Register this installation using your school’s attendance device settings.'))
         school=private_school()
         if not school:return rows
         spec,build,_=current(school)
+        build=ready_build(school,spec,build)
         files={f.role:f for f in Artifact.query.filter_by(build_id=build.id).all()} if build and build.state=='ready' else {}
         signer=db.session.get(Signing,school.storage_key) if files else None
         for row in rows:
             if row['key'] not in required_roles(spec):continue
             role=row['key'];file=files.get(role)
             row.pop('official_qr',None)
-            row.update(label=spec['name']+' '+ROLES[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school’s icon.' if file else 'Prepare this school’s apps below. No generic SchoolFlow APK is substituted.'))
+            row.update(label=spec['name']+' '+ROLES[role],launcher_label=LAUNCHER_LABELS[role],school_managed=True,platform='apk',url='https://schoolflow-phase1.onrender.com'+url_for('school_apps.public_download',token=signer.download_token,role=role) if file and signer else '',version=('0.3' if build.spec.get('source_version',1)>=3 else '0.2')+'-school-test.'+str(build.sequence) if file else '',size=str(file.size)+' bytes' if file else '',sha256=file.sha256 if file else '',source_commit=build.source_sha if file else '',notes='School-specific Android test app. '+('Ready to install with your school’s icon.' if file else 'Prepare this school’s apps below. No generic InstituteAxis APK is substituted.'))
         return rows
     def owner():
         school=private_school()
@@ -241,6 +254,7 @@ def configure_school_apps(app,db):
         school=private_school()
         if not school:abort(403)
         spec,build,_=current(school)
+        build=ready_build(school,spec,build)
         if not build or build.state!='ready':abort(409,'Your school app is not ready yet. Prepare it in App Links.')
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
         return artifact_response(school,file)
@@ -252,6 +266,7 @@ def configure_school_apps(app,db):
         # This opaque URL shares only the APK. It grants no account/data access.
         g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
         spec,build,_=current(school)
+        build=ready_build(school,spec,build)
         if not build or build.state!='ready':abort(409,'The school app is being prepared. Ask the school for its current download link.')
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
         return artifact_response(school,file)
@@ -268,7 +283,8 @@ def configure_school_apps(app,db):
         if role!=expected_role:abort(404)
         school=School.query.filter_by(storage_key=scope,active=True).first_or_404()
         g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
-        _,build,_=current(school)
+        spec,build,_=current(school)
+        build=ready_build(school,spec,build)
         if not build or build.state!='ready' or build.sequence!=sequence:abort(404)
         file=Artifact.query.filter_by(build_id=build.id,role=role).first_or_404()
         return artifact_response(school,file)
@@ -280,6 +296,7 @@ def configure_school_apps(app,db):
         school=School.query.filter_by(storage_key=scope,active=True).first_or_404()
         g.institute_engine=app.extensions['identity_helpers']['engine'](school.id);db.session.remove()
         spec,build,_=current(school)
+        build=ready_build(school,spec,build)
         if not build or build.state!='ready':
             return jsonify(available=False),200,{'Cache-Control':'private, no-store'}
         file=Artifact.query.filter_by(build_id=build.id,role=role).first()
@@ -289,7 +306,7 @@ def configure_school_apps(app,db):
         ticket=update_ticket().dumps([scope,role,build.sequence])
         link='https://schoolflow-phase1.onrender.com'+url_for('school_apps.mobile_update_download',ticket=ticket,role=role)
         response=jsonify(available=True,version_code=build.sequence,version_name="0.3-school-test."+str(build.sequence),
-                         whats_new="SchoolFlow app improvements and fixes.",minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),
+                         whats_new="Updated InstituteAxis name, logo and app experience.",minimum_supported_version_code=max(0,int(os.environ.get("SCHOOLFLOW_MIN_ANDROID_VERSION_CODE","0"))),
                          sha256=file.sha256,url=link)
         response.headers['Cache-Control']='private, no-store'
         return response

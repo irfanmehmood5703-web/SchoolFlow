@@ -1,10 +1,10 @@
-# SchoolFlow Gate 0.2 — isolated connected trial
+# InstituteAxis Gate 0.2 — isolated connected trial
 
 The trial server is https://schoolflow-gate-trial-irfan.onrender.com, a separate free Render service in the confirmed workspace. The existing schoolflow-phase1 service and main branch remain unchanged. No existing school database was migrated, copied, restarted or reset.
 
 The explicit launcher scripts/start_gate_trial.py seeds one fictional institute (GATE-TRIAL), a fictional person/staff record, one gate and a fictional all-day student shift. It refuses missing opt-in/secrets, enabled public demo and stores containing other institutes. Credentials come only from this new service's private environment. A normal app:app startup never imports the launcher or runs this seed. Notification channels and automatic absence are disabled in the trial. Do not put real school records here.
 
-The debug APK's package is com.schoolflow.gate.trial, named SchoolFlow Gate (Trial), fixed to this HTTPS trial server. It can coexist with the older app. No host text field, arbitrary endpoint, token or school account is bundled. Release builds retain the original SchoolFlow host. This is attended recognition: explicit operator confirmation remains mandatory.
+The debug APK's package is com.schoolflow.gate.trial, named InstituteAxis Gate (Trial), fixed to this HTTPS trial server. It can coexist with the older app. No host text field, arbitrary endpoint, token or school account is bundled. Release builds retain the original InstituteAxis host. This is attended recognition: explicit operator confirmation remains mandatory.
 
 Owner login and gate connection details are supplied privately. Log in to the trial portal, open Admissions → Student Card and Certificates → Student QR Code, select Fictional Gate Campus and print/show the fictional person's QR. In the Android app, unlock the device to enter the supplied connection, verify that card, attest permission and capture three samples. Use the provided fictional record rather than creating real pupil records. Verify the person and press Confirm identity & mark, then check Face Attendance Gates scan history.
 
@@ -43,4 +43,4 @@ The successful protocol events are not evidence of camera recognition: these wer
 
 Render free-host storage limitations are documented at https://render.com/docs/free . No persistent production storage or paid service was added.
 
-Verified APK: SchoolFlow-Gate-Trial.apk, 119,188,033 bytes. SHA-256: `bba89be76a8c12871acd414b28904f139dc774b394d65df0c0f830938ed0fb92`. Packaged source manifest, fixed trial endpoint and both model hashes were verified after download. Android reports show 18 unit tests and 9 emulator tests passing.
+Verified APK: InstituteAxis-Gate-Trial.apk, 119,188,033 bytes. SHA-256: `bba89be76a8c12871acd414b28904f139dc774b394d65df0c0f830938ed0fb92`. Packaged source manifest, fixed trial endpoint and both model hashes were verified after download. Android reports show 18 unit tests and 9 emulator tests passing.

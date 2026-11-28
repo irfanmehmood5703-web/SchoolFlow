@@ -3,13 +3,13 @@
 These two General options were omitted from the earlier Student Extras milestone.
 They are now implemented as separate functional pages before Student Extras:
 
-1. SchoolFlow App Links (the original-brand equivalent of EDUBase App Links)
+1. InstituteAxis App Links (the original-brand equivalent of EDUBase App Links)
 2. Widgets
 3. Student Extras: Parents App, Notice Board, PTM, Student Diary.
 
 ## App Links
 
-Eight reference cards: Parents App, Teacher App, SchoolFlow Admin, QR Attendance
+Eight reference cards: Parents App, Teacher App, InstituteAxis Admin, QR Attendance
 App, Owner App, SMS App, Face Attendance, WhatsApp Desktop Sender. The private
 school's Parent Web Portal has a working separate link.
 
@@ -76,7 +76,7 @@ mutations re-read permissions inside their existing lock.
   Approvals are real Pending workflows; leave counts use approved date ranges.
 - Birthdays use actual birth dates. Complaints use locally saved workflows.
   Native parent submission telemetry is not inferred.
-- Mobile Apps and SchoolFlow Updates reflect configured published releases.
+- Mobile Apps and InstituteAxis Updates reflect configured published releases.
   There is no install/adoption claim. SMS Balance & Sent shows unavailable
   external credit/delivery telemetry and reports local communication requests;
   a queued request never means an SMS was sent.
@@ -104,7 +104,7 @@ mutations re-read permissions inside their existing lock.
 ## Original application integration — 12 November 2026
 
 The main Library foundation and the Gate-feature web modules are integrated
-into one original SchoolFlow navigation. General contains App Links, Widgets,
+into one original InstituteAxis navigation. General contains App Links, Widgets,
 then Student Extras (Parents, Notice Board, PTM, Diary, Leave Approval,
 Complaints & Suggestions and Library). Existing Library, Leaves and Feedback
 APIs remain owner-only; the shared top navigation is preserved on those pages.

@@ -20,7 +20,7 @@ def configure_hrm_reports(app,db,Employee):
         stream=io.StringIO();writer=csv.writer(stream);writer.writerow(headers)
         for row in rows:writer.writerow(["'"+str(x) if str(x).lstrip().startswith(('=','+','-','@')) else str(x) for x in row])
         response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv')
-        response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"'
+        response.headers['Content-Disposition']=f'attachment; filename="instituteaxis-{name}.csv"'
         return response
     @bp.get('/lecture-delivery')
     def lecture_delivery():

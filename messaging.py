@@ -339,7 +339,7 @@ def configure_messaging(app,db,Student,Employee):
         for f in media:db.session.add(File(message_id=message.id,**f))
         row.updated=time.time();db.session.add(Submission(token=token,actor=actor['key'],fingerprint=fingerprint,conversation_id=row.id))
         audit('Save internal message',conversation_id=row.id,message_id=message.id,campus=row.campus,blocked=blocked,flagged=detected)
-        db.session.commit();flash('Message blocked by school contact policy.' if blocked else 'Message saved inside SchoolFlow.','info' if blocked else 'success')
+        db.session.commit();flash('Message blocked by school contact policy.' if blocked else 'Message saved inside InstituteAxis.','info' if blocked else 'success')
         return redirect(path('thread',cid=row.id))
     for b in (bp,parents):
         b.add_url_rule('/new',view_func=post,methods=['POST'],endpoint='new')
@@ -463,7 +463,7 @@ def configure_messaging(app,db,Student,Employee):
             content=response.get_data()
             if len(content)>20*1024*1024:raise ValueError('Narrow this export to less than 20 MB.')
             Export.query.filter(Export.expires<time.time()).delete(synchronize_session=False)
-            artifact=Export(id=secrets.token_urlsafe(32),actor=g.message_actor['key'],campuses=sorted({i['row'].campus for i in data}),filename='schoolflow-conversation-'+kind+'.xlsx',content=content,expires=time.time()+600)
+            artifact=Export(id=secrets.token_urlsafe(32),actor=g.message_actor['key'],campuses=sorted({i['row'].campus for i in data}),filename='instituteaxis-conversation-'+kind+'.xlsx',content=content,expires=time.time()+600)
             db.session.add(artifact);db.session.commit()
             return redirect(url_for('messages.export_file',eid=artifact.id),code=303)
         all_messages=[m for item in data for m in item['messages']];responses=[i['first'] for i in data if i['first'] is not None];media=File.query.filter(File.message_id.in_([m.id for m in all_messages])).all() if all_messages else []

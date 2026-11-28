@@ -1,4 +1,4 @@
-# SchoolFlow Guide, Support and personal notifications
+# InstituteAxis Guide, Support and personal notifications
 
 **Current user decision: built-in Guide mode only.** External model calls and the activation form have been removed. Guide replies and live summaries require no AI credits or provider key. The application no longer reads AI gateway environment variables; any previously saved credential is unused. Historical provider policy/budget table mappings are retained for upgrade compatibility and cannot enable a model. Earlier AI setup notes below describe the superseded implementation.
 
@@ -44,7 +44,7 @@ A read mark is actor-specific and binds to the displayed source revision. Mark d
 
 ## Authorised credential setup — 14 November 2026
 
-The user explicitly approved storing the AI gateway key on the existing SchoolFlow Render service. A dedicated credential with only `ai_gateway:invoke` scope was saved as `NEON_AI_GATEWAY_TOKEN`, alongside `NEON_AI_GATEWAY_BASE_URL`, using a merge operation that preserved unrelated environment variables. No secret was committed to the repository.
+The user explicitly approved storing the AI gateway key on the existing InstituteAxis Render service. A dedicated credential with only `ai_gateway:invoke` scope was saved as `NEON_AI_GATEWAY_TOKEN`, alongside `NEON_AI_GATEWAY_BASE_URL`, using a merge operation that preserved unrelated environment variables. No secret was committed to the repository.
 
 Render acknowledged the environment update and automatically deployed commit `06f07b19cfe80b51e2b6e51b8b13a4afee15ccc6` as `dep-dbs5d1bl550s73fg8bp0`, which became live at 12:42:01 UTC. The post-deploy `/healthz` check returned HTTP 200.
 

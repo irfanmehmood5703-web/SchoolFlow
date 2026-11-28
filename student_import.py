@@ -168,7 +168,7 @@ def configure_student_import(app,db,Student):
     @bp.get('/template.xlsx')
     def template():
         wb=Workbook();sheet=wb.active;sheet.title='Students';fields=columns();sheet.append(list(fields.values()));sheet.freeze_panes='A2'
-        guide=wb.create_sheet('Instructions');guide.append(['SchoolFlow student import: enter plain configured names, not IDs.']);guide.append(['Dates: YYYY-MM-DD. Gender: M/F/Other. Blank fees use the scoped schedule.']);guide.append(['Use text cells for phones/CNICs to preserve leading zeros; separate subjects with |.']);guide.append(['Required fields match Add Student. No photos, formulas or external messages are imported.']);guide.append(['Blank effective month/admission date use the upload date. Blank increments/discounts/arrears use zero.'])
+        guide=wb.create_sheet('Instructions');guide.append(['InstituteAxis student import: enter plain configured names, not IDs.']);guide.append(['Dates: YYYY-MM-DD. Gender: M/F/Other. Blank fees use the scoped schedule.']);guide.append(['Use text cells for phones/CNICs to preserve leading zeros; separate subjects with |.']);guide.append(['Required fields match Add Student. No photos, formulas or external messages are imported.']);guide.append(['Blank effective month/admission date use the upload date. Blank increments/discounts/arrears use zero.'])
         guide.append(['MIGRATION: Enter outstanding balances as Opening arrears for each fee head; do not enter a paid amount as arrears.'])
         guide.append(['Opening arrears = unpaid amount as of the cutover date, after subtracting any payments already received by the old school.'])
         guide.append(['Example: tuition billed 3500, paid 1500, unpaid 2000: Opening arrears — Tuition = 2000.'])
@@ -187,7 +187,7 @@ def configure_student_import(app,db,Student):
                 for cell in row:
                     if isinstance(cell.value,str):cell.data_type='s'
         output=io.BytesIO();wb.save(output);output.seek(0)
-        return send_file(output,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='schoolflow-student-import.xlsx')
+        return send_file(output,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='instituteaxis-student-import.xlsx')
     @bp.get('/historical-payments-template.xlsx')
     def historical_payments_template():
         """Reference-only register: historical receipts must never be posted as new cash."""
@@ -198,13 +198,13 @@ def configure_student_import(app,db,Student):
         for message in (
             'Historical payments register — upload separately as non-posting historical evidence after importing students.',
             'Enter one row per old receipt allocation. If a receipt paid two fee heads, use two rows and keep the same receipt number.',
-            'Record only amounts already received by the old school; never post them again as new SchoolFlow collections.',
+            'Record only amounts already received by the old school; never post them again as new InstituteAxis collections.',
             'Opening arrears in the Students import must be the outstanding unpaid balance AFTER these historical payments.',
             'Preserve original receipts for audit and reconciliation. Historical payments are stored as non-posting evidence; automatic GL reconciliation is not yet implemented.',
             'Dates must be YYYY-MM-DD; fee month must be YYYY-MM. Keep admission and receipt numbers as text.',
         ):instructions.append([message])
         out=io.BytesIO();wb.save(out);out.seek(0)
-        return send_file(out,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='schoolflow-historical-payments-register.xlsx')
+        return send_file(out,mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',as_attachment=True,download_name='instituteaxis-historical-payments-register.xlsx')
     @bp.post('/historical-payments/upload')
     def upload_historical_payments():
         """Store validated legacy receipts as non-posting historical evidence."""

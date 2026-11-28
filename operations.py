@@ -1,4 +1,4 @@
-"""SchoolFlow pre-test workflows. Amounts use integer paisa; no external messages are sent."""
+"""InstituteAxis pre-test workflows. Amounts use integer paisa; no external messages are sent."""
 import calendar, csv, hmac, io, json, re, secrets, hashlib
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
@@ -2160,7 +2160,7 @@ def configure_operations(app, db, Student, Employee):
         stream=io.StringIO();writer=csv.writer(stream);writer.writerow(headers)
         for row in rows:
             writer.writerow(["'"+str(x) if str(x).lstrip().startswith(('=','+','-','@')) else str(x) for x in row])
-        response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']='attachment; filename="schoolflow-'+name+'.csv"';return response
+        response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']='attachment; filename="instituteaxis-'+name+'.csv"';return response
 
     @bp.route('/installment/<int:bill_id>',methods=['GET','POST'])
     def installment(bill_id):
@@ -2287,7 +2287,7 @@ def configure_operations(app, db, Student, Employee):
         db.session.execute(db.text('SELECT 1'))
         if app.extensions.get('identity_bind_key'):
             with app.extensions['identity_helpers']['control_engine']().connect() as connection:connection.execute(db.text('SELECT 1'))
-        response = jsonify(status='ok',build='schoolflow-system-audit-v38')
+        response = jsonify(status='ok',build='instituteaxis-brand-v1')
         response.headers['Cache-Control'] = 'no-store'
         response.vary.add('Origin')
         if request.headers.get('Origin') == 'https://schoolflow-start.onrender.com':

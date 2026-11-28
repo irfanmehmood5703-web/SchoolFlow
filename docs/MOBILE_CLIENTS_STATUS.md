@@ -1,7 +1,7 @@
 # Connected Android clients and school-SIM outbox — updated 20 November 2026
 
 This release supplies four separate Android test packages, targeting the original
-SchoolFlow HTTPS host. Parents, Teacher and Owner are restricted native portal
+InstituteAxis HTTPS host. Parents, Teacher and Owner are restricted native portal
 clients over existing real web workflows, not independent offline/native rewrites.
 The SMS client uses Android's actual selected SIM API. An explicit Start authorizes a finite foreground queue with selectable 15/20/25-second spacing (default 20). Connection/pending state is encrypted and started/uncertain messages are never automatically resent. See SMS_BATCH_SENDING.md for Pause, recovery and result semantics. No real SMS was sent during work.
 
@@ -68,4 +68,4 @@ issue prevents treating the system as production-ready.
 
 Release `clients-test-6` (source `bb9d0f4f1d9fa6d0cf06aa751139dded21da4ce5`) supplies four `.acceptance` packages that coexist with earlier test packages. Parents/Teacher/Owner support original-host-only foreground Messages microphone recording with Android permission; SMS has no microphone permission. School-specific branding/signing builds retain their existing package contract.
 
-Release `gate-test-52` supplies both the isolated Trial APK and Gate School Test APK (`.schooltest`) targeting the original SchoolFlow host. App Links uses School Test for Face Attendance; the trial remains separate. Main CI passed Android compile/unit/lint, native Gate emulator tests, school-specific signing/callback/update, full backend and PostgreSQL/browser/persistence checks. These are test packages; actual phones, SIM and camera acceptance and production signing remain required.
+Release `gate-test-52` supplies both the isolated Trial APK and Gate School Test APK (`.schooltest`) targeting the original InstituteAxis host. App Links uses School Test for Face Attendance; the trial remains separate. Main CI passed Android compile/unit/lint, native Gate emulator tests, school-specific signing/callback/update, full backend and PostgreSQL/browser/persistence checks. These are test packages; actual phones, SIM and camera acceptance and production signing remain required.

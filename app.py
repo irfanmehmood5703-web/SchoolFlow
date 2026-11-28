@@ -1,4 +1,4 @@
-"""SchoolFlow pre-test application. Existing starter tables are retained."""
+"""InstituteAxis pre-test application. Existing starter tables are retained."""
 import os
 import secrets
 import sys
@@ -262,7 +262,8 @@ def exams(): return redirect(url_for('ops.examination',kind='awards'))
 def settings(): return redirect(url_for('records.settings'))
 
 @app.route('/favicon.ico')
-def favicon(): return '',204
+def favicon():
+    return send_from_directory(app.static_folder, 'instituteaxis-favicon.ico')
 
 @app.after_request
 def headers(response):

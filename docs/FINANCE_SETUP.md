@@ -8,7 +8,7 @@ Groups: five account classes, create/view/edit/delete, active/inactive status, f
 
 Accounts: server-assigned unique codes, editable name/group/inactive state, searchable grouped selector, live client code preview, case-insensitive duplicate-name checks. Codes 2000–2099 and 4000–4099 are reserved. New user accounts use the remaining class range; reserved/system account provisioning and fee-head mapping await ledger integration. Existing account codes survive renames and same-class group changes. No third-party school’s 57 saved accounts or historical timestamps are silently copied.
 
-Chart: derives every group/account from the current school database and groups by Assets, Liabilities, Equity, Income and Expense. Uses SchoolFlow school branding/logo and a print stylesheet with repeated table headers. No invented balances.
+Chart: derives every group/account from the current school database and groups by Assets, Liabilities, Equity, Income and Expense. Uses InstituteAxis school branding/logo and a print stylesheet with repeated table headers. No invented balances.
 
 Security: CSRF, institute routing, institute write lock, audit events, optimistic versions, FK constraints and separate default-deny Finance permissions. Every delegated Finance grant must cover every configured campus because these masters are school-wide. Chart print requests require finance.print. Existing schools require the additive `flask --app app institute-upgrade` CLI before using the new master tables. The isolated Gate trial launcher adds missing tables only in its own explicitly opted-in institute. No main deployment restart or schema update is performed.
 

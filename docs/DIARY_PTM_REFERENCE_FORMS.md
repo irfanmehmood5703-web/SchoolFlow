@@ -1,6 +1,6 @@
 # Student Diary and PTM reference forms
 
-Reference: five user-supplied screenshots on 13 November 2026. Implementation keeps SchoolFlow's original interface and top navigation.
+Reference: five user-supplied screenshots on 13 November 2026. Implementation keeps InstituteAxis's original interface and top navigation.
 
 ## Student Diary
 
@@ -17,7 +17,7 @@ Reference: five user-supplied screenshots on 13 November 2026. Implementation ke
 - Voice-note preference and feedback windows are stored configuration. This release does **not** implement recording/upload/playback, automatic event publication notifications or a new parent-feedback endpoint.
 - Create PTM supports campus, class, multiple sessions and sections, active student checkboxes, optional assigned teachers, date, optional event, exam filters/subjects and notes. Standalone meetings need no event. Up to 500 active students per batch.
 - All selected students and active teachers are revalidated inside the institute write transaction. No teachers assigned means no Teacher-role staff account sees that batch. Manager access still requires normal PTM action/campus grants.
-- Optional exam marks are immutable snapshots from SchoolFlow's canonical result calculation, filtered by student, subject, type and dates. Staff also need exam-view access. Empty filters copy no marks.
+- Optional exam marks are immutable snapshots from InstituteAxis's canonical result calculation, filtered by student, subject, type and dates. Staff also need exam-view access. Empty filters copy no marks.
 - Class meeting attendance/feedback has optimistic version checks and appears alongside legacy appointments in meeting/report pages and Excel export. Legacy meeting creation APIs and existing saved records remain supported.
 - New tables only: diary_submission, ptm_event_config, ptm_group, ptm_evaluation. No deployed table gains a required column; existing private school schemas use the established additive upgrade path.
 

@@ -98,7 +98,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   camera.setCameraIndex(useQr&&hasRearCamera?CameraBridgeViewBase.CAMERA_ID_BACK:CameraBridgeViewBase.CAMERA_ID_FRONT);
   qrModeButton.setText(useQr?"Face Attendance":"QR Attendance");
   personText.setText(useQr?"Student, teacher and staff QR attendance":"One clear face at a time.");
-  detail.setText(useQr?"Select IN or OUT, start the camera and present a SchoolFlow identity card. Wait for the result before scanning the next card.":"Verify the person, then confirm the selected IN or OUT. Use fictional identities until physical testing is complete.");
+  detail.setText(useQr?"Select IN or OUT, start the camera and present a InstituteAxis identity card. Wait for the result before scanning the next card.":"Verify the person, then confirm the selected IN or OUT. Use fictional identities until physical testing is complete.");
   confirm.setVisibility(useQr?View.GONE:View.VISIBLE);
  }
  private void startCamera(){
@@ -197,7 +197,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
  private void connectionDialog(){
   if(busy.get()){show("Wait for the current request to finish.");return;}
   try{
-   JSONObject old=vault.config();LinearLayout box=form();box.addView(text("SchoolFlow server: "+EndpointPolicy.BASE,14));
+   JSONObject old=vault.config();LinearLayout box=form();box.addView(text("InstituteAxis server: "+EndpointPolicy.BASE,14));
    String schoolCode=BuildConfig.GATE_SCHOOL_CODE;
    EditText code=input(box,"Private institute code",schoolCode.isEmpty()?(old==null?"":old.getString("code")):schoolCode,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
    if(!schoolCode.isEmpty())code.setEnabled(false);
@@ -217,16 +217,16 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   if(!contactValid()){show("Verify the connection and automatic device time before enrollment.");return;}
   if(qrAttendance)switchAttendanceMode(false);
   startCamera();LinearLayout box=form();
-  EditText qr=input(box,"SchoolFlow student / employee QR value","",InputType.TYPE_CLASS_TEXT);
+  EditText qr=input(box,"InstituteAxis student / employee QR value","",InputType.TYPE_CLASS_TEXT);
   enrollmentQrTarget=qr;JSONObject[] verified={null};ArrayList<float[]> samples=new ArrayList<>();long[] sampled={0};
-  TextView identity=text("Scan or paste this person's SchoolFlow identity QR, then verify the card.",15);box.addView(identity);
-  box.addView(button("Read identity QR from camera",()->{readEnrollmentQr=true;show("Hold the SchoolFlow identity QR clearly in front of the camera.");}));
+  TextView identity=text("Scan or paste this person's InstituteAxis identity QR, then verify the card.",15);box.addView(identity);
+  box.addView(button("Read identity QR from camera",()->{readEnrollmentQr=true;show("Hold the InstituteAxis identity QR clearly in front of the camera.");}));
   CheckBox permission=new CheckBox(this);permission.setText("I verified this person and permission to enroll their face on this school device.");box.addView(permission);
   TextView count=text("After card verification, remove the card and capture three live samples of the same person.",14);box.addView(count);
   qr.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int d){}public void onTextChanged(CharSequence s,int a,int b,int c){verified[0]=null;samples.clear();identity.setText("Card changed; verify it again.");}public void afterTextChanged(android.text.Editable e){}});
-  box.addView(button("Verify card with SchoolFlow",()->{
+  box.addView(button("Verify card with InstituteAxis",()->{
    String value=qr.getText().toString().trim();
-   if(!value.matches("schoolflow:(student|employee):[a-f0-9]{64}")||!contactValid()){identity.setText("Use a SchoolFlow identity QR and verified gate connection.");return;}
+   if(!value.matches("schoolflow:(student|employee):[a-f0-9]{64}")||!contactValid()){identity.setText("Use a InstituteAxis identity QR and verified gate connection.");return;}
    if(!busy.compareAndSet(false,true)){identity.setText("Wait for the current request.");return;}
    worker.execute(()->{
     try{
@@ -273,7 +273,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
   worker.execute(()->{
    try{
     JSONObject config=vault.config();if(config==null){show("Connect your private institute gate first.");return;}
-    GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","SchoolFlow QR Attendance "+BuildConfig.VERSION_NAME));
+    GateApi.Reply reply=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MANUFACTURER+" "+Build.MODEL).put("client_version","InstituteAxis QR Attendance "+BuildConfig.VERSION_NAME));
     if(reply.code!=200){connected=false;clockOK=false;show("Connection refused ("+reply.code+"). Check the gate key/status.");return;}
     if(!reply.json.optString("scope_id").matches("[a-f0-9]{64}")){connected=false;clockOK=false;resetFace();show("Server enrollment update is required before this app can connect. Attendance is paused; ask the software owner to review the gate backend update.");return;}
     boolean changed=vault.bindScope(reply.json.getString("scope_id"));if(changed){known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}
@@ -293,7 +293,7 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
     JSONObject pending=vault.pending();if(pending==null)return;JSONObject body=pending.getJSONObject("body"),config=vault.config();if(config==null)return;
     long age=System.currentTimeMillis()-pending.getLong("captured_ms");
     if(age< -60000||age>14*60*1000){vault.finish(body.getString("event_id"),"Pending event expired. Check web history and use manual attendance if necessary.");show(vault.lastResult());return;}
-    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","SchoolFlow QR Attendance "+BuildConfig.VERSION_NAME));
+    GateApi.Reply check=new GateApi().post(config,"heartbeat",new JSONObject().put("model",Build.MODEL).put("client_version","InstituteAxis QR Attendance "+BuildConfig.VERSION_NAME));
     if(check.code!=200){connected=false;show("Cannot verify the gate before retry. Pending mark retained.");return;}
     String scope=check.json.getString("scope_id");
     if(!scope.equals(pending.getString("scope_id"))){vault.bindScope(scope);known=vault.people();resetFace();connected=false;clockOK=false;show(vault.lastResult());return;}

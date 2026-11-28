@@ -12,7 +12,7 @@ every EDUBase module, or production security certification are complete.
 
 General > **Student Extras** retains this order:
 Parents App, Notice Board, PTM (Parent Teacher Meeting), Student Diary.
-All four entries now lead to functional SchoolFlow pages.
+All four entries now lead to functional InstituteAxis pages.
 
 Parents App has Analytics, OTP Portal, Login Links and Privileges. Analytics
 uses actual parent web sign-ins, not enrolment as a proxy. It has configured

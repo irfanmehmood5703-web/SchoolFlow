@@ -184,7 +184,7 @@ public final class QrActivity extends Activity {
         buttons();
         String token = scanResult.getContents();
         if (token == null || mark == null || data == null) return;
-        if (!token.matches(QR)) { status.setText("Use a SchoolFlow student or staff QR card."); return; }
+        if (!token.matches(QR)) { status.setText("Use a InstituteAxis student or staff QR card."); return; }
         run(() -> {
             JSONObject event = new JSONObject().put("event_id", UUID.randomUUID().toString())
                     .put("qr_token", token).put("direction", mark).put("occurred_at", Instant.now().toString());

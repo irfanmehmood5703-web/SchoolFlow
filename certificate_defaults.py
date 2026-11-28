@@ -1,4 +1,4 @@
-"""Original editable SchoolFlow documents; no real reference pupil data is seeded."""
+"""Original editable InstituteAxis documents; no real reference pupil data is seeded."""
 DOCUMENTS = [
  ('student-card-new','Student Card New','SCN','card',True),
  ('student-card','Student Card','SC','card',False),
@@ -74,7 +74,7 @@ def default_content(key):
         '<tr><th>Approval Date</th><td>________________________________</td></tr>'
         '<tr><th>Receiving Campus Acknowledgement</th><td>________________________________</td></tr>'
         '</table>'
-        '<p style="font-size:11px;margin:8px 0">Note: Update the student\'s campus in SchoolFlow only after approval.</p>'
+        '<p style="font-size:11px;margin:8px 0">Note: Update the student\'s campus in InstituteAxis only after approval.</p>'
         +copy
       ),
       'rustication':(
@@ -95,7 +95,7 @@ def default_content(key):
         '<tr><th>Guardian Notified / Date</th><td>____________________________</td></tr>'
         '<tr><th>Guardian Acknowledgement</th><td>____________________________</td></tr>'
         '</table>'
-        '<p style="font-size:11px;margin:10px 0">Note: Issuing this notice does not automatically change the student\'s enrolment status in SchoolFlow. '
+        '<p style="font-size:11px;margin:10px 0">Note: Issuing this notice does not automatically change the student\'s enrolment status in InstituteAxis. '
         'Any approved action must be recorded separately by authorised staff.</p>'
         +copy
       ),

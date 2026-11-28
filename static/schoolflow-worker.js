@@ -1,5 +1,5 @@
 // Bump when the public opening screen or its assets change. Workspace pages are never cached.
-const openingCache = 'schoolflow-opening-v1';
+const openingCache = 'schoolflow-opening-v2';
 const openingPage = '/opening/screen.html';
 const openingFiles = [openingPage, '/opening/start.css', '/opening/start.js'];
 let readyUntil = 0;

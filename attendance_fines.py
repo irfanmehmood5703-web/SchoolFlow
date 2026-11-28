@@ -76,7 +76,7 @@ def configure_attendance_fines(app,db,Student):
         if request.method=='POST':
             action=request.form.get('action')
             if action not in ('save','reset','simulate'):raise ValueError('Choose Save, Reset or Simulate.')
-            if action!='simulate' and not editable():abort(403,'Attendance-fine policies are provider-managed. Contact your SchoolFlow operator.')
+            if action!='simulate' and not editable():abort(403,'Attendance-fine policies are provider-managed. Contact your InstituteAxis operator.')
             if request.form.get('version')!=str(row.version if row else 0):raise ValueError('This policy changed. Reload before saving.')
             config=parse() if action!='reset' else None
             if action=='simulate':

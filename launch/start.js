@@ -32,8 +32,8 @@ async function isReady(timeout) {
   }
 }
 
-async function openSchoolFlow() {
-  title.textContent = 'Opening SchoolFlow';
+async function openInstituteAxis() {
+  title.textContent = 'Opening InstituteAxis';
   status.textContent = 'Getting your school workspace ready.';
   progress.hidden = false;
   retry.hidden = true;
@@ -44,7 +44,7 @@ async function openSchoolFlow() {
   try {
     while (Date.now() < deadline) {
       if (await isReady(Math.min(24_000, deadline - Date.now()))) {
-        status.textContent = 'Workspace ready. Opening SchoolFlow.';
+        status.textContent = 'Workspace ready. Opening InstituteAxis.';
         if (reopen) {
           // Let the service worker allow a longer navigation after a healthy response.
           navigator.serviceWorker?.controller?.postMessage('schoolflow-backend-ready');
@@ -56,7 +56,7 @@ async function openSchoolFlow() {
       }
       await new Promise(resolve => setTimeout(resolve, 2_500));
     }
-    title.textContent = 'SchoolFlow is taking longer than usual';
+    title.textContent = 'InstituteAxis is taking longer than usual';
     status.textContent = 'Try again to reconnect to your school workspace.';
     progress.hidden = true;
     retry.hidden = false;
@@ -66,5 +66,5 @@ async function openSchoolFlow() {
   }
 }
 
-retry.addEventListener('click', openSchoolFlow);
-openSchoolFlow();
+retry.addEventListener('click', openInstituteAxis);
+openInstituteAxis();

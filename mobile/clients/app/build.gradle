@@ -9,13 +9,13 @@ def resourceText={ value -> '"'+value.replace('\\','\\\\').replace('"','\\"').re
 android {
     namespace 'com.schoolflow.clients'
     compileSdk 35
-    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 9; versionName '0.9-acceptance' }
+    defaultConfig { applicationId 'com.schoolflow.clients'; minSdk 26; targetSdk 35; versionCode 10; versionName '0.10-acceptance' }
     sourceSets.main.java.srcDir rootProject.file('../android-common/src/main/java')
     buildFeatures { buildConfig true }
     defaultConfig {
         buildConfigField 'String','INSTITUTE_CODE',school ? '"'+school.code+'"' : '""'
         buildConfigField 'String','SCHOOL_SCOPE',school ? '"'+school.school_key+'"' : '""'
-        manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/schoolflow_icon', launcherLabel:'@string/app_name']
+        manifestPlaceholders=[launcherIcon:school ? '@mipmap/school_launcher' : '@drawable/instituteaxis_icon', launcherLabel:'@string/app_name']
         if(school){ versionCode (school.sequence as int); versionName '0.3-school-test.'+school.sequence }
     }
     if(school){
@@ -28,17 +28,17 @@ android {
     }
     flavorDimensions += 'role'
     productFlavors {
-        parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','SchoolFlow Parents (School Test)' }
-        teacher { dimension 'role'; applicationId 'com.schoolflow.teacher'; buildConfigField 'String', 'ROLE', '"teacher"'; resValue 'string','app_name','SchoolFlow Teacher (School Test)' }
-        owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','SchoolFlow Owner (School Test)' }
+        parents { dimension 'role'; applicationId 'com.schoolflow.parents'; buildConfigField 'String', 'ROLE', '"parents"'; resValue 'string','app_name','InstituteAxis Parent' }
+        teacher { dimension 'role'; applicationId 'com.schoolflow.teacher'; buildConfigField 'String', 'ROLE', '"teacher"'; resValue 'string','app_name','InstituteAxis Teacher' }
+        owner { dimension 'role'; applicationId 'com.schoolflow.owner'; buildConfigField 'String', 'ROLE', '"owner"'; resValue 'string','app_name','InstituteAxis Owner' }
         qr {
             dimension 'role'
             applicationId 'com.schoolflow.qr'
             buildConfigField 'String', 'ROLE', '"qr"'
-            resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
-            resValue 'string', 'qr_scan_prompt', resourceText(school ? "Scan QR card · ${school.name}" : 'Scan a SchoolFlow QR card')
+            resValue 'string', 'app_name', 'InstituteAxis QR Attendance'
+            resValue 'string', 'qr_scan_prompt', resourceText(school ? "Scan QR card · ${school.name}" : 'Scan a InstituteAxis QR card')
         }
-        sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','SchoolFlow SMS (School Test)' }
+        sms { dimension 'role'; applicationId 'com.schoolflow.sms'; buildConfigField 'String', 'ROLE', '"sms"'; resValue 'string','app_name','InstituteAxis SMS' }
     }
     if(school){ productFlavors.all { flavor ->
         def names=[parents:'Parents',teacher:'Teacher',owner:'Owner',sms:'SMS',qr:'QR Attendance']

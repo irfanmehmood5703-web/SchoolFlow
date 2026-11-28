@@ -1,4 +1,4 @@
-/* SchoolFlow shared adaptive print policy.
+/* InstituteAxis shared adaptive print policy.
    Print only. Density is based on document content, never on a student's marks.
    No fixed height, clipping, transforms, or forced one-page limit. 
    Preserve specialized ID cards, labels, QR sizes, and result-card layouts. */

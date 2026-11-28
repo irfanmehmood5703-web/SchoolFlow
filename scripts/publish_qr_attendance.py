@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -55,7 +56,7 @@ def publish(unsigned):
         keystore = folder / "signing.p12"
         keystore.write_bytes(base64.b64decode(credentials["keystore"], validate=True))
         aligned = folder / "aligned.apk"
-        apk = folder / "SchoolFlow-QR-Attendance.apk"
+        apk = folder / "InstituteAxis-QR-Attendance.apk"
         subprocess.run([aapt.with_name("zipalign"), "-P", "16", "-f", "4", unsigned, aligned], check=True)
         subprocess.run(
             [signer, "sign", "--ks", keystore, "--ks-key-alias", "schoolflow",
@@ -69,16 +70,18 @@ def publish(unsigned):
             raise RuntimeError("QR Attendance signing identity did not match.")
         with apk.open("rb") as stream:
             checksum = hashlib.file_digest(stream, "sha256").hexdigest()
+        legacy_apk = folder / "SchoolFlow-QR-Attendance.apk"
+        shutil.copyfile(apk, legacy_apk)  # Existing installs validate this exact asset name.
         subprocess.run(
-            ["gh", "release", "create", tag, apk, "--target", source,
-             "--title", f"SchoolFlow QR Attendance {package[2]}", "--latest=false",
-             "--notes", "Official Android APK for SchoolFlow QR Attendance."],
+            ["gh", "release", "create", tag, apk, legacy_apk, "--target", source,
+             "--title", f"InstituteAxis QR Attendance {package[2]}", "--latest=false",
+             "--notes", "Official Android APK for InstituteAxis QR Attendance."],
             check=True,
         )
         request_json(AUDIENCE + "/qr-attendance/publish", {
             "package": "com.schoolflow.gate", "version_code": version, "version_name": package[2],
             "fingerprint": credentials["fingerprint"], "source_commit": source, "sha256": checksum,
-            "size": apk.stat().st_size,
+            "size": apk.stat().st_size, "branded_asset": True,
         })
 
 

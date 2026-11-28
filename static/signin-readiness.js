@@ -18,7 +18,7 @@
     if (checking) return;
 
     checking = true;
-    status.textContent = 'Connecting to SchoolFlow…';
+    status.textContent = 'Connecting to InstituteAxis…';
     form.setAttribute('aria-busy', 'true');
     const deadline = Date.now() + 105_000;
     try {
@@ -32,7 +32,7 @@
         }
         if (Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 2_500));
       }
-      status.textContent = 'SchoolFlow is taking longer than usual. Press the button again to retry.';
+      status.textContent = 'InstituteAxis is taking longer than usual. Press the button again to retry.';
     } finally {
       checking = false;
       form.removeAttribute('aria-busy');

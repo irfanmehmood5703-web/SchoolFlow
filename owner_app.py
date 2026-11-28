@@ -23,7 +23,7 @@ TOOLS={
  'users':('Users & Privileges','/workspace/core/users'),
  'security':('Account Security','/workspace/core/users/my-password'),
  'apps':('School App Updates','/workspace/general/app-links'),
- 'subscription':('SchoolFlow Subscription','/workspace/core/subscription'),
+ 'subscription':('InstituteAxis Subscription','/workspace/core/subscription'),
  'diary':('Class Diaries','/workspace/general/diary'),
  'admissions':('Admission Approvals','/workspace/admission-approvals'),
  'admission-queries':('Admission Queries','/workspace/register/queries'),
@@ -52,8 +52,8 @@ TOOLS={
  'staff-daily':('Daily Staff Attendance Register','/workspace/reports/attendance/staff-attendance-report'),
  'category-expenses':('Category-wise Expense Report','/workspace/finance/ledger/report/profit'),
  'quality':('System & Data Checks','/workspace/readiness'),
- 'support':('SchoolFlow Support','/workspace/support'),
- 'help':('SchoolFlow Help','/workspace/how-to'),
+ 'support':('InstituteAxis Support','/workspace/support'),
+ 'help':('InstituteAxis Help','/workspace/how-to'),
 }
 EXTRA_REPORTS=[
  ('expense-breakdown','Finance','Category-wise Expense Report','category-expenses','Posted income and expense accounts for the selected period.'),
@@ -297,7 +297,7 @@ def configure_owner_app(app,db,Student,Employee):
                 events.insert(0,dict(key=key,revision=revision,title=('Student' if kind=='student' else 'Employee')+' attendance not marked',detail=str(len(missing))+' active records have no saved attendance for '+str(school_today())+' · '+(g.owner_campus or 'All campuses'),url=link('owner_app.report',key='attendance-donut' if kind=='student' else 'staff-attendance')))
         I=app.extensions['client_subscription_models']['invoice'];invoice=I.query.filter_by(institute_id=session['institute_id']).order_by(I.month.desc()).first()
         if invoice:
-            events.insert(0,dict(key='owner-subscription:'+invoice.month,revision=str(invoice.paid)+':'+str(invoice.discount)+':'+str(invoice.amount),title='SchoolFlow Subscription',detail=invoice.month+' · '+('Invoice paid' if invoice.remaining==0 else cents(invoice.remaining)+' outstanding'),url=link('owner_app.open_tool',key='subscription')))
+            events.insert(0,dict(key='owner-subscription:'+invoice.month,revision=str(invoice.paid)+':'+str(invoice.discount)+':'+str(invoice.amount),title='InstituteAxis Subscription',detail=invoice.month+' · '+('Invoice paid' if invoice.remaining==0 else cents(invoice.remaining)+' outstanding'),url=link('owner_app.open_tool',key='subscription')))
         events=events[:40];State=app.extensions['notice_model'];who='owner:'+str(session['owner_id']);states={r.source:r.revision for r in State.query.filter_by(actor=who).filter(State.source.in_([e['key'] for e in events])).all()}
         for event in events:event['read']=states.get(event['key'])==event['revision']
         return events

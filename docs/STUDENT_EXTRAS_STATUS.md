@@ -36,7 +36,7 @@ message intent is saved with Provider not configured, never Sent. Notice
 Delivered/Viewed columns show Not connected, not invented delivery counts.
 No scheduled publishing consumer in a native app is claimed. Attachments are
 stored, not malware-scanned. No real reference students, contacts, OTPs or
-vendor apps are copied into SchoolFlow.
+vendor apps are copied into InstituteAxis.
 
 Parents App workflows, PTM, own App Links release registry and the remaining
 widget expansion are still pending. PTM create/event forms and diary editor

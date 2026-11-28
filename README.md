@@ -1,4 +1,8 @@
-# SchoolFlow
+# InstituteAxis
+
+**Complete Education Management System**
+
+The public address remains the existing Render URL. `instituteaxis.pk` is reserved for a future DNS and hosting configuration after purchase.
 
 Original green/white school-management web software with horizontal menus, private institute login, campus permissions and separate school data. The current build is for controlled user acceptance testing; automated checks do not certify a production launch or physical Android/hardware behavior.
 
@@ -10,7 +14,7 @@ Original green/white school-management web software with horizontal menus, priva
 - HRM: employees, shifts, leave, working calendars, salary plans, approved manual increments, lecture records, payroll and reports. Sandwich leave and recurring automatic annual increases stay disabled as requested.
 - Finance: chart/accounts/periods, balanced journals and reversals, trial balance, profit/loss, cash/shareholders, requisitions, historical fee audits and daily snapshots. Fee-receipt ledger posting is optional and requires explicit account mappings; payroll-to-GL automatic posting is not connected.
 - General: App Links, Widgets, family-scoped Parent portal, notices, PTM, subject diary, owner-only leave/feedback/Library workflows.
-- How To, built-in free SchoolFlow Guide, private Messages, central human Support tickets and the in-app notification bell. No external AI model, key or AI billing is needed by the Guide.
+- How To, built-in free InstituteAxis Guide, private Messages, central human Support tickets and the in-app notification bell. No external AI model, key or AI billing is needed by the Guide.
 - Institute/Exam/HRM configuration, staff grants and audit logs. Front Desk is deferred; Student 360° is excluded from the menu.
 
 Teacher/Parent/Owner Android portal test packages and an attended school-SIM SMS package are published under App Links. They share the existing backend and authentication. Actual phone installation, SIM/network behavior and owner-controlled production signing require device acceptance checks. App Links also supplies an attended Gate School Test APK targeting this original host. The separate Gate Trial APK stays on its fictional trial server. Physical camera/enrollment/recognition checks and owner-controlled production signing remain required.

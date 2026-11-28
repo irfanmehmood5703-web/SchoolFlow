@@ -204,7 +204,7 @@ final class SmsScreen {
   activityIndicator.setVisibility(View.GONE);
   overview.addView(activityIndicator,new LinearLayout.LayoutParams(-1,dp(8)));
   timer=text(overview,"Ready when your SIM and queue are confirmed.",12,false);
-  status=text(overview,"Preview and queue SMS in SchoolFlow.",14,false);
+  status=text(overview,"Preview and queue SMS in InstituteAxis.",14,false);
   status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
   refreshButton=button(overview,"Refresh queue",this::refresh,false);
 

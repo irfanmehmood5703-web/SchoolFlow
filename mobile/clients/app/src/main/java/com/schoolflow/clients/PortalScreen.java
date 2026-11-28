@@ -109,7 +109,7 @@ final class PortalScreen {
       """,result->{
    if(navigation!=current||waitingForProbe||!loading||!url.equals(web.getUrl())||a.isDestroyed())return;
    // An older installed browser service worker may supply its own cached
-   // SchoolFlow opening page. Keep it hidden; it only retries safe GETs.
+   // InstituteAxis opening page. Keep it hidden; it only retries safe GETs.
    if("\"schoolflow-opening\"".equals(result)){
     clearPageTimeout();pageTimeout=()->{if(navigation==current&&loading&&!waitingForProbe)unavailable("Still waiting for the school workspace. Try again.",false);};ui.postDelayed(pageTimeout,115_000);return;
    }

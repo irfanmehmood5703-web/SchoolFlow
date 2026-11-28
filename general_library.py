@@ -1,4 +1,4 @@
-"""SchoolFlow General > Library foundation.
+"""InstituteAxis General > Library foundation.
 
 Opt-in registration only. Do not expose routes without a verified institute context
 and a role/permission check supplied by the host application.

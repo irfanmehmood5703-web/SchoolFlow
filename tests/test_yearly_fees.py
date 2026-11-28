@@ -50,7 +50,7 @@ class YearlyFeeTests(unittest.TestCase):
         page=self.c.get(self.path).data
         table=page.split(b'<table data-yearly-cohorts>',1)[1].split(b'</table>',1)[0]
         self.assertIn(b'Campus A',table);self.assertNotIn(b'percentage',table);self.assertNotIn(b'2027',table)
-        self.assertIn(b'Advanced',page);self.assertIn(b'SchoolFlow percentage controls',page)
+        self.assertIn(b'Advanced',page);self.assertIn(b'InstituteAxis percentage controls',page)
         self.assertEqual(row.data['years'],{'2027':'10'})
     def test_separate_add_form_dependent_choices_and_server_validation(self):
         import json,re

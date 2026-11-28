@@ -58,7 +58,7 @@ def configure_certificate_manager(app,db):
         if exporting:
             headers=[columns[k] for k in selected];rows=[[meta[t.id][k] for k in selected] for t in templates]
             if exporting=='xlsx':return report_xlsx(headers,rows,'certificate-templates')
-            output=io.StringIO();writer=csv.writer(output);writer.writerow(headers);writer.writerows([["'"+str(v) if str(v).lstrip().startswith(('=','+','-','@')) else v for v in row] for row in rows]);return app.response_class('\ufeff'+output.getvalue(),mimetype='text/csv',headers={'Content-Disposition':'attachment; filename="schoolflow-certificate-templates.csv"'})
+            output=io.StringIO();writer=csv.writer(output);writer.writerow(headers);writer.writerows([["'"+str(v) if str(v).lstrip().startswith(('=','+','-','@')) else v for v in row] for row in rows]);return app.response_class('\ufeff'+output.getvalue(),mimetype='text/csv',headers={'Content-Disposition':'attachment; filename="instituteaxis-certificate-templates.csv"'})
         return render_template('certificate_manager.html',title='Manage Certificates',rows=templates,meta=meta,campuses=campuses(),total=total,page=page,pages=pages,size=size,columns=columns,selected=selected)
     @bp.after_request
     def private(response):response.headers['Cache-Control']='private, no-store';return response

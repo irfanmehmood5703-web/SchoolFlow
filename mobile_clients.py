@@ -96,13 +96,13 @@ def configure_mobile_clients(app):
             preset=request.form.get('code','').strip().upper()
             if bound and bound['kind']=='teacher' and preset!=bound['code']:abort(403,'This app belongs to '+bound['code']+'.')
             if not re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',preset) or preset=='DEMO':
-                return render_template('mobile_entry.html',kind=kind,error='Enter the Institute Code provided by your school.',title='SchoolFlow Teacher')
+                return render_template('mobile_entry.html',kind=kind,error='Enter the Institute Code provided by your school.',title='InstituteAxis Teacher')
         if preset and re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',preset):
             School=app.extensions['identity_models']['institute']
             school=School.query.filter_by(code=preset,active=True).first()
             if not school:
                 if kind=='teacher' and not scope:
-                    return render_template('mobile_entry.html',kind=kind,error='Institute code not recognised. Check the code supplied by your school.',title='SchoolFlow Teacher')
+                    return render_template('mobile_entry.html',kind=kind,error='Institute code not recognised. Check the code supplied by your school.',title='InstituteAxis Teacher')
                 abort(404)
             if scope and scope!=school.storage_key:abort(403,'The installed school app identity does not match.')
             # The generic Teacher App also needs a teacher binding to reach the
@@ -130,5 +130,5 @@ def configure_mobile_clients(app):
             code=request.form.get('code','').strip().upper()
             if re.fullmatch(r'[A-Z0-9][A-Z0-9-]{2,39}',code) and code!='DEMO':return redirect(url_for('parent_portal.login',code=code))
             error='Enter the Institute Code provided by your school.'
-        return render_template('mobile_entry.html',kind=kind,error=error,title='SchoolFlow '+kind.title())
+        return render_template('mobile_entry.html',kind=kind,error=error,title='InstituteAxis '+kind.title())
     app.register_blueprint(bp)

@@ -51,7 +51,7 @@ security certification.
 
 Keep the institute/control database and SECRET_KEY durable and backed up. Loss
 of the control database/signing material breaks future update continuity.
-SchoolFlow's original host was last verified as temporary SQLite development
+InstituteAxis's original host was last verified as temporary SQLite development
 storage; this change does not migrate or erase it. Existing-data confirmation
 and a verified backup/migration remain required before operational school use.
 Do not present these tests as proof that temporary hosting preserves keys.

@@ -1,6 +1,6 @@
 # Shareholder workflow completion
 
-The user authorized original SchoolFlow workflows without further reference
+The user authorized original InstituteAxis workflows without further reference
 screenshots. This extends the existing directory/profile; it does not seed a
 real shareholder or copy EDUBase's data or unpublished behavior.
 

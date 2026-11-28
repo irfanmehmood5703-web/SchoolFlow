@@ -47,7 +47,7 @@ def configure_reports(app,db,Student,Employee):
     def export(headers,rows,name):
         stream=io.StringIO();writer=csv.writer(stream);writer.writerow(headers)
         for row in rows:writer.writerow(["'"+str(x) if str(x).lstrip().startswith(('=','+','-','@')) else str(x) for x in row])
-        response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="schoolflow-{name}.csv"';return response
+        response=app.response_class('\ufeff'+stream.getvalue(),mimetype='text/csv');response.headers['Content-Disposition']=f'attachment; filename="instituteaxis-{name}.csv"';return response
     def response(view,headers,rows,totals=None,**kw):
         export_kind = request.args.get('export')
         if export_kind in ('csv', 'xlsx') and kw.get('total_row'):

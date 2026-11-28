@@ -97,7 +97,7 @@ def configure_late_fees(app,db,Student):
         if request.method=='POST':
             action=request.form.get('action')
             if action not in ('save','reset','simulate'):raise ValueError('Choose Save, Reset or Simulate.')
-            if action in ('save','reset') and not editable():abort(403,'Late-fee policies are provider-managed. Contact your SchoolFlow operator.')
+            if action in ('save','reset') and not editable():abort(403,'Late-fee policies are provider-managed. Contact your InstituteAxis operator.')
             if request.form.get('version')!=str(row.version if row else 0):raise ValueError('These settings changed. Reload before saving.')
             config=parse() if action!='reset' else None
             if action=='simulate':

@@ -35,13 +35,13 @@ WIDGETS=[
 ('mobile-apps','General','Mobile Apps','apps.view'),
 ('complaints','General','Complaints & Suggestions','communication.view'),
 ('complaints-chart','General','Complaints & Suggestions Chart','communication.view'),
-('updates','General','SchoolFlow Updates','apps.view'),
+('updates','General','InstituteAxis Updates','apps.view'),
 ('sms','General','SMS Balance & Sent','communication.view'),
 ]
 KEYS=[r[0] for r in WIDGETS]
 APPS=[
 ('parents','Parents App','store'),('teacher','Teacher App','store'),
-('admin','SchoolFlow Admin','apk'),('qr','QR Attendance App','store'),
+('admin','InstituteAxis Admin','apk'),('qr','QR Attendance App','store'),
 ('owner','Owner App','store'),('sms','SMS App','apk'),
 ('face','Face Attendance','apk'),('whatsapp','WhatsApp Desktop Sender','windows'),
 ]

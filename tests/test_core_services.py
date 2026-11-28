@@ -68,7 +68,7 @@ class CoreServiceTests(unittest.TestCase):
         self.assertEqual(self.tenant(lambda:db.session.get(app.extensions['whatsapp_models']['provider'],1).secret),'');self.assertEqual(self.tenant(lambda:app.extensions['whatsapp_models']['command'].query.count()),1)
     def cli(self,command,*args):return app.test_cli_runner().invoke(args=[command,*args])
     def test_subscription_invoice_payment_and_replayed_reference(self):
-        r=self.cli('subscription-service','--code','DEVICE-TEST','--name','SchoolFlow test subscription','--cycle','Monthly','--price','1250');self.assertEqual(r.exit_code,0,r.output)
+        r=self.cli('subscription-service','--code','DEVICE-TEST','--name','InstituteAxis test subscription','--cycle','Monthly','--price','1250');self.assertEqual(r.exit_code,0,r.output)
         r=self.cli('subscription-invoice','--code','DEVICE-TEST','--month','2026-11','--due','2026-11-10','--amount','1250','--discount','50');self.assertEqual(r.exit_code,0,r.output)
         args=('--invoice-id','1','--amount','1200','--reference','fictional-bank-ref-001')
         for _ in range(2):

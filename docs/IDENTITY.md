@@ -95,7 +95,7 @@ provisioned on that public test service.
 
 ## Vendor-generated client credentials
 
-SchoolFlow remains the product name. Provision each customer with their own school name and institute code:
+InstituteAxis remains the product name. Provision each customer with their own school name and institute code:
 
 ```sh
 flask --app app institute-create-generated --code CLIENT-001 --name 'Client School Name' --credentials-file /private/client-001-credentials.json

@@ -1,6 +1,6 @@
 # Finance reference reports and corrections
 
-Adds three Finance menu options alongside the single outer Ledger link: Journal Inquiry, General Ledger and Day Wise P & L (New). Existing Ledger workflows remain its internal tabs. Original SchoolFlow branding and green responsive interface are retained.
+Adds three Finance menu options alongside the single outer Ledger link: Journal Inquiry, General Ledger and Day Wise P & L (New). Existing Ledger workflows remain its internal tabs. Original InstituteAxis branding and green responsive interface are retained.
 
 Journal Inquiry provides dates, campus, transaction ID/date/amount, created/updated user and Pakistan-time date filters, stable pagination, selected-transaction actions, line-detail dialogs, individual vouchers and print. Active, voided, corrected and all-history views distinguish replacements from originals. Edit prefills the original manual journal/expense/income form. Save atomically appends a balanced reversal, validated replacement and audit/change records; delete-selected appends balanced reversals. Original vouchers and their snapshots never change. Original periods must be open and replacement dates need an open period. Mixed invalid batches roll back entirely. Actor-bound action tokens make exact retries safe and reject changed payloads. System/reversal and already corrected/voided entries cannot be edited or voided here.
 
@@ -10,7 +10,7 @@ Day Wise P&L starts with filters and generates on request. Combine, Balance, Inc
 
 Access uses distinct all-campus Finance view, print, update and delete grants, institute tenant routing, CSRF and the shared institute write lock. New additive tables are finance_journal_change and finance_journal_action. Existing institutes need the normal institute-upgrade migration command; isolated trial startup creates additive tables. No new external dependencies or payment/message deliveries.
 
-Limitations: reports currently use manual SchoolFlow journals. Admissions receipt/payroll automatic posting requires an explicit source-account mapping and synchronization/reversal/reconciliation bridge. Permanent Render trial storage is still pending; its ephemeral SQLite data can reset with deployments/restarts. Do not use the trial for real school records or financial decisions. Native-device and actual saved PDF verification are separate from backend/rendered print checks.
+Limitations: reports currently use manual InstituteAxis journals. Admissions receipt/payroll automatic posting requires an explicit source-account mapping and synchronization/reversal/reconciliation bridge. Permanent Render trial storage is still pending; its ephemeral SQLite data can reset with deployments/restarts. Do not use the trial for real school records or financial decisions. Native-device and actual saved PDF verification are separate from backend/rendered print checks.
 
 Validation: full backend suite passed 538 tests in 201.160 seconds. An additional expense/income correction case passed in the final focused 11-test report suite. Permissions/tenant-focused run passed 67 tests. Python compilation, JavaScript syntax and git whitespace checks passed. Remote deployment/browser results are recorded separately after rollout.
 

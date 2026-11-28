@@ -65,4 +65,4 @@ VENDOR_SETUP_HASH, SCHOOLFLOW_SESSION_KEY and SCHOOL_APP_SIGNING_KEY are
 configured in the service, without values in source. Do not regenerate or
 replace these settings during later continuation work. Once used, the private
 setup code cannot create another central owner. The private handover file is
-SchoolFlow-Owner-Setup.txt; it must never be committed.
+InstituteAxis-Owner-Setup.txt; it must never be committed.

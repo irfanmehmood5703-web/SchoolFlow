@@ -23,7 +23,7 @@
     const response=await fetch(window.location.pathname.replace(/\/$/,'')+'/connection',{method:'POST',credentials:'same-origin',body,cache:'no-store'});
     const data=await response.json().catch(()=>({}));
     if(!response.ok){if(response.status===401||response.redirected){setConnection(null);throw new Error(data.error||'Sign in and reconnect the scanner.');}throw new Error(data.error||'Connection request refused ('+response.status+').');}
-    if(response.redirected||!Object.keys(data).length){setConnection(null);throw new Error('Sign in to SchoolFlow again.');}
+    if(response.redirected||!Object.keys(data).length){setConnection(null);throw new Error('Sign in to InstituteAxis again.');}
     return data;
   }
   function connection(){if(!connected)throw new Error('Connect this device first.');}
@@ -42,7 +42,7 @@
   call('status').then(info=>{setConnection(info);status('Saved device connected. Ready to scan.');}).catch(error=>{setConnection(null);status(error.message);});
   async function send(value, repeat = false) {
     if (busy) return;
-    if (!repeat && !/^schoolflow:(student|employee):[a-f0-9]{64}$/.test(value)) { status('Use a SchoolFlow student or employee QR code.'); return; }
+    if (!repeat && !/^schoolflow:(student|employee):[a-f0-9]{64}$/.test(value)) { status('Use a InstituteAxis student or employee QR code.'); return; }
     busy = true;
     try {
       connection();
@@ -60,11 +60,11 @@
     try {
       if (!('BarcodeDetector' in window) || !navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot scan QR with its camera. Use a USB scanner or paste the QR value below.');
       const detector = new BarcodeDetector({ formats: ['qr_code'] });
-      const info = await post('heartbeat', { model: 'SchoolFlow browser QR scanner', client_version: '1' });
+      const info = await post('heartbeat', { model: 'InstituteAxis browser QR scanner', client_version: '1' });
       if (!info.connected) throw new Error('This device is disconnected.');
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       video.srcObject = stream; video.hidden = false; await video.play(); active = true; status('Camera ready.');
-      heartbeatTimer = setInterval(() => post('heartbeat', { model: 'SchoolFlow browser QR scanner', client_version: '1' }).catch(error => { stop(); status(error.message); }), 40000);
+      heartbeatTimer = setInterval(() => post('heartbeat', { model: 'InstituteAxis browser QR scanner', client_version: '1' }).catch(error => { stop(); status(error.message); }), 40000);
       const scan = async () => {
         if (!active) return;
         try {

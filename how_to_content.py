@@ -1,4 +1,4 @@
-"""Original instructions checked against SchoolFlow forms, not vendor promises."""
+"""Original instructions checked against InstituteAxis forms, not vendor promises."""
 
 
 def guide(summary, *steps, note=''):
@@ -259,7 +259,7 @@ GUIDES = {
         'Choose the intended configured accounts and policy values.',
         'Save and reload the settings to verify.',
         note='Do not guess receiving or expense accounts from similar names.'),
-    'school-migration': guide('Transfer students, opening dues and historical receipts into SchoolFlow.',
+    'school-migration': guide('Transfer students, opening dues and historical receipts into InstituteAxis.',
         'Open School Migration Center in the sidebar and configure the destination campus, classes and session.',
         'Download the Excel template, upload the student records and review the mapped rows before importing.',
         'Upload historical receipts if needed and open Review Totals to reconcile the migration.'),
@@ -456,9 +456,9 @@ SETTINGS = [
      ['Open Manage WhatsApp and inspect the configured account state.', 'Use only the available controls for the school’s actual connection.',
       'Check the displayed result before treating an operation as successful.'],
      'Hosted WhatsApp delivery is not connected by this guide or by simply saving settings.'),
-    ('setup-subscription', 'SchoolFlow Subscription', 'client_subscription.index', {},
+    ('setup-subscription', 'InstituteAxis Subscription', 'client_subscription.index', {},
      'Review this private institute’s subscription information.',
-     ['Sign in as the private institute owner.', 'Open SchoolFlow Subscription.',
+     ['Sign in as the private institute owner.', 'Open InstituteAxis Subscription.',
       'Review the recorded plan, dates and status before any available request.'],
      'The shared demo and ordinary staff accounts cannot manage the private school subscription.'),
 ]
@@ -469,7 +469,7 @@ UTILITY_GUIDES = [
      ['Open Messages in the header and choose New conversation.', 'Choose the campus, recipient type and person. Parents also choose their linked child.',
       'Enter a subject and message, add permitted files or record a voice note, then review and send.',
       'Open the conversation to reply, check saved/read state or resolve/reopen it where permitted.'],
-     'Only participants can open the chat. Teachers need staff Messages access and matching class assignments to contact a family. Student discussions use the verified family account; no independent Student login is implied. Messages stay in SchoolFlow, without SMS or push delivery. Direct voice-note recording works in supported browsers and the updated Parents, Teacher and Owner acceptance APKs after microphone permission is granted. Older portal APKs can attach recorded audio. Recording always requires review and explicit Send; verify permission and audio on the actual phone.'),
+     'Only participants can open the chat. Teachers need staff Messages access and matching class assignments to contact a family. Student discussions use the verified family account; no independent Student login is implied. Messages stay in InstituteAxis, without SMS or push delivery. Direct voice-note recording works in supported browsers and the updated Parents, Teacher and Owner acceptance APKs after microphone permission is granted. Older portal APKs can attach recorded audio. Recording always requires review and explicit Send; verify permission and audio on the actual phone.'),
     ('message-settings', 'Communication Settings', 'messages.settings', {},
      'Control messaging pairs, account access, contact handling and attachments.',
      ['Open Messages → Settings with institute-wide management access.', 'Choose permitted role pairs and whether parents may start conversations.',
@@ -497,7 +497,7 @@ TOOLS_GUIDES = [
    'Review the absence dates under Open follow-ups. Choose an assigned teacher where available and use the displayed contact number if your account can view it.',
    'Record Pending, Call attempted, Spoke to parent or Call again. For Call again, set the next call date. Add a short note and save.',
    'Open All follow-ups to review completed cases as well. Spoke to parent closes the case in the Open follow-ups view.'],
-  'The center uses saved absence marks. Holidays and days marked Off Day are skipped. Saving a call outcome records the follow-up in SchoolFlow.'),
+  'The center uses saved absence marks. Holidays and days marked Off Day are skipped. Saving a call outcome records the follow-up in InstituteAxis.'),
  ('one-click-reports','One-Click Reports','ops.dashboard',{},
   'Open frequently used fee, attendance, exam and salary reports with their usual date ranges already selected.',
   ['Open Dashboard and expand One-Click Reports in the sidebar. Available shortcuts depend on your role.',
@@ -505,9 +505,9 @@ TOOLS_GUIDES = [
    'Other fee shortcuts open this month’s collections, family dues or the class-wise fee summary. Attendance shortcuts open today’s absentees or monthly student and staff attendance.',
    'Choose Exam Marks & Results or the Employee Salary Report when available. Use the report’s own filters or export and print controls where provided.'],
   'Today uses the school date. Monthly collection and attendance shortcuts run through today. The salary shortcut opens the previous completed month.'),
- ('assistant-help','SchoolFlow Guide','assistant.page',{},'Ask about SchoolFlow options and review permitted live totals.',
-  ['Open SchoolFlow Guide in the header or the floating SchoolFlow Guide button.','Type a question or use a suggestion. Guide mode uses the instructions built into SchoolFlow and needs no AI credits.','Use read-only actions to review student counts, fee balances, attendance or employee counts within your own permissions.','Use Chat history to reopen your recent chats, New chat to start again, or Hide on this page to hide the floating launcher for this session.'],
-  'No records are changed from chat. Browser dictation and read aloud depend on device support. Questions and summaries stay within SchoolFlow; this guide does not send them to an external AI model. Do not include passwords or unnecessary personal information.'),
+ ('assistant-help','InstituteAxis Guide','assistant.page',{},'Ask about InstituteAxis options and review permitted live totals.',
+  ['Open InstituteAxis Guide in the header or the floating InstituteAxis Guide button.','Type a question or use a suggestion. Guide mode uses the instructions built into InstituteAxis and needs no AI credits.','Use read-only actions to review student counts, fee balances, attendance or employee counts within your own permissions.','Use Chat history to reopen your recent chats, New chat to start again, or Hide on this page to hide the floating launcher for this session.'],
+  'No records are changed from chat. Browser dictation and read aloud depend on device support. Questions and summaries stay within InstituteAxis; this guide does not send them to an external AI model. Do not include passwords or unnecessary personal information.'),
  ('support-help','Support tickets','support.inbox',{},'Send your own school issue to the software owner and track human replies.',
   ['Open Support in the header. Private school accounts can choose New ticket.','Enter a subject, category, priority, campus and a description of the problem. Add up to five photos or PDF files, each up to 5 MB.','Send the ticket, then reopen it to review replies, add details or resolve the case.','Mark displayed replies as read. A human reply from the software owner also appears under the notification bell.'],
   'Demo only previews the form. Each school user can access their own tickets. The software owner answers through the separate central Support inbox; a reply time is not guaranteed. Chat transcripts are never attached automatically.'),

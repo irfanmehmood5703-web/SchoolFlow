@@ -3,11 +3,11 @@
 ## Confirmed scope and menu grouping
 
 The user confirmed that the current reference collection reaches Student Diary.
-Preserve the reference's section headings and item order in SchoolFlow's original
+Preserve the reference's section headings and item order in InstituteAxis's original
 green/white/zinc interface and top navigation:
 
 - General
-  - SchoolFlow App Links (reference label: EDUBase App Links)
+  - InstituteAxis App Links (reference label: EDUBase App Links)
   - Widgets
   - **Student Extras** (section heading, not a separate page)
     - Parents App
@@ -26,7 +26,7 @@ No real student/contact/code data from screenshots belongs in source or fixtures
 
 Eight visible cards: Parents App, Teacher App, Admin, QR Attendance, Owner App,
 SMS App, Face Attendance, WhatsApp Desktop Sender. Store/open/download and Copy
-link actions vary by card. Use SchoolFlow-owned releases and links; vendor
+link actions vary by card. Use InstituteAxis-owned releases and links; vendor
 versions/APKs are reference only. The widget says nine apps but only eight cards
 are visible; do not invent a ninth or claim downloads exist.
 

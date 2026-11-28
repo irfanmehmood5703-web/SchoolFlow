@@ -1,10 +1,10 @@
 # Core Settings — reference pass v33
 
-This continues the existing SchoolFlow source at `775fd03`, preserving the prior SaaS and Gate Android work. It implements the supplied remaining Core Settings screenshots as original SchoolFlow workflows. No EDUBase account, payment history, bank/IBAN, price, installer or private school record is copied.
+This continues the existing InstituteAxis source at `775fd03`, preserving the prior SaaS and Gate Android work. It implements the supplied remaining Core Settings screenshots as original InstituteAxis workflows. No EDUBase account, payment history, bank/IBAN, price, installer or private school record is copied.
 
 ## Current menu and scope
 
-Seventeen active routes now appear in the supplied order: Institute Setup, Exam Settings, HRM Settings, Roll Number Series, Late Fee Automation, Student Yearly Fee Increment, Users & Privileges, Manage Certificates, User Logging, QR Biometric Attendance, Face Attendance Gates, Attendance Alerts, Geo Location Attendance, Attendance Acronym Active/Inactive, WhatsApp Service, Manage WhatsApp and SchoolFlow Subscription. The first eleven existing implementations are retained. The reference's grey Biometric Readers entry does not imply a supported reader protocol and is not presented as a working route.
+Seventeen active routes now appear in the supplied order: Institute Setup, Exam Settings, HRM Settings, Roll Number Series, Late Fee Automation, Student Yearly Fee Increment, Users & Privileges, Manage Certificates, User Logging, QR Biometric Attendance, Face Attendance Gates, Attendance Alerts, Geo Location Attendance, Attendance Acronym Active/Inactive, WhatsApp Service, Manage WhatsApp and InstituteAxis Subscription. The first eleven existing implementations are retained. The reference's grey Biometric Readers entry does not imply a supported reader protocol and is not presented as a working route.
 
 ## Attendance Alerts
 
@@ -28,7 +28,7 @@ Separate employee/student flags for the nine shown statuses. At least one suppor
 
 ## WhatsApp Service and Manage WhatsApp
 
-Sender choice (SchoolFlow-managed / own WA Link), configured active provider and 3/7/14/30/90-day or indefinite local message-content retention. SchoolFlow-managed sending/message balance and a SchoolFlow Windows sender release are not configured; download/copy controls are explicitly unavailable unless the software owner publishes an original verified release. No other vendor's executable or Windows warning-bypass instructions are supplied.
+Sender choice (InstituteAxis-managed / own WA Link), configured active provider and 3/7/14/30/90-day or indefinite local message-content retention. InstituteAxis-managed sending/message balance and a InstituteAxis Windows sender release are not configured; download/copy controls are explicitly unavailable unless the software owner publishes an original verified release. No other vendor's executable or Windows warning-bypass instructions are supplied.
 
 The account manager has Name, write-only API Key, Base URL, active account selection, credential deletion, balance/stats refresh, actual provider QR request/display, remote account save/sync/inbox flags/view/rename/remove, linked-account selection, international mobile number, message, optional HTTPS media URL and retained local command history/status filters. Unretrieved balances and states are shown as unknown, never fabricated zero credits or successful connections. API keys and provider state are encrypted with Fernet and a dedicated operator-managed integration key, bound to the institute storage identity. Deleting a provider clears its secret and preserves command claims. Audit payloads do not include keys, message text or recipient numbers.
 
@@ -38,9 +38,9 @@ No live provider request occurs unless `SCHOOLFLOW_WHATSAPP_ENABLED=1`; manual s
 
 These controls do not pretend that existing SMS/WhatsApp communication queues have become a production delivery worker. Queued school messages, provider delivery receipts/webhooks, a managed balance service, actual provider credentials and a Windows sender binary require their separately verified integrations. No real message has been sent by this development/verification pass.
 
-## SchoolFlow Subscription
+## InstituteAxis Subscription
 
-Private primary-owner portal showing only operator-recorded services, cycle/price/active state, actual SchoolFlow payment details, date-filtered invoices, real paid dates, paid/discount/remaining totals and printable invoice/receipt statements. Empty configuration is explicitly empty; no sample balance, subscription, bank account or invoice is fabricated. Receipt IDs are filtered to the signed-in institute. Clients cannot edit charges, mark invoices paid, purchase a plan or trigger service suspension through this page.
+Private primary-owner portal showing only operator-recorded services, cycle/price/active state, actual InstituteAxis payment details, date-filtered invoices, real paid dates, paid/discount/remaining totals and printable invoice/receipt statements. Empty configuration is explicitly empty; no sample balance, subscription, bank account or invoice is fabricated. Receipt IDs are filtered to the signed-in institute. Clients cannot edit charges, mark invoices paid, purchase a plan or trigger service suspension through this page.
 
 Root control-database service/invoice/payment/profile tables are excluded from tenant schema routing. Operator-only CLI commands are `subscription-service`, `subscription-bank`, `subscription-invoice` and `subscription-receive` (run `flask --app app COMMAND --help` for flags). Amounts are integer paisa, snapshots retain invoice-time service/bank details, one invoice per institute/month is enforced, and unique payment references prevent replay. A conditional balance update prevents overpayment under concurrent operators. An unpaid print is explicitly a statement, not a payment receipt. Student fee/payroll accounts are untouched. The owner's actual prices, bank details and agreements remain to be supplied.
 

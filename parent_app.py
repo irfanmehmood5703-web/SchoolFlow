@@ -249,7 +249,7 @@ def configure_parent_app(app,db,Student,bp,principal,access,rate):
         branding=app.extensions['challan_branding_helpers']
         context=branding['print_context']([bill],'parent',{})
         sheet=context['sheets'][0]
-        if sheet['school']['institute_name']=='SchoolFlow':
+        if sheet['school']['institute_name']=='InstituteAxis':
             sheet['school']['institute_name']=g.parent_school.name
         sheet['config'].update(layout='portrait',copy_1='Parent copy',copy_2='',copy_3='')
         item=sheet['entries'][0]

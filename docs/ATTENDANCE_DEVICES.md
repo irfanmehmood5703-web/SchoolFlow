@@ -8,11 +8,11 @@ Configuration → Face Attendance Gates manages gate names, direction, Pending/A
 
 Which gate marked whom supplies inclusive Pakistan-date filters, gate and row limits, a name search over loaded rows, and a server query for one selected student/staff identity. Results distinguish Marked, Already marked and Not marked, with a reason. Scoped staff cannot read other-campus gates or scans. Device administration requires institute-wide Core Settings rights; viewing scan history/scanner uses attendance view permission.
 
-Open QR scanner supports a browser camera when its QR detection API is available, plus USB scanner/pasted token input. It reads the existing SchoolFlow signed student/employee QR codes. QR camera frames stay local and no camera image is uploaded. The key is kept only in the current page, never saved to local storage or a URL. Explicit IN/OUT prevents a repeated scan from changing an arrival into a departure. Browser/hardware camera behavior still requires physical verification.
+Open QR scanner supports a browser camera when its QR detection API is available, plus USB scanner/pasted token input. It reads the existing InstituteAxis signed student/employee QR codes. QR camera frames stay local and no camera image is uploaded. The key is kept only in the current page, never saved to local storage or a URL. Explicit IN/OUT prevents a repeated scan from changing an arrival into a departure. Browser/hardware camera behavior still requires physical verification.
 
 ## Physical integrations that remain external
 
-The server does not perform face recognition, take biometric templates, connect an EDUBase tablet, or speak an unspecified fingerprint terminal protocol. A compatible trusted client must recognize a person and send a SchoolFlow identity event. Device type/name is not evidence that a face was actually recognized. A vendor adapter must map that device's own identifiers to the correct SchoolFlow student/staff ID. No face image, fingerprint template or confidence payload is accepted or stored by this interface. A real tablet/reader/recognition client must be connected and tested before claiming physical biometric attendance works.
+The server does not perform face recognition, take biometric templates, connect an EDUBase tablet, or speak an unspecified fingerprint terminal protocol. A compatible trusted client must recognize a person and send a InstituteAxis identity event. Device type/name is not evidence that a face was actually recognized. A vendor adapter must map that device's own identifiers to the correct InstituteAxis student/staff ID. No face image, fingerprint template or confidence payload is accepted or stored by this interface. A real tablet/reader/recognition client must be connected and tested before claiming physical biometric attendance works.
 
 Android SMS, branded SMS, WhatsApp and Teacher App notification choices create queued requests marked Provider not configured; this release sends no message and does not connect the mobile apps. Free sleeping hosting cannot guarantee clock-time automation.
 
@@ -21,7 +21,7 @@ Android SMS, branded SMS, WhatsApp and Teacher App notification choices create q
 1. Back up the private database and run the existing explicit `flask --app app institute-upgrade` operator procedure. New additive tables are `attendance_device`, `attendance_device_scan`, and `attendance_device_mark`; no destructive migration is performed.
 2. Configure active campus/classes and real student/staff shifts. Save attendance rules. Auto-absence starts only for selected classes/enabled staff rules; it checks today only.
 3. Register a biometric serial or face gate. Open Connect and confirm issuing its connection key. The plaintext key is displayed once; only a SHA-256 digest is stored. A new key immediately revokes the old one. Keep it private and out of repository files, screenshots and URLs.
-4. Supply the institute code, numeric SchoolFlow device ID and key to the QR scanner or compatible integration. Each device is bound to one campus. These credentials do not provide a roster-read API or owner/staff web access.
+4. Supply the institute code, numeric InstituteAxis device ID and key to the QR scanner or compatible integration. Each device is bound to one campus. These credentials do not provide a roster-read API or owner/staff web access.
 5. Verify real heartbeat, IN, repeated IN, OUT, suspension and a cross-campus refusal with fictional identities before use. Pending requires no approval; set Suspended to pause marking. Removed devices retain history and cannot be reactivated by merely changing their status.
 
 ## Device protocol
@@ -63,7 +63,7 @@ An operator can run `flask --app app attendance-tick --code <PRIVATE-CODE>` or u
 
 ## Native gate identity enrollment (v32)
 
-The Android SchoolFlow Gate test client performs local attended face recognition. It verifies enrollment by presenting an existing signed SchoolFlow identity QR to the new authenticated endpoint:
+The Android InstituteAxis Gate test client performs local attended face recognition. It verifies enrollment by presenting an existing signed InstituteAxis identity QR to the new authenticated endpoint:
 
 `POST /api/attendance/devices/<device_id>/identity` with `{"qr_token":"schoolflow:student:<signed token>"}`.
 

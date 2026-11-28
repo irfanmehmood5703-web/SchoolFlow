@@ -41,4 +41,4 @@ def report_xlsx(headers,rows,name,filters=None):
         raw=source_filters.getlist(key) if hasattr(source_filters,'getlist') else [source_filters[key]]
         filters.append([cell(filters,key),cell(filters,', '.join(str(v) for v in raw))])
     stream=io.BytesIO();book.save(stream)
-    return Response(stream.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="schoolflow-{name}.xlsx"','Cache-Control':'no-store'})
+    return Response(stream.getvalue(),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="instituteaxis-{name}.xlsx"','Cache-Control':'no-store'})

@@ -28,7 +28,7 @@ def tools():
 
 def make_key(path,password):
     env={**os.environ,'SCHOOLFLOW_KEYSTORE_PASSWORD':password}
-    subprocess.run(['keytool','-genkeypair','-keystore',str(path),'-storetype','PKCS12','-alias','schoolflow','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=SchoolFlow School Apps','-storepass:env','SCHOOLFLOW_KEYSTORE_PASSWORD','-keypass:env','SCHOOLFLOW_KEYSTORE_PASSWORD'],env=env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['keytool','-genkeypair','-keystore',str(path),'-storetype','PKCS12','-alias','schoolflow','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=InstituteAxis School Apps','-storepass:env','SCHOOLFLOW_KEYSTORE_PASSWORD','-keypass:env','SCHOOLFLOW_KEYSTORE_PASSWORD'],env=env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 def decode_label(value):
     # aapt quotes punctuation in its text output; preserve non-ASCII school names.
@@ -134,7 +134,7 @@ def run_gradle(args,directory,password):
         time.sleep(delay)
 
 def run(base,fixture_token=None):
-    claimed=api(base,'claim',{'source_version':29},token=fixture_token);job=claimed.get('job')
+    claimed=api(base,'claim',{'source_version':30},token=fixture_token);job=claimed.get('job')
     if not job:print('No pending school app builds.');return False
     bid=job['id']
     try:
@@ -167,7 +167,7 @@ def run(base,fixture_token=None):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--base',default='https://schoolflow-phase1.onrender.com');parser.add_argument('--max-jobs',type=int,default=2);args=parser.parse_args()
-    if args.base!='https://schoolflow-phase1.onrender.com':raise SystemExit('The central worker is pinned to the original SchoolFlow host')
+    if args.base!='https://schoolflow-phase1.onrender.com':raise SystemExit('The central worker is pinned to the original InstituteAxis host')
     for attempt in range(8):
         try:
             for index in range(min(2,max(1,args.max_jobs))):

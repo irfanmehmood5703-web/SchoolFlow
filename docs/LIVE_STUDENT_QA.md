@@ -1,8 +1,8 @@
 # Live private-school student flow check
 
 The software owner requested adding one student and checking connected data.
-Testing uses the original SchoolFlow host and a new isolated institute,
-SF-QA-13NOV-1EBB, labelled SchoolFlow QA - Fictional student test. Its single
+Testing uses the original InstituteAxis host and a new isolated institute,
+SF-QA-13NOV-1EBB, labelled InstituteAxis QA - Fictional student test. Its single
 child is QA Student 13Nov, admission QA-STUDENT-001. All names, contacts,
 records, notices, marks and money are synthetic. No actual school was populated
 with fixtures and no SMS, WhatsApp, bank transfer or APK installation was made.

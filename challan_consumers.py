@@ -1,7 +1,7 @@
 """Stable internal consumer references and authenticated payment-link QR images.
 
 These references are not bank registration or payment reconciliation. Schools
-supply their own HTTPS collection URL; SchoolFlow does not invent bank payloads.
+supply their own HTTPS collection URL; InstituteAxis does not invent bank payloads.
 """
 import io,re,secrets,hashlib,hmac,json
 from urllib.parse import urlsplit,quote
@@ -75,7 +75,7 @@ def configure_challan_consumers(app,db):
         link=payment_url(bill,many([bill]).get(bill.id,''),cfg)
         if not link:abort(404)
         stream=io.BytesIO();qrcode.make(link).save(stream,format='PNG');stream.seek(0)
-        response=send_file(stream,mimetype='image/png',download_name=f'schoolflow-payment-qr-{bill.id}.png');response.headers['Cache-Control']='no-store';return response
+        response=send_file(stream,mimetype='image/png',download_name=f'instituteaxis-payment-qr-{bill.id}.png');response.headers['Cache-Control']='no-store';return response
     def legacy_rows():return Bill.query.outerjoin(ChallanConsumer,ChallanConsumer.bill_id==Bill.id).filter(ChallanConsumer.bill_id==None).order_by(Bill.id).limit(100).all()
     def legacy_stamp(bills):
         out=[]

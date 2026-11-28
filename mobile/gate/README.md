@@ -1,18 +1,18 @@
-# SchoolFlow QR Attendance — school and isolated trial builds
+# InstituteAxis QR Attendance — school and isolated trial builds
 
-Native QR and face attendance companion for SchoolFlow's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
+Native QR and face attendance companion for InstituteAxis's existing private-institute Face Attendance Gates. This is separate from the planned Teacher, Parent, SMS and Owner apps.
 
 ## Test installation
 
-Download **SchoolFlow-Gate-Trial.apk** from a successful **SchoolFlow Gate Android** Actions run's **SchoolFlow-Gate-test** artifact (extract the ZIP first), or use the directly supplied APK. Check SOURCE-COMMIT.txt and SHA256SUMS.txt. This test build has a separate package ID (`com.schoolflow.gate.trial`) and can coexist with the older test app. It is debug-signed for fictional trials, not production-signed. Targets are ARM64 Android 8+ and emulator x86_64.
+Download **InstituteAxis-Gate-Trial.apk** from a successful **InstituteAxis Gate Android** Actions run's **InstituteAxis-Gate-test** artifact (extract the ZIP first), or use the directly supplied APK. Check SOURCE-COMMIT.txt and SHA256SUMS.txt. This test build has a separate package ID (`com.schoolflow.gate.trial`) and can coexist with the older test app. It is debug-signed for fictional trials, not production-signed. Targets are ARM64 Android 8+ and emulator x86_64.
 
-**The debug trial APK is pinned to https://schoolflow-gate-trial-irfan.onrender.com**, a separate free server with a fictional private institute. It does not contact or update the original SchoolFlow service. Credentials are delivered privately, never in the APK or source. The release build retains the original fixed SchoolFlow host; a future production rollout still requires protected storage and schema upgrades.
+**The debug trial APK is pinned to https://schoolflow-gate-trial-irfan.onrender.com**, a separate free server with a fictional private institute. It does not contact or update the original InstituteAxis service. Credentials are delivered privately, never in the APK or source. The release build retains the original fixed InstituteAxis host; a future production rollout still requires protected storage and schema upgrades.
 
 Use only fictional identities. Free trial storage may reset after sleep/restart; the server then recreates a new fictional institute incarnation and the app invalidates old enrollment/pending data after scope verification. Do not use this service for operational school attendance or real student data. See ../../docs/GATE_TRIAL.md.
 
 1. Set a PIN, password or pattern on the school device. Install the test APK and grant camera permission.
-2. In the SchoolFlow web portal, register a face gate for the correct private school/campus, then use Connect to issue its connection key. In the Android app choose Connection, unlock the device, and enter the private institute code, numeric gate ID and key. DEMO cannot connect. Use the separately provided trial connection details; the trial server address is fixed in this APK.
-3. Choose Enroll face and unlock the device. Scan or paste a fictional person's SchoolFlow identity-card QR, then press Verify card. The app retrieves that exact active person's name/ID from its gate's campus; no bulk roster is downloaded. Attest that this actual person and enrollment permission are verified. Capture three samples of the same person.
+2. In the InstituteAxis web portal, register a face gate for the correct private school/campus, then use Connect to issue its connection key. In the Android app choose Connection, unlock the device, and enter the private institute code, numeric gate ID and key. DEMO cannot connect. Use the separately provided trial connection details; the trial server address is fixed in this APK.
+3. Choose Enroll face and unlock the device. Scan or paste a fictional person's InstituteAxis identity-card QR, then press Verify card. The app retrieves that exact active person's name/ID from its gate's campus; no bulk roster is downloaded. Attest that this actual person and enrollment permission are verified. Capture three samples of the same person.
 4. Start the camera, select IN or OUT, and show one enrolled person. Matching must be stable and unambiguous. The operator verifies the person and explicitly confirms the mark. Check the web scan history for the actual server result.
 5. Test suspension, foreign-campus refusal, repeated IN/OUT, loss of connectivity and key rotation before considering any operational use.
 
@@ -20,7 +20,7 @@ Settings and enrollment require the device's own screen-lock credential. Local t
 
 ## QR Attendance
 
-Connect the app to the registered campus gate. Choose **QR Attendance**, set **IN** or **OUT**, and start the camera. Show a SchoolFlow student identity card or an employee identity card for a teacher or another staff member. The app submits the scanned card and displays the server result. Wait for the result before presenting the next card. Check **Which gate marked whom** in the web portal to review scans. A pending response pauses new marks while the saved event is retried.
+Connect the app to the registered campus gate. Choose **QR Attendance**, set **IN** or **OUT**, and start the camera. Show a InstituteAxis student identity card or an employee identity card for a teacher or another staff member. The app submits the scanned card and displays the server result. Wait for the result before presenting the next card. Check **Which gate marked whom** in the web portal to review scans. A pending response pauses new marks while the saved event is retried.
 
 ## Recognition and privacy
 
@@ -59,4 +59,4 @@ Before real use: physical ARM64 camera/inference/recognition tests, representati
 
 ## Original-host acceptance build
 
-The `schoolTest` variant produces `SchoolFlow-Gate-School-Test.apk` for the original SchoolFlow host, with package suffix `.schooltest`. The `debug` trial variant keeps its `.trial` package and separate fictional host. They can coexist and do not share enrolled faces, keys or pending events. Both remain attended test apps with explicit operator confirmation; neither is a certified liveness system. Original-host testing requires a private institute, an explicitly registered gate/connection key and the school’s consented enrollment process. Physical ARM64 camera/accuracy tests and protected production signing remain required.
+The `schoolTest` variant produces `SchoolFlow-Gate-School-Test.apk` for the original InstituteAxis host, with package suffix `.schooltest`. The `debug` trial variant keeps its `.trial` package and separate fictional host. They can coexist and do not share enrolled faces, keys or pending events. Both remain attended test apps with explicit operator confirmation; neither is a certified liveness system. Original-host testing requires a private institute, an explicitly registered gate/connection key and the school’s consented enrollment process. Physical ARM64 camera/accuracy tests and protected production signing remain required.

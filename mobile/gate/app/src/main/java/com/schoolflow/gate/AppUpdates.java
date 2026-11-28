@@ -54,7 +54,7 @@ final class AppUpdates {
     static boolean validLink(String link, int version) {
         String prefix = DOWNLOAD_PREFIX + version + "-";
         return link.startsWith(prefix)
-                && link.substring(prefix.length()).matches("[0-9]+-[0-9]+/SchoolFlow-QR-Attendance\\.apk");
+                && link.substring(prefix.length()).matches("[0-9]+-[0-9]+/(?:InstituteAxis|SchoolFlow)-QR-Attendance\\.apk");
     }
 
     private static JSONObject readManifest() throws IOException, JSONException {
@@ -84,7 +84,7 @@ final class AppUpdates {
         try {
             activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link)));
         } catch (ActivityNotFoundException unavailable) {
-            Toast.makeText(activity, "Open General → App Links in SchoolFlow to download the update.", Toast.LENGTH_LONG).show();
+            Toast.makeText(activity, "Open General → App Links in InstituteAxis to download the update.", Toast.LENGTH_LONG).show();
         }
     }
 

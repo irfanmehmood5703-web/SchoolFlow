@@ -55,7 +55,7 @@ class GateTrialTests(unittest.TestCase):
         page = client.get('/records/student')
         self.assertEqual(page.status_code, 200)
         self.assertNotIn(b'Fictional Gate Trial Person', page.data)
-        self.assertIn(b'SchoolFlow Demo', page.data)
+        self.assertIn(b'InstituteAxis Demo', page.data)
         self.assertEqual(client.get('/workspace/core/institute').status_code, 200)
 
     def test_refuses_store_belonging_to_other_school(self):

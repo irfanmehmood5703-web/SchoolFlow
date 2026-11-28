@@ -15,8 +15,8 @@ android {
         applicationId 'com.schoolflow.gate'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '0.12'
+        versionCode 13
+        versionName '0.13'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
     }
@@ -27,7 +27,7 @@ android {
         buildConfigField 'String', 'GATE_SCHOOL_CODE', school ? '"' + school.code + '"' : '""'
         buildConfigField 'String', 'GATE_SCHOOL_SCOPE', school ? '"' + school.school_key + '"' : '""'
         buildConfigField 'boolean', 'CHECK_FOR_UPDATES', 'false'
-        resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
+        resValue 'string', 'app_name', 'InstituteAxis QR Attendance'
         manifestPlaceholders=[launcherIcon: school ? '@mipmap/school_launcher' : '@drawable/gate_icon']
         if (school) {
             applicationId 'com.schoolflow.schools.s' + school.school_key + '.face.test'
@@ -49,21 +49,21 @@ android {
         debug {
             applicationIdSuffix '.trial'
             buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-gate-trial-irfan.onrender.com"'
-            resValue 'string', 'app_name', 'SchoolFlow QR Attendance (Trial)'
+            resValue 'string', 'app_name', 'InstituteAxis Gate (Trial)'
         }
         schoolTest {
             initWith debug
             applicationIdSuffix '.schooltest'
             matchingFallbacks=['debug']
             buildConfigField 'String', 'GATE_BASE', '"https://schoolflow-phase1.onrender.com"'
-            resValue 'string', 'app_name', 'SchoolFlow QR Attendance'
+            resValue 'string', 'app_name', 'InstituteAxis Gate'
         }
         release {
             minifyEnabled false
             buildConfigField 'boolean', 'CHECK_FOR_UPDATES', 'true'
             if (school) {
                 signingConfig signingConfigs.schoolKey
-                resValue 'string', 'app_name', resourceText(school.name + ' Face Attendance')
+                resValue 'string', 'app_name', resourceText(school.launcher_labels?.face ?: school.name + ' Face Attendance')
             }
         }
     }

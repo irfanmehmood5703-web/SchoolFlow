@@ -765,7 +765,7 @@ def configure_records(app, db, Student, Employee):
         for obj, data in filtered_rows(kind):
             writer.writerow([obj.id]+[cell(data.get(f["key"], "")) for f in fields])
         response = app.response_class("\ufeff"+stream.getvalue(), mimetype="text/csv")
-        response.headers["Content-Disposition"] = f'attachment; filename="schoolflow-{kind}-records.csv"'
+        response.headers["Content-Disposition"] = f'attachment; filename="instituteaxis-{kind}-records.csv"'
         return response
 
     @bp.route("/options", methods=["POST"])

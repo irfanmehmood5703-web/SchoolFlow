@@ -1,6 +1,6 @@
-# SchoolFlow Android clients — test release
+# InstituteAxis Android clients — test release
 
-Four installable Android clients connect to the original SchoolFlow host and
+Four installable Android clients connect to the original InstituteAxis host and
 its existing institute databases. No records, passwords, device keys or signing
 secrets are bundled. These do not replace the separate attended Face Gate app.
 
@@ -18,7 +18,7 @@ location, printing, back/reload and local session clearing. File/content URL
 loading, cleartext, third-party cookies, unreviewed WebView permission grants, native
 JavaScript bridges and foreign-origin WebView navigation are blocked. User-tapped
 HTTPS, telephone and email links can open in another app after confirmation;
-no SchoolFlow session cookies are passed to those apps. TLS errors stop
+no InstituteAxis session cookies are passed to those apps. TLS errors stop
 navigation. Backup is disabled and screenshots are protected. Download requests
 carry the current same-origin session cookie without following redirects.
 
@@ -80,7 +80,7 @@ verification steps; a compile or synthetic test is not proof of these outcomes.
 
 ## Portal microphone and acceptance packages
 
-Parents, Teacher and Owner portal clients declare audio-recording permission. A foreground SchoolFlow page may request audio capture only from the exact original HTTPS origin; foreign origins, camera/mixed resources, background/cancelled requests and denied OS permission are refused. App pause stops/prepares an in-progress voice note for explicit review; it never sends a recording. Finished voice previews remain usable on return. Android permission timing may require pressing Record again after the first grant. Physical WebView/microphone checks remain necessary. SMS does not declare or request microphone permission.
+Parents, Teacher and Owner portal clients declare audio-recording permission. A foreground InstituteAxis page may request audio capture only from the exact original HTTPS origin; foreign origins, camera/mixed resources, background/cancelled requests and denied OS permission are refused. App pause stops/prepares an in-progress voice note for explicit review; it never sends a recording. Finished voice previews remain usable on return. Android permission timing may require pressing Record again after the first grant. Physical WebView/microphone checks remain necessary. SMS does not declare or request microphone permission.
 
 Default downloadable acceptance packages use a separate `.acceptance` suffix and can coexist with earlier `.test` packages. Existing school-specific builds keep their debug/signing path. Do not erase an old SMS app’s uncertain pending submission just to install a new test app; review server/phone state first. Test packages are not production-signed releases.
 
@@ -165,9 +165,9 @@ sync, and offline cache expires after 48 hours. This is not a push service.
 
 ### Native school opening screen
 All school-branded Android apps show their locally packaged school logo and name
-while connecting. Only a successful, marked SchoolFlow JSON health response
+while connecting. Only a successful, marked InstituteAxis JSON health response
 allows startup. Owner, Parent and Teacher WebViews remain covered until a
-SchoolFlow document is actually rendered; upstream HTML, including a successful
+InstituteAxis document is actually rendered; upstream HTML, including a successful
 HTTP 200 hosting wake-up page, is never accepted as a school page. Health
 checks retry for a bounded 105 seconds with a manual retry on failure. Native
 SMS/attendance tools may open their local screen after a connection timeout,

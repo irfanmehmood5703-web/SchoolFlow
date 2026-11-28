@@ -83,7 +83,7 @@ def configure_challan_branding(app,db,Student):
 
     def reference_qr(bill,consumer):
         # Identifiers only; this QR grants no login or payment authority.
-        payload=json.dumps(dict(type='SchoolFlow fee challan',challan=str(bill.id),reference=consumer or ''),sort_keys=True,separators=(',',':'))
+        payload=json.dumps(dict(type='InstituteAxis fee challan',challan=str(bill.id),reference=consumer or ''),sort_keys=True,separators=(',',':'))
         return inline_qr(payload)
 
     def inline_qr(value):

@@ -167,13 +167,13 @@ def build_widgets(app,db,Student,Employee,keys,start,end,today,releases,tuition_
         birthday=[s for s in active if s['born'] and (s['born'].month,s['born'].day)==(today.month,today.day)]
         add('birthdays',len(birthday),'birthdays today',['SID','Student','Class'],[[s['id'],s['name'],s['class_name']] for s in birthday],'Today’s birthdays from actual saved dates of birth for Active students.')
         published=[r for r in releases if r['url']]
-        add('mobile-apps',len(published),'published release links',['App','Version','Public link'],[[r['label'],r['version'],r['url']] for r in published],'SchoolFlow’s configured public release links; this does not infer device installs or native app usage.')
+        add('mobile-apps',len(published),'published release links',['App','Version','Public link'],[[r['label'],r['version'],r['url']] for r in published],'InstituteAxis’s configured public release links; this does not infer device installs or native app usage.')
         complaints=[w for w in work if w.kind in ('complaints','suggestions','complaints-suggestions')]
         open_rows=[w for w in complaints if w.status not in ('Closed','Resolved','Solved')]
         add('complaints',len(open_rows),'open local records',['ID','Type','Status','Description'],[[w.id,w.kind,w.status,w.data.get('description',w.data.get('message',''))] for w in complaints],'Local saved complaint/suggestion workflows; disconnected parent submissions are not inferred.')
         six=month_range(today,6);complaint_months=Counter(w.created.strftime('%Y-%m') for w in complaints if w.created and w.created.date()<=today)
         add('complaints-chart',sum(complaint_months[m] for m in six),'records in 6 months',['Month','Records'],[[m,complaint_months[m]] for m in six],'Actual creation months of locally saved complaint/suggestion records.',[(m,complaint_months[m]) for m in six])
-        add('updates',len(published),'published releases',['App','Version','Release notes'],[[r['label'],r['version'],r['notes']] for r in published],'Your configured SchoolFlow release versions and notes; no vendor announcements are copied.')
+        add('updates',len(published),'published releases',['App','Version','Release notes'],[[r['label'],r['version'],r['notes']] for r in published],'Your configured InstituteAxis release versions and notes; no vendor announcements are copied.')
         requests=rm['communication'].query.filter(rm['communication'].created_at>=start,rm['communication'].created_at<end+timedelta(days=1)).all()
         if campus:requests=[r for r in requests if r.student_id in by_id]
         add('sms',None,'SMS credit unavailable',['Request','Student ID','Status','Created'],[[r.id,r.student_id,r.status,str(r.created_at)] for r in requests],f'{len(requests)} local communication requests in the selected period. SIM/provider balance and recipient delivery are unavailable. Phone-submission results are recorded separately under School SIM SMS; saved requests here are not sent messages.')

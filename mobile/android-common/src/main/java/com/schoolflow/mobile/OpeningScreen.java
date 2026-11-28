@@ -99,7 +99,7 @@ public final class OpeningScreen {
         offline = new Button(activity);
         offline.setText("Open app without connection"); offline.setAllCaps(false);
         panel.addView(offline, new LinearLayout.LayoutParams(-2, -2));
-        TextView footer = label("Powered by SchoolFlow", 12, MUTED, true);
+        TextView footer = label("Powered by InstituteAxis", 12, MUTED, true);
         footer.setPadding(0, dp(28), 0, 0);
         panel.addView(footer);
         scroll.addView(panel, new ScrollView.LayoutParams(-1, -1));
