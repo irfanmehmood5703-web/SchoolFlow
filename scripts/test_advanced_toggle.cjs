@@ -9,8 +9,12 @@ const base='http://127.0.0.1:5056';const assert=(yes,message)=>{if(!yes)throw Er
    const text=await page.textContent('body');assert(text.includes(query?'No records match these filters.':'Fictional visibility child'),'Empty/existing student fixture not shown');
   }
   await page.screenshot({path:'/tmp/sf-fee-scope-advanced-list-'+width+'.png'});
-  await page.goto(base+'/records/student/new');const panels=page.locator('details[data-advanced]'),toggle=page.locator('[data-advanced-toggle]');assert(await panels.count()>0,'Admission form missing its actual advanced panels');assert(await toggle.isVisible(),'Useful advanced toggle hidden');
-  if((await toggle.textContent()).includes('Hide'))await toggle.click();assert(await page.locator('details[data-advanced][open]').count()===0,'Advanced panels did not close');await toggle.click();assert(await page.locator('details[data-advanced][open]').count()===await panels.count(),'Advanced panels did not open');await toggle.click();assert(await page.locator('details[data-advanced][open]').count()===0,'Second toggle failed');
-  assert(!errors.length,errors.join('\n'));console.log('PASS Advanced toggle '+width+'px: hidden on empty/existing student lists, visible and functional on Add Student');await page.close();
+  await page.goto(base+'/records/student/new');
+  const details=page.locator('#student-more-details'), toggle=details.locator('summary').first();
+  assert(await toggle.isVisible(),'More Details control is hidden');
+  assert(!(await details.evaluate(el=>el.open)),'Optional admission fields are open by default');
+  await toggle.click();assert(await details.evaluate(el=>el.open),'Optional admission fields did not open');
+  await toggle.click();assert(!(await details.evaluate(el=>el.open)),'Optional admission fields did not close');
+  assert(!errors.length,errors.join('\n'));console.log('PASS Advanced toggle '+width+'px: hidden on student lists, More Details works on Add Student');await page.close();
  }
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1);});
