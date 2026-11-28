@@ -157,7 +157,7 @@ final class SmsScreen {
   header.addView(schoolRow);
   ImageView logo=new ImageView(a);
   int icon=a.getResources().getIdentifier("school_launcher","mipmap",a.getPackageName());
-  logo.setImageResource(icon==0?R.drawable.schoolflow_icon:icon);
+  logo.setImageResource(icon==0?R.drawable.instituteaxis_icon:icon);
   logo.setContentDescription("School logo");
   logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
   logo.setBackground(box(mint,12,0));
