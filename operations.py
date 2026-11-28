@@ -2287,7 +2287,7 @@ def configure_operations(app, db, Student, Employee):
         db.session.execute(db.text('SELECT 1'))
         if app.extensions.get('identity_bind_key'):
             with app.extensions['identity_helpers']['control_engine']().connect() as connection:connection.execute(db.text('SELECT 1'))
-        response = jsonify(status='ok',build='instituteaxis-brand-v1')
+        response = jsonify(status='ok',build='schoolflow-instituteaxis-v1',brand='InstituteAxis')
         response.headers['Cache-Control'] = 'no-store'
         response.vary.add('Origin')
         if request.headers.get('Origin') == 'https://schoolflow-start.onrender.com':

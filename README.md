@@ -2,7 +2,7 @@
 
 **Complete Education Management System**
 
-The public address remains the existing Render URL. `instituteaxis.pk` is reserved for a future DNS and hosting configuration after purchase.
+The public address remains the existing Render URL. `instituteaxis.pk` is the planned future domain, pending purchase and configuration.
 
 Original green/white school-management web software with horizontal menus, private institute login, campus permissions and separate school data. The current build is for controlled user acceptance testing; automated checks do not certify a production launch or physical Android/hardware behavior.
 

@@ -260,7 +260,8 @@ class InstituteSetupTests(unittest.TestCase):
         for path in ['/workspace/dashboard','/records/student','/workspace/examination/awards','/records/employee']:
             page=self.c.get(path)
             header=page.data.split(b'<div class="brand-row">',1)[1].split(b'</header>',1)[0]
-            self.assertIn(b'<a class="brand" href="/">Institute<span>Axis</span></a>',header)
+            self.assertIn(b'Institute<span>Axis</span></a>',header)
+            self.assertIn(b'/static/instituteaxis-mark.svg',header)
             self.assertIn(b'<div class="school-header-banner"><span class="school-header-name">Fictional School Name</span></div>',header)
             self.assertIn(b'/workspace/core/logo',header)
         self.assertEqual(self.post(action='profile',version='1',name='No overwrite',logo=(io.BytesIO(b'not an image'),'bad.png')).status_code,422)
